@@ -13,6 +13,7 @@ import {
 } from '../mods/enf';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan } from '../mods/model';
 import { nameOf } from '../mods/paths';
+import type { Prefix } from '../mods/workDrive';
 
 /** The three files a workspace of mods is made of, anywhere in the open folders. */
 const SCAN_GLOB = `**/{${MANIFEST_FILE},${WORKSPACE_FILE},${CONFIG_FILE}}`;
@@ -50,6 +51,26 @@ export async function findMods(): Promise<Discovery> {
   const configurations = configurationsOf(mods, enf);
 
   return { mods, uris, configured: configurations.mods, workspaces: configurations.workspaces };
+}
+
+/**
+ * The mods that have something to put on the work drive, with the prefix root as a path on disk.
+ *
+ * The folder has no `Uri` of its own — only files were searched for — so it borrows one from a
+ * file inside the mod and swaps the path. Building a `Uri` from the path instead would assume the
+ * workspace is on this disk, and `fsPath` is the one thing that turns it into what Windows takes.
+ */
+export function prefixesOf(found: Discovery): Prefix[] {
+  return found.mods.flatMap((mod) => {
+    const prefixRoot = mod.prefixRoot;
+    const anchor = found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
+
+    if (prefixRoot === undefined || anchor === undefined) {
+      return [];
+    }
+
+    return [{ prefixRoot, name: mod.name, target: anchor.with({ path: prefixRoot }).fsPath }];
+  });
 }
 
 /**

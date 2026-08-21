@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. The one program this extension runs is the registry query that finds the DayZ installation, and its arguments come from the extension alone."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. The two programs this extension runs are the registry query that finds the DayZ installation and subst, which mounts the work drive on the folder and the drive letter the machine settings name; neither takes an argument from the workspace. Linking the mods onto the work drive writes junctions there, and only when it is asked for."
     }
   },
   "contributes": {
@@ -56,6 +56,24 @@
         "title": "Refresh Mods",
         "category": "Enfusion",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "enfusion.workDrive.mount",
+        "title": "Mount Work Drive",
+        "category": "Enfusion",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "enfusion.workDrive.unmount",
+        "title": "Unmount Work Drive",
+        "category": "Enfusion",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "enfusion.workDrive.link",
+        "title": "Link Mods onto the Work Drive",
+        "category": "Enfusion",
+        "icon": "$(link)"
       }
     ],
     "menus": {
@@ -114,11 +132,20 @@
           "order": 4,
           "markdownDescription": "The folder the work drive is mounted from — the one holding the unpacked vanilla data."
         },
+        "enfusion.workDrive.letter": {
+          "type": "string",
+          "default": "P:",
+          "pattern": "^$|^[A-Za-z]:?[\\\\/]?$",
+          "patternErrorMessage": "A drive letter, on its own or with a colon after it: P, P: or P:\\. Left empty, the work drive goes up under P:.",
+          "scope": "machine",
+          "order": 5,
+          "markdownDescription": "The letter the work drive is mounted under. Every prefix in the game is counted from the root of it, which is why `P:` is what the tools and the documentation assume."
+        },
         "enfusion.filePatching.root": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 5,
+          "order": 6,
           "markdownDescription": "Where the folder the game is launched in is built. Left empty, it goes under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
         },
         "enfusion.builder": {
@@ -130,7 +157,7 @@
             "AddonBuilder, which comes with DayZ Tools."
           ],
           "scope": "machine",
-          "order": 6,
+          "order": 7,
           "markdownDescription": "The program that packs an addon into a pbo."
         }
       }

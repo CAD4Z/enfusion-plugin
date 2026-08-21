@@ -21,11 +21,22 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
-The paths to DayZ and DayZ Tools, the private key, the work drive source, the file patching root and
-the choice of builder are about the machine rather than about the mod, so they live in VS Code
-settings with `scope: machine`, which the editor physically will not let a workspace write. The
-paths to DayZ and DayZ Tools are read out of the registry by default, so in the ordinary case
-nothing has to be entered; what resolved and what did not is visible in the panel.
+The paths to DayZ and DayZ Tools, the private key, the source and the letter of the work drive, the
+file patching root and the choice of builder are about the machine rather than about the mod, so
+they live in VS Code settings with `scope: machine`, which the editor physically will not let a
+workspace write. The paths to DayZ and DayZ Tools are read out of the registry by default, so in the
+ordinary case nothing has to be entered; what resolved and what did not is visible in the panel.
+
+The work drive is mounted and unmounted from the same panel: the buttons call `subst` with the
+folder and the letter out of the machine settings, and the panel shows where the letter actually
+leads. A drive mounted somewhere other than what is configured is a warning with both folders in it,
+rather than a quiet build of the wrong sources. The **Link mods** button lays junctions across the
+root of the drive onto the prefix roots of every mod of the workspace — what `SetupWorkdrive.bat`
+used to do: a junction already pointing where it should is not an error and is not repointed, one
+pointing elsewhere is repointed, and a real folder in its place is left untouched and shown as it
+is. Every mod in the list shows whether it is linked or not, so the reason a build would fail is
+visible beforehand. Unpacking the vanilla data and setting the drive up in the first place with DayZ
+Tools is not part of this.
 
 ## Development
 

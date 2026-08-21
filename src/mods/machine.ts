@@ -14,6 +14,8 @@
  * that a refusal is visible before the first build rather than during it.
  */
 
+import { samePath } from './paths';
+
 /** The program that packs an addon into a pbo. */
 export type Builder = 'pboProject' | 'AddonBuilder';
 
@@ -28,6 +30,8 @@ export interface MachineSettings {
   readonly privateKey: string;
   /** The folder the work drive is mounted from. */
   readonly workDrive: string;
+  /** The letter it is mounted under, however it was typed; see `driveLetterOf`. */
+  readonly workDriveLetter: string;
   /** Where the file patching root is built; empty leaves the extension to pick the place. */
   readonly filePatchingRoot: string;
   readonly builder: Builder;
@@ -39,6 +43,7 @@ export const SETTING = {
   dayzTools: 'enfusion.dayzTools.path',
   privateKey: 'enfusion.signing.privateKey',
   workDrive: 'enfusion.workDrive.source',
+  workDriveLetter: 'enfusion.workDrive.letter',
   filePatchingRoot: 'enfusion.filePatching.root',
   builder: 'enfusion.builder',
 } as const;
@@ -127,9 +132,4 @@ function stateOf(path: string, found: ReadonlySet<string>): EnvironmentState {
   }
 
   return found.has(samePath(path)) ? 'ok' : 'missing';
-}
-
-/** Windows tells none of these apart, so neither does the comparison. */
-function samePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }

@@ -45,6 +45,7 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
     dayzTools: text(SETTING.dayzTools) || (await fromRegistry(DAYZ_TOOLS)),
     privateKey: text(SETTING.privateKey),
     workDrive: text(SETTING.workDrive),
+    workDriveLetter: text(SETTING.workDriveLetter),
     filePatchingRoot: text(SETTING.filePatchingRoot),
     builder: builderOf(text(SETTING.builder)),
   };

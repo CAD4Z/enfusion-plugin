@@ -19,3 +19,16 @@ export function folderOf(path: string): string {
 export function nameOf(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
+
+/**
+ * A path reduced to what a comparison should look at. Windows tells none of these apart — the
+ * case, the separator, a trailing one, the leading slash a `Uri.path` carries in front of a drive
+ * letter — so neither does anything here that compares two paths.
+ */
+export function samePath(path: string): string {
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\/(?=[A-Za-z]:)/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}

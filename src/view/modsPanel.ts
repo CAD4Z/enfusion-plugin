@@ -12,11 +12,20 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { isWanting } from '../mods/machine';
+import { SETTING, isWanting } from '../mods/machine';
 import type { Mod } from '../mods/model';
+import {
+  type Link,
+  type WorkDrive,
+  WORK_DRIVE_ACTIONS,
+  isUnlinked,
+  refusalOf,
+} from '../mods/workDrive';
 import { readEnvironment, readMachineSettings } from '../platform/machine';
-import { type Discovery, findMods } from '../platform/workspace';
-import type { ModsMessage, ModView, PanelRequest } from '../webview/protocol';
+import { platformRefusal, readLinks, readWorkDrive } from '../platform/workDrive';
+import { type Discovery, findMods, prefixesOf } from '../platform/workspace';
+import type { ModsMessage, ModView, PanelRequest, WorkDriveView } from '../webview/protocol';
+import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** A burst of file events — a checkout, a build — should still cost one scan. */
 const SETTLE_MS = 200;
@@ -104,6 +113,10 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'settings':
         this.report(openSettings(request.id));
         return;
+      // Through the command, so that the button and the palette do the very same thing.
+      case 'workDrive':
+        this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
+        return;
     }
   }
 
@@ -121,24 +134,33 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
     }
 
     const [found, settings] = await Promise.all([findMods(), readMachineSettings(reread)]);
-    const entries = await readEnvironment(settings);
+    const [entries, drive] = await Promise.all([
+      readEnvironment(settings),
+      readWorkDrive(settings),
+    ]);
+    const links = await readLinks(drive, prefixesOf(found));
 
     this.uris = found.uris;
     this.log.info(`${found.mods.length} mod(s): ${found.mods.map((mod) => mod.name).join(', ')}`);
     this.log.info(
       `environment: ${entries.map((entry) => `${entry.kind} ${entry.state}`).join(', ')}`,
     );
+    this.log.info(
+      `work drive: ${drive.letter} ${drive.state}${drive.at === '' ? '' : ` at ${drive.at}`}, ` +
+        `${links.filter(isUnlinked).length} of ${links.length} mod(s) not linked`,
+    );
 
     const message: ModsMessage = {
       type: 'mods',
       environment: { entries, wanting: entries.filter(isWanting).length },
+      workDrive: workDriveViewOf(drive, links),
       workspaces: [...found.workspaces].map(([path, problems]) => ({
         path,
         location: locationOfFile(path, found),
         owns: ownedBy(path, found),
         problems,
       })),
-      mods: found.mods.map((mod) => toView(mod, found)),
+      mods: found.mods.map((mod) => toView(mod, found, links)),
     };
     await view.webview.postMessage(message);
   }
@@ -192,9 +214,37 @@ async function openSettings(id: string): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.openSettings', id);
 }
 
-function toView(mod: Mod, found: Discovery): ModView {
+async function runCommand(command: string): Promise<void> {
+  await vscode.commands.executeCommand(command);
+}
+
+/**
+ * The work drive as the panel shows it. Every button carries the reason it would refuse, so the
+ * one that is disabled says why without being pressed; the warning is the same sentence, because
+ * "mounted from the wrong folder" is one fact and deserves one wording.
+ */
+function workDriveViewOf(drive: WorkDrive, links: readonly Link[]): WorkDriveView {
+  const platform = platformRefusal();
+
+  return {
+    letter: drive.letter,
+    source: drive.source,
+    at: drive.at,
+    state: drive.state,
+    setting: SETTING.workDrive,
+    warning: platform ?? (drive.state === 'elsewhere' ? refusalOf(drive, 'link') : undefined),
+    actions: WORK_DRIVE_ACTIONS.map((action) => ({
+      action,
+      refusal: platform ?? refusalOf(drive, action),
+    })),
+    unlinked: links.filter(isUnlinked).length,
+  };
+}
+
+function toView(mod: Mod, found: Discovery, links: readonly Link[]): ModView {
   const configured = mod.manifest === undefined ? undefined : found.configured.get(mod.manifest);
   const manifest = configured?.configuration.manifest;
+  const link = links.find((made) => made.prefixRoot === mod.prefixRoot);
 
   return {
     name: mod.name,
@@ -203,6 +253,7 @@ function toView(mod: Mod, found: Discovery): ModView {
     description: manifest?.description,
     manifest: mod.manifest,
     manifestProblems: configured?.problems ?? [],
+    link: link && { state: link.state, path: link.path, at: link.at },
     addons: mod.addons.map((addon) => ({
       name: addon.name,
       main: addon.main,

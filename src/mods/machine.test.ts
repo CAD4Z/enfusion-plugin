@@ -13,6 +13,7 @@ const SETTINGS: MachineSettings = {
   dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
   workDrive: 'F:\\DayZ\\Workdrive',
+  workDriveLetter: 'P:',
   filePatchingRoot: '',
   builder: 'pboProject',
 };

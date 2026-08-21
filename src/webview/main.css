@@ -125,3 +125,24 @@ vscode-badge.warning {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The buttons of the work drive sit on one line under what they act on. */
+.buttons {
+  display: flex;
+  gap: 6px;
+  padding: 6px 20px 2px;
+}
+
+/* A row with nothing behind it to open: a drive letter is not a file. */
+.row.static {
+  cursor: default;
+}
+
+.row.static:hover {
+  background-color: transparent;
+}
+
+/* Carries the tooltip for the button inside it, which when disabled takes no pointer events. */
+.buttons .holds {
+  display: inline-flex;
+}

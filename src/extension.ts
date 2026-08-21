@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { ModsPanel } from './view/modsPanel';
+import { registerWorkDriveCommands } from './view/workDrive';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
@@ -24,6 +25,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('enfusion.refresh', () => {
       panel.reread();
+    }),
+    // Mounting and linking change nothing a file watcher would notice, so they say so themselves.
+    registerWorkDriveCommands(log, () => {
+      panel.refresh();
     }),
   );
 }

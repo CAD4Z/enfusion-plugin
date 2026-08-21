@@ -9,11 +9,13 @@
 import type { ManifestProblem } from '../mods/enf';
 import type { EnvironmentEntry } from '../mods/machine';
 import type { Problem } from '../mods/model';
+import type { LinkState, WorkDriveAction, WorkDriveState } from '../mods/workDrive';
 
 /** Sent to the panel whenever the mods, or the machine they are built on, can have changed. */
 export interface ModsMessage {
   readonly type: 'mods';
   readonly environment: EnvironmentView;
+  readonly workDrive: WorkDriveView;
   /** The `workspace.enf` files of the open folders; usually none, and at most one that matters. */
   readonly workspaces: readonly ManifestFileView[];
   readonly mods: readonly ModView[];
@@ -24,6 +26,38 @@ export interface EnvironmentView {
   readonly entries: readonly EnvironmentEntry[];
   /** How many of them are a gap rather than a choice, which is what the section is headed by. */
   readonly wanting: number;
+}
+
+/** Where the work drive is, against where it should be, and what can be done about it. */
+export interface WorkDriveView {
+  readonly letter: string;
+  /** The folder the settings mount it from. */
+  readonly source: string;
+  /** The folder it is mounted from now; empty when the letter is free. */
+  readonly at: string;
+  readonly state: WorkDriveState;
+  /** The setting that names the folder, for the row that opens it. */
+  readonly setting: string;
+  /** Why the drive is not as it should be, in the words the refused button would use. */
+  readonly warning: string | undefined;
+  readonly actions: readonly WorkDriveActionView[];
+  /** How many mods are not on the drive where they should be, which heads the section. */
+  readonly unlinked: number;
+}
+
+export interface WorkDriveActionView {
+  readonly action: WorkDriveAction;
+  /** Why it would refuse as things stand; undefined where it would work. */
+  readonly refusal: string | undefined;
+}
+
+/** One mod's place on the work drive, which is why a build would find its sources or would not. */
+export interface LinkView {
+  readonly state: LinkState;
+  /** `P:\<Name>`: what the mod is linked as. */
+  readonly path: string;
+  /** Where that points now; empty when nothing is there. */
+  readonly at: string;
 }
 
 export interface ModView {
@@ -38,6 +72,8 @@ export interface ModView {
   readonly manifest: string | undefined;
   /** What is wrong with that `mod.enf`, and where. */
   readonly manifestProblems: readonly ManifestProblem[];
+  /** Where it sits on the work drive; undefined for a mod with no prefix root to link. */
+  readonly link: LinkView | undefined;
   readonly addons: readonly AddonView[];
   readonly problems: readonly Problem[];
 }
@@ -75,4 +111,6 @@ export type PanelRequest =
       readonly column?: number;
     }
   /** Opens the settings on the one that is missing. */
-  | { readonly type: 'settings'; readonly id: string };
+  | { readonly type: 'settings'; readonly id: string }
+  /** Runs the work drive command of that action, which the palette runs the same way. */
+  | { readonly type: 'workDrive'; readonly action: WorkDriveAction };
