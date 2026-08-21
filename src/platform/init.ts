@@ -55,6 +55,20 @@ export async function requireAddon(
   return true;
 }
 
+/**
+ * What a file holds, and nothing at all where it holds nothing readable: a `config.cpp` that went
+ * away between the scan and the read declares no mod, which is what an empty one parses to anyway.
+ * `requireAddon` reads for itself rather than through this, because a read it swallowed would have
+ * it write an edited file over one it never saw.
+ */
+export async function textOf(uri: vscode.Uri): Promise<string> {
+  try {
+    return new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+  } catch {
+    return '';
+  }
+}
+
 /** Whether a folder holds a file of that name, which is how a mod root is recognised. */
 export async function holds(folder: vscode.Uri, name: string): Promise<boolean> {
   return exists(vscode.Uri.joinPath(folder, name));

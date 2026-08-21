@@ -44,6 +44,25 @@ and the private key. The mod is linked onto the work drive as soon as it is made
 on the spot. The script module paths in `CfgMods` are the same in both layouts, so a mod moves from
 one layout to the other by moving files rather than by rewriting its config.
 
+A mod of somebody else's, with no `mod.enf`, is recognised by its `config.cpp` — by the `CfgMods`
+block, the very one a mod declares itself to the game with — and shown in the list marked
+unconfigured. A **+ Create mod.enf** row on its card, or the **Enfusion: Create mod.enf for an
+Existing Mod** command, gets it a manifest, and nothing is asked twice: the name, the description
+and the author come out of `CfgMods` (`name`, `overview`, `author`), and whatever the mod did not
+say about itself comes out of its main addon's `CfgPatches`, where `author` and `version` sometimes
+sit as well; a name that is nowhere stays the name of the prefix root, which is what the mod links
+and loads under. What was read is shown before it is written, and a refusal puts nothing on disk:
+the mod stays in the list unconfigured. Exactly one file is written — `mod.enf` in the mod's root —
+and the layout does not change that: a single-addon mod declares itself in the prefix root, a
+multi-addon one in an addon inside it, and the manifest lands in the mod's root either way. The mod
+is linked onto the work drive as soon as it is written, the same as a freshly made one, so from
+there it is no different from one of our own: it builds, it links, it launches.
+
+There is one case adoption does not take, and it says why: where the prefix root is the open folder
+itself (a repository that links onto `P:\<Name>` whole), the mod's root lies above the workspace,
+and a file written there is one nobody will find — the search only looks inside the open folders.
+The offer then is to open the folder that holds the mod and write the `mod.enf` there.
+
 An addon is added by **Enfusion: Add Addon** — the row under a mod's list of addons in the panel. It
 makes the folder with a `config.cpp` and writes its class into the main addon's `requiredAddons`
 there and then: an addon nobody requires is one the engine is free to load whenever it likes, and it

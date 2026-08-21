@@ -64,6 +64,12 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "enfusion.adopt",
+        "title": "Create mod.enf for an Existing Mod",
+        "category": "Enfusion",
+        "icon": "$(new-file)"
+      },
+      {
         "command": "enfusion.addon.add",
         "title": "Add Addon",
         "category": "Enfusion",

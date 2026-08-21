@@ -118,5 +118,7 @@ export type PanelRequest =
   | { readonly type: 'build'; readonly mod: string; readonly addon: string }
   /** Makes a mod, which is what an empty workspace has to offer. */
   | { readonly type: 'init' }
+  /** Writes the `mod.enf` an unconfigured mod has not got, named the way the panel was given it. */
+  | { readonly type: 'adopt'; readonly mod: string }
   /** Adds an addon to the mod, named the way the panel was given it. */
   | { readonly type: 'addon'; readonly mod: string };

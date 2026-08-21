@@ -127,6 +127,9 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'init':
         this.report(runCommand(INIT_COMMAND.mod));
         return;
+      case 'adopt':
+        this.report(runCommand(INIT_COMMAND.adopt, { mod: request.mod }));
+        return;
       case 'addon':
         this.report(runCommand(INIT_COMMAND.addon, { mod: request.mod }));
         return;

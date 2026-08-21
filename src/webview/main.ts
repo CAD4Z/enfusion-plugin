@@ -278,7 +278,12 @@ function modOf(mod: ModView): HTMLElement {
     decorations.append(badge(mod.name, 'The prefix root: what the mod is linked and loaded as'));
   }
   if (mod.manifest === undefined) {
-    decorations.append(badge('not configured', 'No mod.enf: this mod was found by its config.cpp'));
+    decorations.append(
+      badge(
+        'not configured',
+        'No mod.enf: this mod was found by its config.cpp, and can be given one from what it says',
+      ),
+    );
   }
   // Only when it is not linked: that is the one that explains a build failing before it runs.
   if (mod.link !== undefined && mod.link.state !== 'linked' && mod.link.state !== 'unavailable') {
@@ -297,7 +302,9 @@ function modOf(mod: ModView): HTMLElement {
 
   const rows = div('rows');
   const manifest = mod.manifest;
-  if (manifest !== undefined) {
+  if (manifest === undefined) {
+    rows.append(adoptRow(mod.name));
+  } else {
     rows.append(fileRow('mod.enf', mod.location, manifest, 'What configures this mod'));
     rows.append(...mod.manifestProblems.map((problem) => problemRow(manifest, problem)));
   }
@@ -312,17 +319,39 @@ function modOf(mod: ModView): HTMLElement {
 }
 
 /**
+ * The one thing an unconfigured mod can do, offered where its `mod.enf` would be shown if it had
+ * one. The fields come out of the mod's own `config.cpp`, so the row promises no questions — the
+ * command shows what it read and asks only whether to write it down.
+ */
+function adoptRow(mod: string): HTMLElement {
+  return actionRow(
+    '+ Create mod.enf',
+    `Write a mod.enf for ${mod}, filled in with what its config.cpp already says`,
+    { type: 'adopt', mod },
+  );
+}
+
+/**
  * The way to add an addon to the mod. Offered whatever the mod's layout is: a mod that packs into
  * one pbo cannot take one, and being told why by the command that would do it is worth more than
  * a button that is not there.
  */
 function addAddonRow(mod: string): HTMLElement {
-  const row = rowButton(`Add an addon to ${mod}: a folder of its own, packed into its own pbo`, 'add');
+  return actionRow(
+    '+ Add addon',
+    `Add an addon to ${mod}: a folder of its own, packed into its own pbo`,
+    { type: 'addon', mod },
+  );
+}
+
+/** A row that does something rather than opening something: the `+` lines under a mod. */
+function actionRow(label: string, title: string, request: PanelRequest): HTMLElement {
+  const row = rowButton(title, 'add');
   row.addEventListener('click', () => {
-    host.postMessage({ type: 'addon', mod });
+    host.postMessage(request);
   });
 
-  row.append(span('name', '+ Add addon'));
+  row.append(span('name', label));
   return row;
 }
 

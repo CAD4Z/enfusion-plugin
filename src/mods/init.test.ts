@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseConfig } from './config';
 import {
   type AddonPlan,
+  type Adoption,
   type InitPlan,
   addonPlanOf,
+  adoptionOf,
   initPlanOf,
+  modFieldsOf,
   modNameProblemOf,
   requiringAddon,
 } from './init';
@@ -347,6 +351,124 @@ test('with no main addon to require it, the addon is still made and the silence 
   assert.match(plan.warning ?? '', /Nothing in MyMod requires MyMod_Data/);
 });
 
+/**
+ * The one thing an unconfigured mod is asked nothing for. What a `config.cpp` already says about
+ * the mod is exactly what a `mod.enf` would otherwise be typed out with, so this is read whole:
+ * every field, and where each of them came from.
+ */
+test('the fields of a mod.enf are read off the config that already carries them', () => {
+  assert.deepEqual(modFieldsOf(parseConfig(foreignConfig()), 'Foreign'), {
+    name: 'Foreign Mod',
+    description: 'What somebody else made it do.',
+    author: 'somebody',
+    version: '1.4',
+  });
+});
+
+/** A mod that says nothing about itself still has an addon and a folder that do. */
+test('what the mod leaves out is taken from its addon, and its name from the prefix root', () => {
+  const config = parseConfig(`
+class CfgPatches
+{
+	class Foreign_Scripts
+	{
+		requiredAddons[] = { "DZ_Scripts" };
+		author = "somebody";
+		version = "1.4";
+	};
+};
+
+class CfgMods { class Foreign { dir = "Foreign"; name = ""; }; };
+`);
+
+  assert.deepEqual(modFieldsOf(config, 'Foreign'), {
+    name: 'Foreign',
+    description: undefined,
+    author: 'somebody',
+    version: '1.4',
+  });
+});
+
+test('an unconfigured mod is adopted by the one file it is missing, and nothing else', () => {
+  const mod = foreignMod('/w/Foreign/Foreign/config.cpp');
+
+  assert.deepEqual(adoptionOf(mod, foreignConfig(), ['/w']), {
+    fields: {
+      name: 'Foreign Mod',
+      description: 'What somebody else made it do.',
+      author: 'somebody',
+      version: '1.4',
+    },
+    folders: [],
+    files: [{ path: 'mod.enf', content: adoptedManifest() }],
+    refusal: undefined,
+  } satisfies Adoption);
+});
+
+/**
+ * The layout is read off the tree rather than declared, and adoption asks nothing of it: the same
+ * config in the addon of a multi-addon mod fills in the same file, in the same place — the mod
+ * root, which is the prefix root's parent when no `mod.enf` marks it.
+ */
+test('a multi-addon mod is adopted the same way a single-addon one is', () => {
+  const mod = foreignMod('/w/Foreign/Foreign/Scripts/config.cpp');
+
+  assert.equal(mod.layout, 'multi');
+  assert.equal(mod.root, '/w/Foreign');
+  assert.deepEqual(adoptionOf(mod, foreignConfig(), ['/w']).files, [
+    { path: 'mod.enf', content: adoptedManifest() },
+  ]);
+});
+
+/** A config that says nothing gets the same file as one that says everything, filled in less. */
+test('a mod with nothing to say about itself is still adopted, under the name it is linked as', () => {
+  const mod = foreignMod('/w/Foreign/Foreign/config.cpp');
+  const adoption = adoptionOf(mod, 'class CfgMods { class Foreign { dir = "Foreign"; }; };', ['/w']);
+
+  assert.deepEqual(adoption.fields, {
+    name: 'Foreign',
+    description: undefined,
+    author: undefined,
+    version: undefined,
+  });
+  assert.equal(contentOf(adoption, 'mod.enf'), contentOf(initPlanOf('Foreign', 'single'), 'mod.enf'));
+});
+
+test('a mod that has a mod.enf already is refused rather than written over', () => {
+  const adoption = adoptionOf(singleAddonMod(), mainConfig(), ['/w']);
+
+  assert.deepEqual(adoption.files, []);
+  assert.match(adoption.refusal ?? '', /MyMod is configured already/);
+});
+
+/**
+ * A repository that is itself the prefix root has its mod root above everything that is open —
+ * the mod root holds the prefix root rather than being it — and a `mod.enf` written up there is
+ * one the search never looks at again: the mod would stay unconfigured with a file to show for it.
+ */
+test('a mod whose prefix root is the open folder is refused, not written above the workspace', () => {
+  const mod = foreignMod('/w/Foreign/config.cpp');
+  const adoption = adoptionOf(mod, foreignConfig(), ['/w/Foreign']);
+
+  assert.equal(mod.root, '/w');
+  assert.deepEqual(adoption.files, []);
+  assert.match(adoption.refusal ?? '', /Foreign is the folder that is open/);
+});
+
+/** Nothing that packs into a pbo declares the mod, so there is nothing to fill a manifest in from. */
+test('a mod whose CfgMods sits below its addons is refused, and told what is missing', () => {
+  const mod = modOf({
+    manifests: [],
+    configs: [{ path: '/w/Foreign/Foreign/Scripts/Core/config.cpp', source: foreignConfig() }],
+  });
+
+  const adoption = adoptionOf(mod, foreignConfig(), ['/w']);
+
+  assert.deepEqual(mod.addons, []);
+  assert.deepEqual(adoption.files, []);
+  assert.match(adoption.refusal ?? '', /Foreign has no main addon/);
+});
+
 function contentOf(plan: InitPlan, path: string): string {
   return plan.files.find((file) => file.path === path)?.content ?? '';
 }
@@ -388,6 +510,64 @@ class CfgMods { class MyMod { dir = "MyMod"; }; };`,
       },
     ],
   });
+}
+
+/** A mod somebody else wrote: what a `mod.enf` asks for is already written down in it. */
+function foreignConfig(): string {
+  return `class CfgPatches
+{
+	class Foreign_Scripts
+	{
+		units[] = {};
+		requiredVersion = 0.1;
+		requiredAddons[] = { "DZ_Scripts" };
+	};
+};
+
+class CfgMods
+{
+	class Foreign
+	{
+		type = "mod";
+		dir = "Foreign";
+		name = "Foreign Mod";
+		picture = "";
+		overview = "What somebody else made it do.";
+		author = "somebody";
+		version = "1.4";
+	};
+};
+`;
+}
+
+/** The same config wherever it sits, which is what makes the two layouts one case. */
+function foreignMod(config: string): Mod {
+  return modOf({ manifests: [], configs: [{ path: config, source: foreignConfig() }] });
+}
+
+function adoptedManifest(): string {
+  return `{
+  // What the panel and the launcher call this mod; the prefix root's name when left out.
+  "name": "Foreign Mod",
+  "version": "1.4",
+  "description": "What somebody else made it do.",
+  "author": "somebody",
+
+  "launch": {
+    // Where the built mod goes, counted from this file: Addons\\@Foreign.
+    "modsDirectory": "Addons",
+    "targets": [
+      {
+        // The client alone, which loads the vanilla offline mission of the map: a mod is seen
+        // loaded without a mission of your own having been written first.
+        "name": "Client",
+        "map": "ChernarusPlus",
+        "run": "client"
+      }
+    ]
+  }
+}
+`;
 }
 
 function modOf(scan: Parameters<typeof modsFromScan>[0]): Mod {

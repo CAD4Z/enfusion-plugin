@@ -1,11 +1,16 @@
 /**
- * Starting a mod, and adding an addon to one.
+ * Starting a mod, adopting one that is already there, and adding an addon to either.
  *
  * A mod is a folder with `mod.enf`, holding a prefix root of the mod's own name, and inside that
  * the addons. Getting one of those wrong — a `dir` that does not match the folder, a script module
  * path in the wrong case, a `CfgPatches` nobody requires — is the sort of mistake that shows up as
  * a mod which packs cleanly and then does nothing in the game, so none of it is typed by hand
  * here: every name in every file is worked out from the one name the developer gave.
+ *
+ * A mod somebody else wrote is the same job with the answers already given: it has a `config.cpp`
+ * declaring it and no `mod.enf`, and everything that file would be filled in with — the name, who
+ * wrote it, what it does — is written down in the config already. So it is read out of there
+ * rather than asked for a second time.
  *
  * The whole of it comes out as a plan — folders to make, files to write, and for an addon the one
  * edit that keeps it from being lost — so that what a new mod is made of can be compared whole in
@@ -14,8 +19,9 @@
  * Paths are `/` separated and counted from the mod root, which is the folder `mod.enf` goes in.
  */
 
-import { withRequiredAddon } from './config';
-import { CONFIG_FILE, type Layout, MANIFEST_FILE, type Mod } from './model';
+import { type ConfigCpp, type PatchClass, parseConfig, withRequiredAddon } from './config';
+import { CONFIG_FILE, type Layout, MANIFEST_FILE, type Mod, mainAddonOf } from './model';
+import { isWithin } from './paths';
 
 /** Folders to make and files to write, in the order they are made and written. */
 export interface InitPlan {
@@ -41,6 +47,23 @@ export interface AddonPlan extends InitPlan {
   readonly refusal: string | undefined;
   /** What is being done anyway, and is worth saying out loud. */
   readonly warning: string | undefined;
+}
+
+/** Everything an unconfigured mod takes to stop being one: the `mod.enf` it has not got. */
+export interface Adoption extends InitPlan {
+  /** What the config answered for, which is what the developer is shown before agreeing. */
+  readonly fields: ModFields;
+  /** Why nothing can be written; the plan is empty when there is one. */
+  readonly refusal: string | undefined;
+}
+
+/** What a `mod.enf` says about the mod itself, as far as a `config.cpp` can answer for it. */
+export interface ModFields {
+  /** Always something: the prefix root's name, where the config gives no name of its own. */
+  readonly name: string;
+  readonly description: string | undefined;
+  readonly author: string | undefined;
+  readonly version: string | undefined;
 }
 
 /** One name to write into one `CfgPatches` class of one file. */
@@ -97,6 +120,9 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  */
 export function initPlanOf(name: string, layout: Layout): InitPlan {
   const main = layout === 'single' ? name : `${name}/${SCRIPTS}`;
+  // A mod being started has said nothing about itself yet, so every field but its name is left
+  // for the developer to answer — which is what an adopted mod's config answers instead.
+  const fields: ModFields = { name, description: undefined, author: undefined, version: undefined };
 
   return {
     folders: [
@@ -113,7 +139,7 @@ export function initPlanOf(name: string, layout: Layout): InitPlan {
       BUILT,
     ],
     files: [
-      { path: MANIFEST_FILE, content: manifestOf(name) },
+      { path: MANIFEST_FILE, content: manifestOf(name, fields) },
       { path: GITIGNORE_FILE, content: GITIGNORE },
       { path: `${main}/${CONFIG_FILE}`, content: configOf(name, layout) },
       { path: `${name}/${MOD_CPP}`, content: modCppOf(name) },
@@ -135,6 +161,85 @@ export function initPlanOf(name: string, layout: Layout): InitPlan {
 }
 
 /**
+ * A mod found by its `config.cpp` alone, given the `mod.enf` it has not got. Only that one file is
+ * written: everything else about the mod — its prefix root, its addons, whatever it keeps beside
+ * them — is somebody's work that is already there and that adoption has no business touching.
+ *
+ * The layout has nothing to say here. A single-addon mod declares itself in the prefix root and a
+ * multi-addon one in an addon inside it, but both are read the same way, and the manifest goes to
+ * the same place either way: the mod root, which is what the model already worked out.
+ *
+ * `folders` are the folders open in the workspace, because the mod root of an unconfigured mod is
+ * the prefix root's parent — and a repository that *is* the prefix root has its mod root above
+ * everything that is open. A file written there is a file the search never looks at again.
+ */
+export function adoptionOf(mod: Mod, source: string, folders: readonly string[]): Adoption {
+  const fields = modFieldsOf(parseConfig(source), mod.name);
+  const refusal = adoptionRefusalOf(mod, folders);
+
+  return {
+    fields,
+    folders: [],
+    files:
+      refusal === undefined
+        ? [{ path: MANIFEST_FILE, content: manifestOf(mod.name, fields) }]
+        : [],
+    refusal,
+  };
+}
+
+/** Why this mod is not one to adopt, or undefined when it is. */
+function adoptionRefusalOf(mod: Mod, folders: readonly string[]): string | undefined {
+  if (mod.manifest !== undefined) {
+    return `${mod.name} is configured already: it has a ${MANIFEST_FILE}.`;
+  }
+
+  // The mod is in the list because something under it carries `CfgMods`, but that something is
+  // not one of the addons — it sits deeper than one — so no pbo of this mod declares it.
+  if (mainAddonOf(mod) === undefined) {
+    return (
+      `${mod.name} has no main addon: nothing that packs into a pbo here declares the mod in a ` +
+      `CfgMods block, so there is nothing to fill a ${MANIFEST_FILE} in from.`
+    );
+  }
+
+  // The mod root holds the prefix root rather than being it, so a mod whose prefix root is the
+  // open folder itself has nowhere inside the workspace for its manifest to go.
+  if (!folders.some((folder) => isWithin(mod.root, folder))) {
+    return (
+      `${mod.name} is the folder that is open, and a ${MANIFEST_FILE} belongs beside its prefix ` +
+      'root rather than inside it — so it would have to go above everything open here, where ' +
+      `nothing would ever find it. Open the folder holding ${mod.name} and write it there.`
+    );
+  }
+
+  return undefined;
+}
+
+/**
+ * What the config already says about the mod. `CfgMods` is where a mod describes itself, and its
+ * addon is the second place to ask: `author` and `version` in a `CfgPatches` class are an Arma
+ * habit that plenty of DayZ configs keep. The name falls back to the prefix root's, because that
+ * is the name the mod is linked and loaded under whatever else it calls itself.
+ */
+export function modFieldsOf(config: ConfigCpp, name: string): ModFields {
+  return {
+    name: config.mod?.name ?? name,
+    description: config.mod?.overview,
+    author: config.mod?.author ?? patchFieldOf(config, (patch) => patch.author),
+    version: config.mod?.version ?? patchFieldOf(config, (patch) => patch.version),
+  };
+}
+
+/** The first of the addon's `CfgPatches` classes to answer; a config declares more than one. */
+function patchFieldOf(
+  config: ConfigCpp,
+  field: (patch: PatchClass) => string | undefined,
+): string | undefined {
+  return config.patches.map(field).find((value) => value !== undefined);
+}
+
+/**
  * A new addon of a mod that already has one. Only a mod already laid out as several addons takes
  * another: in a single-addon mod the `config.cpp` sits in the prefix root and packs everything
  * under it, so a new addon there would be a folder its parent is already packing — which is a
@@ -149,7 +254,7 @@ export function addonPlanOf(mod: Mod, name: string): AddonPlan {
   const within = withinOf(mod);
   const folder = within === '' ? name : `${within}/${name}`;
   const patch = `${mod.name}_${name}`;
-  const main = mod.addons.find((addon) => addon.main);
+  const main = mainAddonOf(mod);
   const into = main?.patches[0];
 
   return {
@@ -240,6 +345,9 @@ const DEV = 'Dev';
 /** Where the built mod goes, which is what `modsDirectory` is set to. */
 const BUILT = 'Addons';
 
+/** What a mod that has never said which version it is starts at. */
+const VERSION = '0.1.0';
+
 /** One engine script module: how `CfgMods` attaches it, and what the folder is called on disk. */
 interface ScriptModule {
   /** The folder under `Scripts`, which is what the module's `files[]` points at. */
@@ -263,19 +371,23 @@ const MODULES: readonly ScriptModule[] = [
 
 /**
  * What the mod says about itself. `modsDirectory` is filled in, because a mod that cannot be built
- * until a field is found is not a mod that was started for the developer; the fields left as
- * comments are the ones only the developer can answer.
+ * until a field is found is not a mod that was started for the developer; a field nobody has
+ * answered for is left as a comment, which is both the hint and the place to write the answer.
+ *
+ * `name` is the mod's own; `mod` is the prefix root, which is what the built folder is called and
+ * so what the path in the comment is worked out from. For a new mod the two are the same name,
+ * and for an adopted one they are whatever its config said.
  */
-function manifestOf(name: string): string {
+function manifestOf(mod: string, fields: ModFields): string {
   return `{
   // What the panel and the launcher call this mod; the prefix root's name when left out.
-  "name": "${name}",
-  "version": "0.1.0",
-  // "description": "What the mod does, in a sentence.",
-  // "author": "Who made it.",
+  "name": ${quoted(fields.name)},
+  "version": ${quoted(fields.version ?? VERSION)},
+${fieldLine('description', fields.description, 'What the mod does, in a sentence.')}
+${fieldLine('author', fields.author, 'Who made it.')}
 
   "launch": {
-    // Where the built mod goes, counted from this file: ${BUILT}\\@${name}.
+    // Where the built mod goes, counted from this file: ${BUILT}\\@${mod}.
     "modsDirectory": "${BUILT}",
     "targets": [
       {
@@ -289,6 +401,20 @@ function manifestOf(name: string): string {
   }
 }
 `;
+}
+
+/** The field where something answered for it, and the hint that asks for it where nothing did. */
+function fieldLine(field: string, value: string | undefined, hint: string): string {
+  return value === undefined ? `  // "${field}": "${hint}",` : `  "${field}": ${quoted(value)},`;
+}
+
+/**
+ * A value the way JSON writes it, quotes and all. What a `config.cpp` holds is not what JSON
+ * takes: an overview with a quote in it — and the config syntax for one is `""` — would end the
+ * string early and leave a manifest nothing can read.
+ */
+function quoted(value: string): string {
+  return JSON.stringify(value);
 }
 
 /**

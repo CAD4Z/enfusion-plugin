@@ -105,6 +105,15 @@ export function modsFromScan(scan: Scan): Mod[] {
   return mods.map((draft) => toMod(draft, provider, rank, walk.cycles));
 }
 
+/**
+ * The addon that declares the mod: the one carrying `CfgMods`. A mod has one, and a mod whose
+ * declaration sits deeper than an addon has none — which is the one thing everything reading a
+ * mod's own name, author or script modules out of a config has to ask first.
+ */
+export function mainAddonOf(mod: Mod): Addon | undefined {
+  return mod.addons.find((addon) => addon.main);
+}
+
 /** The file whose presence declares a folder to be a mod. */
 export const MANIFEST_FILE = 'mod.enf';
 

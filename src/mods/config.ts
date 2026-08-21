@@ -1,9 +1,11 @@
 /**
  * Reading a `config.cpp`.
  *
- * Only two things are asked of it: which addons a `CfgPatches` class requires, so the build order
- * can be worked out, and whether the file carries a `CfgMods` block, because that is what makes an
- * addon the main one and names the mod's prefix root.
+ * Two things are asked of it for the model: which addons a `CfgPatches` class requires, so the
+ * build order can be worked out, and whether the file carries a `CfgMods` block, because that is
+ * what makes an addon the main one and names the mod's prefix root. What a mod says about itself
+ * there — its name, who wrote it, what it does — is read as well, because a mod already carrying
+ * all of that is a mod nobody should be asked to type it into a `mod.enf` a second time.
  *
  * The format is Arma's class syntax, so the parser has to cope with what real configs are written
  * with: `#include` lines, both comment styles, and `""` as an escaped quote. It never throws — a
@@ -27,12 +29,24 @@ export interface ConfigCpp {
 export interface PatchClass {
   readonly name: string;
   readonly requiredAddons: readonly string[];
+  /** Who wrote the addon; an Arma habit that plenty of DayZ configs keep, and plenty leave out. */
+  readonly author: string | undefined;
+  /** The addon's own version — not `requiredVersion`, which is the game's. */
+  readonly version: string | undefined;
 }
 
 /** The `CfgMods` class that declares the mod itself; carrying one is what makes an addon main. */
 export interface ModClass {
-  /** The prefix root's folder name — `P:\<dir>` — empty when the config leaves it out. */
-  readonly dir: string;
+  /** The prefix root's folder name — `P:\<dir>` — undefined when the config leaves it out. */
+  readonly dir: string | undefined;
+  /** What the mod calls itself, which is neither the class name nor the folder. */
+  readonly name: string | undefined;
+  /** What it does, in a sentence: `overview` is where a DayZ config writes that. */
+  readonly overview: string | undefined;
+  /** Who made the mod, as the mod itself has it rather than as one of its addons does. */
+  readonly author: string | undefined;
+  /** Which version of the mod this is — the mod's own, and nothing to do with the game's. */
+  readonly version: string | undefined;
 }
 
 /** Everything the parser could make sense of; anything malformed is skipped, not reported. */
@@ -42,12 +56,20 @@ export function parseConfig(source: string): ConfigCpp {
   const patches = childrenOf(root, 'CfgPatches').map((patch) => ({
     name: patch.name,
     requiredAddons: valuesOf(patch, 'requiredAddons'),
+    author: scalarOf(patch, 'author'),
+    version: scalarOf(patch, 'version'),
   }));
 
   // A second class under `CfgMods` would be a second mod in one addon, which the engine has no
   // notion of; the first one is the declaration.
   const declaration = childrenOf(root, 'CfgMods')[0];
-  const mod = declaration && { dir: valuesOf(declaration, 'dir')[0] ?? '' };
+  const mod = declaration && {
+    dir: scalarOf(declaration, 'dir'),
+    name: scalarOf(declaration, 'name'),
+    overview: scalarOf(declaration, 'overview'),
+    author: scalarOf(declaration, 'author'),
+    version: scalarOf(declaration, 'version'),
+  };
 
   return { patches, mod };
 }
@@ -98,6 +120,16 @@ function childrenOf(root: Body, name: string): ClassNode[] {
 /** The entry's values, empty when it is not there. */
 function valuesOf(node: Body, key: string): string[] {
   return node.entries.get(key.toLowerCase())?.values ?? [];
+}
+
+/**
+ * The entry's one value, and undefined where it is written empty as well as where it is absent:
+ * `picture = ""` and `author = ""` are half of what a config copied from a template holds, and a
+ * field that says nothing is a field that was never filled in.
+ */
+function scalarOf(node: Body, key: string): string | undefined {
+  const value = valuesOf(node, key)[0]?.trim();
+  return value === undefined || value === '' ? undefined : value;
 }
 
 /** Names are matched the way the engine matches them: without regard for case. */

@@ -1,42 +1,50 @@
 /**
- * The two commands that make something: a mod, and an addon of one.
+ * The three commands that make something: a mod, a `mod.enf` for a mod that is already there, and
+ * an addon of either.
  *
  * The mod is made where the developer asked for it — the folder clicked in the explorer, or the
  * open folder when the command came from the palette or from an empty panel — and it is asked two
  * things and no more: what it is called, and whether it packs into one pbo or one per addon.
  * Everything else about it is worked out from the name in `src/mods/init.ts`, which is also where
- * both refusals are worded.
+ * every refusal is worded.
+ *
+ * A mod somebody else wrote is asked nothing at all: what a `mod.enf` would be filled in with is
+ * in its `config.cpp` already, so it is read out of there and shown, and the one question is
+ * whether to write it down.
  *
  * A mod that cannot be built until something is set up by hand is not a mod that was made for the
- * developer, so the last thing this does is put the new mod on the work drive: it is a build away
+ * developer, so the last thing making one does is put it on the work drive: it is a build away
  * from being a pbo the moment the wizard closes.
  */
 
 import * as vscode from 'vscode';
 import {
   type AddonPlan,
+  type Adoption,
   type InitPlan,
   addonNameProblemOf,
   addonPlanOf,
   addonsRefusalOf,
+  adoptionOf,
   initPlanOf,
   modNameProblemOf,
 } from '../mods/init';
-import { CONFIG_FILE, MANIFEST_FILE, type Layout, type Mod } from '../mods/model';
+import { CONFIG_FILE, MANIFEST_FILE, type Layout, type Mod, mainAddonOf } from '../mods/model';
 import { type WorkDriveState, linkPathOf, linksToMake, refusalOf } from '../mods/workDrive';
-import { createFrom, existingOf, folderAt, holds, requireAddon } from '../platform/init';
+import { createFrom, existingOf, folderAt, holds, requireAddon, textOf } from '../platform/init';
 import { readMachineSettings } from '../platform/machine';
 import { makeLinks, platformRefusal, readLinks, readWorkDrive } from '../platform/workDrive';
-import { findMods } from '../platform/workspace';
+import { type Discovery, findMods } from '../platform/workspace';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** The command ids, which the palette, the explorer's menu and the panel all go through. */
 export const INIT_COMMAND = {
   mod: 'enfusion.init',
+  adopt: 'enfusion.adopt',
   addon: 'enfusion.addon.add',
 } as const;
 
-/** Registers both, and calls back after each so the panel shows what was made. */
+/** Registers all three, and calls back after each so the panel shows what was made. */
 export function registerInitCommands(
   log: vscode.LogOutputChannel,
   changed: () => void,
@@ -45,6 +53,9 @@ export function registerInitCommands(
 
   return vscode.Disposable.from(
     vscode.commands.registerCommand(INIT_COMMAND.mod, (where?: vscode.Uri) => commands.mod(where)),
+    vscode.commands.registerCommand(INIT_COMMAND.adopt, (target?: { mod: string }) =>
+      commands.adopt(target),
+    ),
     vscode.commands.registerCommand(INIT_COMMAND.addon, (target?: { mod: string }) =>
       commands.addon(target),
     ),
@@ -93,23 +104,77 @@ class InitCommands {
 
     // The manifest is what the mod is configured by, so it is what the developer is left looking at.
     await vscode.window.showTextDocument(vscode.Uri.joinPath(root, MANIFEST_FILE));
-    await this.link(root, name);
+    await this.link(root, name, `Made ${name}`);
+  }
+
+  /**
+   * The `mod.enf` an unconfigured mod has not got, filled in from the `config.cpp` that declares
+   * it. Nothing is written before the developer has seen what would go in it, and a developer who
+   * says no leaves the disk as it was and the mod in the list, unconfigured.
+   */
+  async adopt(target: { mod: string } | undefined): Promise<void> {
+    const found = await findMods();
+    const mod = await modFor(target, found, {
+      among: isUnconfigured,
+      empty: `Every mod of this workspace has a ${MANIFEST_FILE} already.`,
+      placeHolder: `Mod to write a ${MANIFEST_FILE} for`,
+    });
+
+    if (mod === undefined) {
+      return;
+    }
+
+    // The main addon is the one that declares the mod, so its config is the one with the answers.
+    const config = found.uris.get(mainAddonOf(mod)?.config ?? '');
+    const adoption = adoptionOf(
+      mod,
+      config === undefined ? '' : await textOf(config),
+      openFolders(),
+    );
+
+    if (adoption.refusal !== undefined) {
+      this.log.warn(`adopt ${mod.name}: ${adoption.refusal}`);
+      await vscode.window.showWarningMessage(adoption.refusal);
+      return;
+    }
+
+    if (!(await confirmed(mod, adoption, config))) {
+      this.log.info(`adopt ${mod.name}: declined, nothing written`);
+      return;
+    }
+
+    const root = rootOf(mod, found);
+    if (root === undefined) {
+      await vscode.window.showErrorMessage(`${mod.name} could not be found on disk any more.`);
+      return;
+    }
+
+    if (!(await this.write(root, adoption, `${MANIFEST_FILE} for ${mod.name}`))) {
+      return;
+    }
+
+    this.log.info(`adopted ${mod.name} as ${adoption.fields.name}`);
+    this.changed();
+
+    // The manifest is what the mod is configured by, so it is what the developer is left looking
+    // at: the fields it was filled in with are the ones worth reading over.
+    await vscode.window.showTextDocument(vscode.Uri.joinPath(root, MANIFEST_FILE));
+
+    // And onto the work drive, the way a new mod goes: an adopted mod that cannot be built until
+    // another button is found is not a mod that was configured for the developer.
+    await this.link(root, mod.name, `Configured ${mod.name}`);
   }
 
   /** A new addon of a mod that is laid out as several. */
   async addon(target: { mod: string } | undefined): Promise<void> {
     const found = await findMods();
-    const mod =
-      target === undefined
-        ? await pickMod(found.mods)
-        : found.mods.find((candidate) => candidate.name === target.mod);
+    const mod = await modFor(target, found, {
+      among: ANY,
+      empty: 'No mod of this workspace can take an addon.',
+      placeHolder: 'Mod to add an addon to',
+    });
 
     if (mod === undefined) {
-      if (target !== undefined) {
-        await vscode.window.showWarningMessage(
-          `${target.mod} is no longer a mod of this workspace.`,
-        );
-      }
       return;
     }
 
@@ -133,9 +198,7 @@ class InitCommands {
       return;
     }
 
-    const root = found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '')?.with({
-      path: mod.root,
-    });
+    const root = rootOf(mod, found);
     if (root === undefined) {
       await vscode.window.showErrorMessage(`${mod.name} could not be found on disk any more.`);
       return;
@@ -216,14 +279,14 @@ class InitCommands {
    * being found first. A drive that is down is not a failure of the initialisation: the mod is
    * made either way, and what is missing is said with the button that settles it.
    */
-  private async link(root: vscode.Uri, name: string): Promise<void> {
+  private async link(root: vscode.Uri, name: string, done: string): Promise<void> {
     const prefixRoot = vscode.Uri.joinPath(root, name);
     const drive = await readWorkDrive(await readMachineSettings());
     const refusal = platformRefusal() ?? refusalOf(drive, 'link');
 
     if (refusal !== undefined) {
       this.log.warn(`link ${name}: ${refusal}`);
-      await this.offerMount(`${name} was made, but it is not on the work drive. ${refusal}`, drive.state);
+      await this.offerMount(`${done}, but it is not on the work drive. ${refusal}`, drive.state);
       return;
     }
 
@@ -236,7 +299,7 @@ class InitCommands {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.log.error(`could not link ${name}: ${message}`);
-      await vscode.window.showWarningMessage(`${name} was made, but could not be linked: ${message}`);
+      await vscode.window.showWarningMessage(`${done}, but could not link it: ${message}`);
       return;
     } finally {
       this.changed();
@@ -244,7 +307,7 @@ class InitCommands {
 
     const path = linkPathOf(drive.letter, name);
     this.log.info(`linked ${name} as ${path}`);
-    await vscode.window.showInformationMessage(`Made ${name} and linked it as ${path}.`);
+    await vscode.window.showInformationMessage(`${done} and linked it as ${path}.`);
   }
 
   /** The one press that settles the commonest reason a new mod is not on the drive. */
@@ -324,10 +387,110 @@ async function askAddonName(mod: Mod): Promise<string | undefined> {
   return name?.trim();
 }
 
+/**
+ * The one question adoption asks. What would be written is shown before it is written, because the
+ * whole of the offer is these fields out of this file — and saying no writes nothing at all.
+ */
+async function confirmed(
+  mod: Mod,
+  adoption: Adoption,
+  config: vscode.Uri | undefined,
+): Promise<boolean> {
+  const write = `Write ${MANIFEST_FILE}`;
+  const answer = await vscode.window.showInformationMessage(
+    `Configure ${mod.name} from its ${CONFIG_FILE}?`,
+    { modal: true, detail: detailOf(adoption, config) },
+    write,
+  );
+
+  return answer === write;
+}
+
+/** The fields as they were read, and where they were read from: the offer, in full. */
+function detailOf(adoption: Adoption, config: vscode.Uri | undefined): string {
+  const { name, version, description, author } = adoption.fields;
+  const fields = [
+    ['name', name],
+    ['version', version],
+    ['description', description],
+    ['author', author],
+  ] as const;
+
+  const read = fields.flatMap(([field, value]) => (value === undefined ? [] : [`${field}: ${value}`]));
+  const where = config === undefined ? CONFIG_FILE : vscode.workspace.asRelativePath(config, true);
+
+  return (
+    `${read.join('\n')}\n\n` +
+    `Read out of ${where}. The only file written is ${MANIFEST_FILE} in the mod root — what is ` +
+    'left blank can be filled in there afterwards — and the mod is put on the work drive, the ' +
+    'way a new one is.'
+  );
+}
+
+/**
+ * The mod a command is about: the one the panel named, or the one picked from the list when the
+ * command came from the palette with nothing to click.
+ *
+ * The panel's name is looked up among all the mods rather than among the ones worth offering, so
+ * that a card gone stale — a mod configured since the panel drew it — is answered by whoever
+ * refuses it, in the words of what it is now, instead of by "no longer a mod of this workspace".
+ */
+async function modFor(
+  target: { mod: string } | undefined,
+  found: Discovery,
+  asking: Asking,
+): Promise<Mod | undefined> {
+  if (target === undefined) {
+    return pickMod(found.mods.filter(asking.among), asking);
+  }
+
+  const mod = found.mods.find((candidate) => candidate.name === target.mod);
+  if (mod === undefined) {
+    await vscode.window.showWarningMessage(`${target.mod} is no longer a mod of this workspace.`);
+  }
+
+  return mod;
+}
+
+/** What a command offers when nothing was clicked, and how it says there is nothing to offer. */
+interface Asking {
+  /** The mods worth offering. */
+  readonly among: (mod: Mod) => boolean;
+  readonly empty: string;
+  readonly placeHolder: string;
+}
+
+/** A mod found by its `config.cpp` alone, which is the only kind there is anything to adopt in. */
+function isUnconfigured(mod: Mod): boolean {
+  return mod.manifest === undefined;
+}
+
+/** Every mod is worth offering: the one that cannot take an addon says so when it is picked. */
+function ANY(): boolean {
+  return true;
+}
+
+/**
+ * The folders the workspace has open, as the domain counts paths. A mod root outside every one of
+ * them is a mod root nothing written into would ever be found in again.
+ */
+function openFolders(): string[] {
+  return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.path);
+}
+
+/**
+ * The mod root as a `Uri`, borrowed from a file inside the mod: only files were searched for, so
+ * the folder has none of its own, and building one from the path would assume the workspace is a
+ * folder on this disk.
+ */
+function rootOf(mod: Mod, found: Discovery): vscode.Uri | undefined {
+  return found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '')?.with({ path: mod.root });
+}
+
 /** From the palette there is nothing to click, so the list of mods is the question asked. */
-async function pickMod(mods: readonly Mod[]): Promise<Mod | undefined> {
+async function pickMod(mods: readonly Mod[], asking: Asking): Promise<Mod | undefined> {
   if (mods.length === 0) {
-    await vscode.window.showWarningMessage('No mod of this workspace can take an addon.');
+    await vscode.window.showWarningMessage(asking.empty);
     return undefined;
   }
 
@@ -341,7 +504,7 @@ async function pickMod(mods: readonly Mod[]): Promise<Mod | undefined> {
       description: vscode.workspace.asRelativePath(mod.root, true),
       mod,
     })),
-    { placeHolder: 'Mod to add an addon to' },
+    { placeHolder: asking.placeHolder },
   );
 
   return picked?.mod;
