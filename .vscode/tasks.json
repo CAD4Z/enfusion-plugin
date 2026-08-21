@@ -21,7 +21,7 @@
           "${workspaceFolder}"
         ],
         "pattern": {
-          "regexp": "^(?:\s+)?(.*):(\d+):(\d+):\s+(warning|error):\s+(.*)$",
+          "regexp": "^(?:\\s+)?(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
           "file": 1,
           "line": 2,
           "column": 3,
@@ -30,8 +30,8 @@
         },
         "background": {
           "activeOnStart": true,
-          "beginsPattern": "^\[watch\] build started$",
-          "endsPattern": "^\[watch\] build finished$"
+          "beginsPattern": "^\\[watch\\] build started$",
+          "endsPattern": "^\\[watch\\] build finished$"
         }
       }
     },
