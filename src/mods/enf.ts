@@ -208,7 +208,8 @@ export function workspaceFor(modRoot: string, files: readonly string[]): string 
     .at(0);
 }
 
-const NO_LAUNCH: Launch = {
+/** What a mod that configures no launch is launched by, which is nothing at all. */
+export const NO_LAUNCH: Launch = {
   modsDirectory: undefined,
   clientMods: [],
   serverMods: [],

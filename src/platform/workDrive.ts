@@ -61,7 +61,7 @@ export async function readLinks(
   const facts = await Promise.all(
     prefixes.map(async (prefix) => {
       const path = linkPathOf(drive.letter, prefix.name);
-      return [path, await factAt(path)] as const;
+      return [path, await linkFactAt(path)] as const;
     }),
   );
 
@@ -84,11 +84,19 @@ export async function unmount(drive: WorkDrive): Promise<void> {
 export async function makeLinks(links: readonly Link[]): Promise<void> {
   for (const link of links) {
     if (link.at !== '') {
-      await remove(link.path);
+      await removeLink(link.path);
     }
 
-    await symlink(link.target, link.path, 'junction');
+    await makeJunction(link.path, link.target);
   }
+}
+
+/**
+ * One junction, at the path and onto the folder given. The one kind of link Windows makes without
+ * Developer Mode, which is why the launch folder is built out of these as well.
+ */
+export async function makeJunction(path: string, target: string): Promise<void> {
+  await symlink(target, path, 'junction');
 }
 
 /** What `subst` prints with no arguments: every letter it has put up, and the folder behind it. */
@@ -106,7 +114,7 @@ async function mounts(): Promise<string> {
   }
 }
 
-async function factAt(path: string): Promise<LinkFact> {
+export async function linkFactAt(path: string): Promise<LinkFact> {
   const stats = await statOf(path);
   if (stats === undefined) {
     return { kind: 'none' };
@@ -144,7 +152,7 @@ async function targetOf(path: string): Promise<string | undefined> {
  * junction; where it will not, `rmdir` removes the reparse point rather than what is behind it —
  * which is why neither the mod's sources nor anything else on the drive can be lost here.
  */
-async function remove(path: string): Promise<void> {
+export async function removeLink(path: string): Promise<void> {
   try {
     await unlink(path);
   } catch {

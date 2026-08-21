@@ -21,12 +21,12 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
-The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the private key, the source and the letter
-of the work drive, the file patching root and the choice of builder are about the machine rather
-than about the mod, so they live in VS Code settings with `scope: machine`, which the editor
-physically will not let a workspace write. All three paths are read out of the registry by default,
-so in the ordinary case nothing has to be entered; what resolved and what did not is visible in the
-panel.
+The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the game executable to run, the private
+key, the source and the letter of the work drive, the file patching root and the choice of builder
+are about the machine rather than about the mod, so they live in VS Code settings with
+`scope: machine`, which the editor physically will not let a workspace write. All three paths are
+read out of the registry by default, so in the ordinary case nothing has to be entered; what
+resolved and what did not is visible in the panel.
 
 The work drive is mounted and unmounted from the same panel: the buttons call `subst` with the
 folder and the letter out of the machine settings, and the panel shows where the letter actually
@@ -62,8 +62,38 @@ AddonBuilder is not given them, because `-exclude=` brings it down (1.0.240639) 
 `ArgumentNullException` on any list at all, its own example included. Build errors are read out of
 the packing log and reach Problems — on the line of the file of the workspace the builder was
 talking about, not on its twin on `P:`; an addon that failed without a place to point at is marked
-on its own `config.cpp`. Building is the only thing that puts paths out of a `mod.enf` on a command
-line, so it is the only thing that wants the folder trusted (Workspace Trust).
+on its own `config.cpp`. Building is one of the two places where a path out of a `mod.enf` reaches a
+command line (the other is launching), so it wants the folder trusted (Workspace Trust).
+
+The client is launched by the editor's own **Run and Debug**: the configurations are handed out
+dynamically from the targets of the `launch` block, so `launch.json` is not needed and is never
+created. One written by hand is useless for configuring, too: a debug configuration takes exactly
+`type`, `request` and `target`, and any other field is an error pointing at `mod.enf`. The selected
+target is shown in the status bar and changed there; `target` in a configuration is a target's name,
+and targets of the same name in different mods are told apart as `<Mod>: <Name>`. The debugger does
+exactly two things, start and stop: there are no breakpoints, no stacks and no variables, but
+**Stop** puts the game down along with its children (`taskkill /T`), and the session ends by itself
+when the game is closed from inside.
+
+Before a launch the **file patching root** is put together — the working directory the game will
+get, by default `%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it are junctions onto **every
+folder of the game root**, obtained by listing it, plus junctions onto the prefix roots of the
+workspace's mods and a copy of `steam_appid.txt`; neither the game folder nor the work drive is
+changed by any of it. The listing is not a detail: the Workbench plugins had the list hardcoded as
+`Addons`, `bliss` and `sakhal`, while a live installation has had no `bliss` for a long time and
+does have `!Workshop`, `dta`, `Missions`, `MainMenu.*` and the rest. A second launch redoes nothing:
+a link pointing where it should stays, one that has moved is repointed, one no longer wanted is
+taken off, and whatever the game itself wrote into the working directory (logs, dumps) is not
+touched at all. A launch refuses to start where the work drive is not mounted, or where there is no
+game executable — by default `DayZDiag_x64.exe`, because only the diagnostic build understands
+`-filePatching`; the name or the path is changed by the `enfusion.dayz.executable` setting.
+
+The client gets `-filePatching`, a profile of its own inside the working directory, a `-mod=` with
+the list of the mods that were built (the third-party ones out of `clientMods` first, then ours in
+dependency order) and, where the target named a map, `-mission=dayzOffline.<map>`. Like a build, a
+launch puts paths out of a `mod.enf` on a command line, so it wants the folder trusted too. The
+server (`run: "server"` and `"both"`) is not put up yet: a server-only target refuses to start, and
+a target that says both puts up the client and says so.
 
 One more thing about AddonBuilder, nothing to do with this extension but worth knowing in advance:
 it binarises through `binarize.exe -addon="P:"`, which is to say it reads **every** config on the

@@ -42,6 +42,7 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
 
   return {
     dayz: text(SETTING.dayz) || (await fromRegistry(DAYZ)),
+    executable: text(SETTING.executable),
     dayzTools: text(SETTING.dayzTools) || (await fromRegistry(DAYZ_TOOLS)),
     pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
     privateKey: text(SETTING.privateKey),

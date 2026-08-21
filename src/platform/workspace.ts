@@ -6,13 +6,15 @@
 import * as vscode from 'vscode';
 import {
   type Configured,
+  type Launch,
   type ManifestProblem,
   type ManifestSource,
+  NO_LAUNCH,
   WORKSPACE_FILE,
   configurationsOf,
 } from '../mods/enf';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan } from '../mods/model';
-import { nameOf } from '../mods/paths';
+import { nameOf, windowsFolder } from '../mods/paths';
 import type { Prefix } from '../mods/workDrive';
 
 /** The three files a workspace of mods is made of, anywhere in the open folders. */
@@ -71,6 +73,55 @@ export function prefixesOf(found: Discovery): Prefix[] {
 
     return [{ prefixRoot, name: mod.name, target: anchor.with({ path: prefixRoot }).fsPath }];
   });
+}
+
+/**
+ * A mod with the `.enf` that configures it resolved: which file owns its launch block, where that
+ * file sits, and what it says. The cascade has already picked the file — a `workspace.enf` owns
+ * the launch of everything under it — and a relative path is counted from that file's folder,
+ * which is the one place a path in a manifest means what it says.
+ */
+export interface Owned {
+  readonly mod: Mod;
+  /** The file whose launch block this mod obeys; empty for a mod with no manifest at all. */
+  readonly owner: string;
+  /** Its name — `mod.enf` or `workspace.enf` — for the sentence that asks for a setting. */
+  readonly configuredBy: string;
+  /** Its folder, the way Windows takes it. */
+  readonly configuredIn: string;
+  readonly launch: Launch;
+  /** What the mod's own manifest excludes from packing, which no workspace file overrides. */
+  readonly exclude: readonly string[];
+}
+
+/** Every mod of the workspace, in the model's order, with the file that configures each. */
+export function ownedOf(found: Discovery): Owned[] {
+  return found.mods.map((mod) => {
+    const configured = mod.manifest === undefined ? undefined : found.configured.get(mod.manifest);
+    const owner = configured?.workspace ?? mod.manifest;
+    const ownerUri = owner === undefined ? undefined : found.uris.get(owner);
+
+    return {
+      mod,
+      owner: owner ?? '',
+      configuredBy: owner === undefined ? MANIFEST_FILE : nameOf(owner),
+      configuredIn:
+        ownerUri === undefined ? rootOf(mod.root, found) : windowsFolder(ownerUri.fsPath),
+      launch: configured?.configuration.launch ?? NO_LAUNCH,
+      exclude: configured?.configuration.manifest.exclude ?? [],
+    };
+  });
+}
+
+/**
+ * The mod root as Windows takes it. The folder has no `Uri` of its own — only files were searched
+ * for — so it borrows one from a file inside the mod and swaps the path, which is what keeps this
+ * working for a workspace that is not on this disk.
+ */
+function rootOf(root: string, found: Discovery): string {
+  const anchor = [...found.uris.values()].find((uri) => uri.path.startsWith(`${root}/`));
+
+  return anchor ? anchor.with({ path: root }).fsPath : '';
 }
 
 /**

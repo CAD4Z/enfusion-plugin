@@ -6,19 +6,26 @@ import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { registerBuildCommands } from './view/build';
+import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
 import { registerWorkDriveCommands } from './view/workDrive';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
   const panel = new ModsPanel(context.extensionUri, log);
+  // The chosen target is the workspace's rather than the machine's: it names a target of this
+  // workspace's `.enf`, and means nothing in another one.
+  const launching = registerLaunch(context.workspaceState, log);
 
   context.subscriptions.push(
     log,
     panel,
+    launching,
     vscode.window.registerWebviewViewProvider(ModsPanel.viewId, panel),
     watchMods(() => {
       panel.refresh();
+      // A target added to a `.enf` shows on the status bar without anything being pressed.
+      launching.refresh();
     }),
     // The panel shows what the machine resolved to, so a setting changing is a change to show.
     watchMachineSettings(() => {

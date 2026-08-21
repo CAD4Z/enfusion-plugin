@@ -25,14 +25,12 @@ import {
   subjectOf,
 } from '../mods/build';
 import type { MachineSettings } from '../mods/machine';
-import { MANIFEST_FILE } from '../mods/model';
 import { fileOf, problemsOf } from '../mods/packingLog';
-import { nameOf, windowsFolder } from '../mods/paths';
 import { type Link, isUnlinked } from '../mods/workDrive';
 import { type StepOutcome, runBuild } from '../platform/build';
 import { readMachineSettings } from '../platform/machine';
 import { readLinks, readWorkDrive } from '../platform/workDrive';
-import { type Discovery, findMods, prefixesOf } from '../platform/workspace';
+import { type Discovery, findMods, ownedOf, prefixesOf } from '../platform/workspace';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** The command ids, which are also what the panel's buttons ask for. */
@@ -259,31 +257,14 @@ async function readBuildInput(): Promise<BuildInput> {
  * what it means where it is written.
  */
 function sourcesOf(found: Discovery, links: readonly Link[]): BuildSource[] {
-  return found.mods.map((mod) => {
-    const configured = mod.manifest === undefined ? undefined : found.configured.get(mod.manifest);
-    const owner = configured?.workspace ?? mod.manifest;
-    const ownerUri = owner === undefined ? undefined : found.uris.get(owner);
-
-    return {
-      mod,
-      link: links.find((made) => made.prefixRoot === mod.prefixRoot),
-      modsDirectory: configured?.configuration.launch.modsDirectory ?? '',
-      exclude: configured?.configuration.manifest.exclude ?? [],
-      configuredIn: ownerUri === undefined ? rootOf(mod.root, found) : windowsFolder(ownerUri.fsPath),
-      configuredBy: owner === undefined ? MANIFEST_FILE : nameOf(owner),
-    };
-  });
-}
-
-/**
- * The mod root as Windows takes it. The folder has no `Uri` of its own — only files were searched
- * for — so it borrows one from a file inside the mod and swaps the path, which is what keeps this
- * working for a workspace that is not on this disk.
- */
-function rootOf(root: string, found: Discovery): string {
-  const anchor = [...found.uris.values()].find((uri) => uri.path.startsWith(`${root}/`));
-
-  return anchor ? anchor.with({ path: root }).fsPath : '';
+  return ownedOf(found).map((owned) => ({
+    mod: owned.mod,
+    link: links.find((made) => made.prefixRoot === owned.mod.prefixRoot),
+    modsDirectory: owned.launch.modsDirectory ?? '',
+    exclude: owned.exclude,
+    configuredIn: owned.configuredIn,
+    configuredBy: owned.configuredBy,
+  }));
 }
 
 function named(jobs: readonly BuildJob[], target: BuildTarget): BuildJob | undefined {

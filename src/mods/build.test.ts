@@ -423,6 +423,7 @@ function job(over: Partial<BuildJob> = {}): BuildJob {
 function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   return {
     dayz: 'F:\\DayZ',
+    executable: '',
     dayzTools: TOOLS,
     pboProject: PBOPROJECT,
     privateKey: KEY,

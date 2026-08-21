@@ -14,7 +14,7 @@
  * that a refusal is visible before the first build rather than during it.
  */
 
-import { samePath, windowsPath } from './paths';
+import { resolveWindows, samePath, windowsPath } from './paths';
 
 /** The program that packs an addon into a pbo. */
 export type Builder = 'pboProject' | 'AddonBuilder';
@@ -25,6 +25,8 @@ export const BUILDERS: readonly Builder[] = ['pboProject', 'AddonBuilder'];
 export interface MachineSettings {
   /** The DayZ installation — the folder the client and the diag executable sit in. */
   readonly dayz: string;
+  /** The executable a launch starts, as a name in that folder or as a path of its own. */
+  readonly executable: string;
   readonly dayzTools: string;
   /** `pboProject.exe` itself, which is what its installer records rather than a folder. */
   readonly pboProject: string;
@@ -42,6 +44,7 @@ export interface MachineSettings {
 /** The settings, by the ids the editor knows them under, so the panel can open the right one. */
 export const SETTING = {
   dayz: 'enfusion.dayz.path',
+  executable: 'enfusion.dayz.executable',
   dayzTools: 'enfusion.dayzTools.path',
   privateKey: 'enfusion.signing.privateKey',
   workDrive: 'enfusion.workDrive.source',
@@ -115,6 +118,21 @@ export function signToolOf(settings: MachineSettings): string {
   return settings.dayzTools === ''
     ? ''
     : windowsPath(settings.dayzTools, 'Bin', 'DsUtils', 'DSSignFile.exe');
+}
+
+/** The build of the game that reads scripts off the disk rather than out of a pbo. */
+export const DEFAULT_EXECUTABLE = 'DayZDiag_x64.exe';
+
+/**
+ * The program a launch starts. The diag build is the one that honours `-filePatching`, so that is
+ * what the setting stands in for when it is empty; a setting holding a path of its own is taken as
+ * it is written, which is how a developer whose diag build sits outside the installation launches
+ * at all.
+ */
+export function gameExecutableOf(settings: MachineSettings): string {
+  const executable = settings.executable === '' ? DEFAULT_EXECUTABLE : settings.executable;
+
+  return resolveWindows(settings.dayz, executable);
 }
 
 export type EnvironmentKind = 'dayz' | 'dayzTools' | 'privateKey' | 'workDrive' | 'builder';

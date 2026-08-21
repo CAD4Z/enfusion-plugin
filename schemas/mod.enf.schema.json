@@ -28,8 +28,16 @@
     "exclude": {
       "type": "array",
       "description": "File masks and folder names the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying. Left out, a default list of the source formats DayZ modding has settled on is used; naming any replaces that list whole. Handed to pboProject as it is written here. AddonBuilder ignores it: the option it takes an exclude list through crashes it.",
-      "items": { "type": "string" },
-      "examples": [["*.psd", "*.fbx", "Workbench"]]
+      "items": {
+        "type": "string"
+      },
+      "examples": [
+        [
+          "*.psd",
+          "*.fbx",
+          "Workbench"
+        ]
+      ]
     },
     "launch": {
       "$ref": "#/definitions/launch",
@@ -48,25 +56,33 @@
         },
         "clientMods": {
           "type": "array",
-          "description": "Third-party mods to hand the client, by the name of their folder in modsDirectory.",
-          "items": { "type": "string" }
+          "description": "Third-party mods to hand the client, by the name of their folder in modsDirectory, with or without the leading @.",
+          "items": {
+            "type": "string"
+          }
         },
         "serverMods": {
           "type": "array",
-          "description": "Third-party mods to hand the server, by the name of their folder in modsDirectory.",
-          "items": { "type": "string" }
+          "description": "Third-party mods to hand the server, by the name of their folder in modsDirectory, with or without the leading @.",
+          "items": {
+            "type": "string"
+          }
         },
         "targets": {
           "type": "array",
           "description": "The entries of the Run and Debug list. Each one says what to put up and where its profile and mission come from.",
-          "items": { "$ref": "#/definitions/target" }
+          "items": {
+            "$ref": "#/definitions/target"
+          }
         }
       }
     },
     "target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -78,12 +94,16 @@
         },
         "map": {
           "type": "string",
-          "description": "The world the server loads, which is the tail of the mission folder's name — sakhal, chernarusplus."
+          "description": "The world this target is about, which is the tail of the mission folder name — sakhal, chernarusplus. A client with no server to join loads dayzOffline.<map>."
         },
         "run": {
           "type": "string",
           "description": "What this target puts up.",
-          "enum": ["client", "server", "both"],
+          "enum": [
+            "client",
+            "server",
+            "both"
+          ],
           "enumDescriptions": [
             "The client alone.",
             "The server alone.",

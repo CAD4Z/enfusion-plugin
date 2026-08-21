@@ -6,11 +6,13 @@ import {
   builderOf,
   environmentOf,
   environmentPaths,
+  gameExecutableOf,
   isWanting,
 } from './machine';
 
 const SETTINGS: MachineSettings = {
   dayz: 'F:\\SteamLibrary\\steamapps\\common\\DayZ',
+  executable: '',
   dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
   privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
@@ -159,4 +161,23 @@ test('a builder the settings do not name is the one most machines have', () => {
   assert.equal(builderOf('AddonBuilder'), 'AddonBuilder');
   assert.equal(builderOf('pboProject'), 'pboProject');
   assert.equal(builderOf(''), 'pboProject');
+});
+
+/** `-filePatching` is honoured by the diag build alone, which is why that is what is started. */
+test('the executable a launch starts is the diag build of the installation', () => {
+  assert.equal(
+    gameExecutableOf(SETTINGS),
+    'F:\\SteamLibrary\\steamapps\\common\\DayZ\\DayZDiag_x64.exe',
+  );
+});
+
+test('an executable named by the settings is taken as a name in that folder, or as its own path', () => {
+  assert.equal(
+    gameExecutableOf({ ...SETTINGS, executable: 'DayZ_x64.exe' }),
+    'F:\\SteamLibrary\\steamapps\\common\\DayZ\\DayZ_x64.exe',
+  );
+  assert.equal(
+    gameExecutableOf({ ...SETTINGS, executable: 'D:\\Diag\\DayZDiag_x64.exe' }),
+    'D:\\Diag\\DayZDiag_x64.exe',
+  );
 });

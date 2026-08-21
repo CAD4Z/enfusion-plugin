@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Building is the one thing that puts a path out of a mod.enf on a command line, so it is the one thing that waits for the workspace to be trusted."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -86,6 +86,12 @@
         "title": "Build All Addons",
         "category": "Enfusion",
         "icon": "$(tools)"
+      },
+      {
+        "command": "enfusion.selectTarget",
+        "title": "Select Launch Target",
+        "category": "Enfusion",
+        "icon": "$(rocket)"
       }
     ],
     "menus": {
@@ -105,7 +111,10 @@
     "languages": [
       {
         "id": "jsonc",
-        "filenames": ["mod.enf", "workspace.enf"]
+        "filenames": [
+          "mod.enf",
+          "workspace.enf"
+        ]
       }
     ],
     "jsonValidation": [
@@ -128,25 +137,32 @@
           "order": 1,
           "markdownDescription": "Where DayZ is installed — the folder holding `DayZDiag_x64.exe`. Left empty, it is read from the registry, which is where the installer put it."
         },
-        "enfusion.dayzTools.path": {
+        "enfusion.dayz.executable": {
           "type": "string",
           "default": "",
           "scope": "machine",
           "order": 2,
+          "markdownDescription": "The executable a launch starts, as a name inside the DayZ folder or as a path of its own. Left empty, `DayZDiag_x64.exe` is started: the diag build is the one that honours `-filePatching`."
+        },
+        "enfusion.dayzTools.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 3,
           "markdownDescription": "Where DayZ Tools is installed — the folder holding `bin\\AddonBuilder` and `bin\\DSUtils`. Left empty, it is read from the registry."
         },
         "enfusion.signing.privateKey": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 3,
+          "order": 4,
           "markdownDescription": "The `.biprivatekey` every pbo is signed with. Left empty, the pbo go unsigned, which a server checking signatures will not take."
         },
         "enfusion.workDrive.source": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 4,
+          "order": 5,
           "markdownDescription": "The folder the work drive is mounted from — the one holding the unpacked vanilla data."
         },
         "enfusion.workDrive.letter": {
@@ -155,37 +171,57 @@
           "pattern": "^$|^[A-Za-z]:?[\\\\/]?$",
           "patternErrorMessage": "A drive letter, on its own or with a colon after it: P, P: or P:\\. Left empty, the work drive goes up under P:.",
           "scope": "machine",
-          "order": 5,
+          "order": 6,
           "markdownDescription": "The letter the work drive is mounted under. Every prefix in the game is counted from the root of it, which is why `P:` is what the tools and the documentation assume."
         },
         "enfusion.filePatching.root": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 6,
+          "order": 7,
           "markdownDescription": "Where the folder the game is launched in is built. Left empty, it goes under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
         },
         "enfusion.builder": {
           "type": "string",
           "default": "pboProject",
-          "enum": ["pboProject", "AddonBuilder"],
+          "enum": [
+            "pboProject",
+            "AddonBuilder"
+          ],
           "enumDescriptions": [
             "Mikero pboProject.",
             "AddonBuilder, which comes with DayZ Tools. It ignores the exclude list: the option it takes one through crashes it."
           ],
           "scope": "machine",
-          "order": 7,
+          "order": 8,
           "markdownDescription": "The program that packs an addon into a pbo."
         },
         "enfusion.pboProject.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 8,
+          "order": 9,
           "markdownDescription": "`pboProject.exe` itself, not the folder holding it. Left empty, it is read from the registry, which is where its installer put it."
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "enfusion",
+        "label": "Enfusion",
+        "languages": [],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "The target to launch, by its name in the \"targets\" of mod.enf or workspace.enf. Left out, the one chosen on the status bar is launched."
+              }
+            }
+          }
+        }
+      }
+    ]
   },
   "scripts": {
     "compile": "node esbuild.js",
@@ -211,5 +247,10 @@
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1"
-  }
+  },
+  "activationEvents": [
+    "workspaceContains:**/mod.enf",
+    "onDebugResolve:enfusion",
+    "onDebugDynamicConfigurations:enfusion"
+  ]
 }
