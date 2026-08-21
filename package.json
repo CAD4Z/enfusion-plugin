@@ -1,0 +1,97 @@
+{
+  "name": "enfusion-plugin",
+  "displayName": "Enfusion",
+  "description": "Enfusion mod tooling for VS Code: the mods of the open workspace, without the Workbench",
+  "version": "0.0.1",
+  "publisher": "hurfy",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hurfy/enfusion-plugin.git"
+  },
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "dayz",
+    "enfusion",
+    "enforce script",
+    "workbench",
+    "mod"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The workspace is only ever read: mods are found by their config.cpp and nothing is executed."
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "enfusion",
+          "title": "Enfusion",
+          "icon": "resources/enfusion.svg"
+        }
+      ]
+    },
+    "views": {
+      "enfusion": [
+        {
+          "id": "enfusion.mods",
+          "name": "Mods",
+          "contextualTitle": "Enfusion"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "enfusion.mods",
+        "contents": "No Enfusion mod was found in this workspace.\n\nA mod is a folder with a `config.cpp` in its root.\n[Refresh](command:enfusion.refresh)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "enfusion.refresh",
+        "title": "Refresh Mods",
+        "category": "Enfusion",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "enfusion.refresh",
+          "when": "view == enfusion.mods",
+          "group": "navigation@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "check-types": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node esbuild.js --tests && node --test \"out/test/**/*.test.js\"",
+    "vsix": "vsce package",
+    "vscode:prepublish": "npm run package"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.94.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.67.0"
+  }
+}

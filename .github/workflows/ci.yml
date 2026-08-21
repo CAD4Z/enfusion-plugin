@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check-types
+
+      - run: npm run lint
+
+      - run: npm test
+
+      # The .vsix of every green build, so a branch can be installed before it is released.
+      - name: Package
+        run: npx vsce package --out enfusion-plugin.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enfusion-plugin-vsix
+          path: enfusion-plugin.vsix
+          if-no-files-found: error
