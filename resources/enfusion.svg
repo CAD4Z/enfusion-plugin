@@ -1,7 +1,12 @@
-<!-- Activity bar icon: heroicons 24/outline cube — the Workbench's own shape, at the weight VS Code
-     asks for. The bar uses the file as a mask, so only the alpha of the strokes reaches the screen
-     and the theme picks the colour. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+<!-- The Enfusion mark, from the engine's own favicon at https://enfusionengine.com/favicon.svg —
+     the same symbol that stands in front of the word in the ENFUSION wordmark. Unchanged apart
+     from the frame: the favicon letterboxes the art inside a 160x160 square, and the viewBox here
+     is cropped to the art itself so the activity bar renders it as large as it can.
+     The brand blue is gone for the same reason `currentColor` is here: the bar uses the file as a
+     mask, so the theme decides the colour and only the silhouette survives. See THIRD-PARTY.md. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 141 79.5906" fill="currentColor">
   <title>Enfusion</title>
-  <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>
+  <path d="M44.2037 54.9306V10.9283H0L44.2037 54.9306Z"/>
+  <path d="M71.9512 10.9283L141 79.5906V10.9283H71.9512Z"/>
+  <path d="M51.1937 55.0017H106.034L51.1937 0V55.0017Z"/>
 </svg>
