@@ -69,6 +69,7 @@ const LABELS: Record<EnvironmentKind, string> = {
   dayzTools: 'DayZ Tools',
   privateKey: 'Private key',
   workDrive: 'Work drive',
+  builder: 'Builder',
 };
 
 function entryOf(entry: EnvironmentEntry): HTMLElement {
@@ -287,34 +288,51 @@ function modOf(mod: ModView): HTMLElement {
   if (mod.link !== undefined) {
     rows.append(linkRow(mod.link));
   }
-  rows.append(...mod.addons.map(addonOf));
+  rows.append(...mod.addons.map((addon) => addonOf(addon, mod.name)));
 
   card.append(...(decorations.hasChildNodes() ? [decorations] : []), rows);
   return card;
 }
 
-/** One addon: what it packs into, and what it is called by whoever requires it. */
-function addonOf(addon: AddonView): HTMLElement {
-  const row = rowButton(`Open ${addon.name}/config.cpp`);
-  row.addEventListener('click', () => {
+/**
+ * One addon: what it packs into, what it is called by whoever requires it, and the button that
+ * packs it. The row is not itself a button any more — it holds two, because an addon is both a
+ * file to open and a thing to build, and one click cannot mean both.
+ */
+function addonOf(addon: AddonView, mod: string): HTMLElement {
+  const row = staticRow('addon');
+
+  const open = document.createElement('button');
+  open.className = 'open';
+  open.title = `Open ${addon.name}/config.cpp`;
+  open.addEventListener('click', () => {
     host.postMessage({ type: 'open', path: addon.config });
   });
 
-  row.append(span('name', addon.name));
+  open.append(span('name', addon.name));
   if (addon.main) {
-    row.append(span('tag', 'main', 'Carries CfgMods, so it declares the mod itself'));
+    open.append(span('tag', 'main', 'Carries CfgMods, so it declares the mod itself'));
   }
 
   // The class name is the addon's own and has nothing to do with the folder, so it is only worth
   // showing where the two say different things.
   for (const patch of addon.patches.filter((name) => name !== addon.name)) {
-    row.append(span('patch', patch, 'The CfgPatches class other addons require it by'));
+    open.append(span('patch', patch, 'The CfgPatches class other addons require it by'));
   }
 
   for (const required of addon.unresolved) {
-    row.append(span('unresolved', required, 'Required, and declared by no addon of this workspace'));
+    open.append(span('unresolved', required, 'Required, and declared by no addon of this workspace'));
   }
 
+  const build = document.createElement('button');
+  build.className = 'action';
+  build.textContent = 'Build';
+  build.title = `Pack ${addon.name} into ${addon.name}.pbo`;
+  build.addEventListener('click', () => {
+    host.postMessage({ type: 'build', mod, addon: addon.name });
+  });
+
+  row.append(open, build);
   return row;
 }
 

@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. The two programs this extension runs are the registry query that finds the DayZ installation and subst, which mounts the work drive on the folder and the drive letter the machine settings name; neither takes an argument from the workspace. Linking the mods onto the work drive writes junctions there, and only when it is asked for."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Building is the one thing that puts a path out of a mod.enf on a command line, so it is the one thing that waits for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -74,14 +74,31 @@
         "title": "Link Mods onto the Work Drive",
         "category": "Enfusion",
         "icon": "$(link)"
+      },
+      {
+        "command": "enfusion.build",
+        "title": "Build Addon",
+        "category": "Enfusion",
+        "icon": "$(package)"
+      },
+      {
+        "command": "enfusion.build.all",
+        "title": "Build All Addons",
+        "category": "Enfusion",
+        "icon": "$(tools)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "enfusion.refresh",
+          "command": "enfusion.build.all",
           "when": "view == enfusion.mods",
           "group": "navigation@1"
+        },
+        {
+          "command": "enfusion.refresh",
+          "when": "view == enfusion.mods",
+          "group": "navigation@2"
         }
       ]
     },
@@ -154,11 +171,18 @@
           "enum": ["pboProject", "AddonBuilder"],
           "enumDescriptions": [
             "Mikero pboProject.",
-            "AddonBuilder, which comes with DayZ Tools."
+            "AddonBuilder, which comes with DayZ Tools. It ignores the exclude list: the option it takes one through crashes it."
           ],
           "scope": "machine",
           "order": 7,
           "markdownDescription": "The program that packs an addon into a pbo."
+        },
+        "enfusion.pboProject.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 8,
+          "markdownDescription": "`pboProject.exe` itself, not the folder holding it. Left empty, it is read from the registry, which is where its installer put it."
         }
       }
     }

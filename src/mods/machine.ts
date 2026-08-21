@@ -14,7 +14,7 @@
  * that a refusal is visible before the first build rather than during it.
  */
 
-import { samePath } from './paths';
+import { samePath, windowsPath } from './paths';
 
 /** The program that packs an addon into a pbo. */
 export type Builder = 'pboProject' | 'AddonBuilder';
@@ -26,6 +26,8 @@ export interface MachineSettings {
   /** The DayZ installation — the folder the client and the diag executable sit in. */
   readonly dayz: string;
   readonly dayzTools: string;
+  /** `pboProject.exe` itself, which is what its installer records rather than a folder. */
+  readonly pboProject: string;
   /** The `.biprivatekey` to sign with; empty means the pbo goes unsigned. */
   readonly privateKey: string;
   /** The folder the work drive is mounted from. */
@@ -46,12 +48,76 @@ export const SETTING = {
   workDriveLetter: 'enfusion.workDrive.letter',
   filePatchingRoot: 'enfusion.filePatching.root',
   builder: 'enfusion.builder',
+  pboProject: 'enfusion.pboProject.path',
 } as const;
 
 /** The section every one of them sits under. */
 export const SECTION = 'enfusion';
 
-export type EnvironmentKind = 'dayz' | 'dayzTools' | 'privateKey' | 'workDrive';
+/**
+ * What differs between the two builders as far as the machine is concerned: where each one is
+ * found, which setting fills that in, and what to say when it is not there. One table, so that a
+ * third builder is one entry rather than a hunt through the ternaries it would otherwise be.
+ */
+const BUILDER: Readonly<
+  Record<
+    Builder,
+    {
+      /** The executable, or empty where the machine has no answer for it. */
+      readonly executable: (settings: MachineSettings) => string;
+      /** The setting that would fill it in. */
+      readonly setting: string;
+      readonly missing: string;
+    }
+  >
+> = {
+  // pboProject's installer records the executable itself, so the setting names a file.
+  pboProject: {
+    executable: (settings) => settings.pboProject,
+    setting: SETTING.pboProject,
+    missing: 'pboProject was not found: install Mikero’s tools, or set enfusion.pboProject.path.',
+  },
+  // AddonBuilder comes with DayZ Tools and is found under wherever those are.
+  AddonBuilder: {
+    executable: (settings) =>
+      settings.dayzTools === ''
+        ? ''
+        : windowsPath(settings.dayzTools, 'Bin', 'AddonBuilder', 'AddonBuilder.exe'),
+    setting: SETTING.dayzTools,
+    missing: 'AddonBuilder was not found: it comes with DayZ Tools, and no path to those is set.',
+  },
+};
+
+/**
+ * The program that will do the packing: whichever of the two the settings chose, at wherever the
+ * machine has it. Empty means it was not found, which the panel shows as a gap and a build refuses
+ * over.
+ */
+export function builderExecutableOf(settings: MachineSettings): string {
+  return BUILDER[settings.builder].executable(settings);
+}
+
+/** The setting that would fill in the builder that was chosen, for the row that opens it. */
+export function builderSettingOf(builder: Builder): string {
+  return BUILDER[builder].setting;
+}
+
+/** Why a build cannot go ahead on a machine that has not got the builder it was told to use. */
+export function missingBuilderOf(builder: Builder): string {
+  return BUILDER[builder].missing;
+}
+
+/**
+ * `DSSignFile.exe`, which signs whatever either builder produced. It comes with DayZ Tools, and
+ * signing is its own step precisely so that it works the same way behind both builders.
+ */
+export function signToolOf(settings: MachineSettings): string {
+  return settings.dayzTools === ''
+    ? ''
+    : windowsPath(settings.dayzTools, 'Bin', 'DsUtils', 'DSSignFile.exe');
+}
+
+export type EnvironmentKind = 'dayz' | 'dayzTools' | 'privateKey' | 'workDrive' | 'builder';
 
 /** Set and there, set and gone, or never set: three states a developer acts on differently. */
 export type EnvironmentState = 'ok' | 'missing' | 'unset';
@@ -73,19 +139,27 @@ export interface EnvironmentEntry {
  */
 const ENTRIES: readonly {
   readonly kind: EnvironmentKind;
-  readonly setting: string;
+  /** The setting that fills it in, which for the builder is whichever one names the one chosen. */
+  readonly setting: (settings: MachineSettings) => string;
   readonly of: (settings: MachineSettings) => string;
   readonly optional?: boolean;
 }[] = [
-  { kind: 'dayz', setting: SETTING.dayz, of: (settings) => settings.dayz },
-  { kind: 'dayzTools', setting: SETTING.dayzTools, of: (settings) => settings.dayzTools },
+  { kind: 'dayz', setting: () => SETTING.dayz, of: (settings) => settings.dayz },
+  { kind: 'dayzTools', setting: () => SETTING.dayzTools, of: (settings) => settings.dayzTools },
   {
     kind: 'privateKey',
-    setting: SETTING.privateKey,
+    setting: () => SETTING.privateKey,
     of: (settings) => settings.privateKey,
     optional: true,
   },
-  { kind: 'workDrive', setting: SETTING.workDrive, of: (settings) => settings.workDrive },
+  { kind: 'workDrive', setting: () => SETTING.workDrive, of: (settings) => settings.workDrive },
+  // The chosen builder rather than both of them: the one that is not going to pack anything is
+  // not a gap, and saying it is missing would send a developer to install what they do not need.
+  {
+    kind: 'builder',
+    setting: (settings) => builderSettingOf(settings.builder),
+    of: builderExecutableOf,
+  },
 ];
 
 /** The paths worth asking the disk about, which is every one the environment is built from. */
@@ -108,7 +182,7 @@ export function environmentOf(
 
     return {
       kind: entry.kind,
-      setting: entry.setting,
+      setting: entry.setting(settings),
       path,
       state: stateOf(path, found),
       optional: entry.optional ?? false,

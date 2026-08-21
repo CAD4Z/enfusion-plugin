@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   type MachineSettings,
+  builderExecutableOf,
   builderOf,
   environmentOf,
   environmentPaths,
@@ -11,6 +12,7 @@ import {
 const SETTINGS: MachineSettings = {
   dayz: 'F:\\SteamLibrary\\steamapps\\common\\DayZ',
   dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
+  pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
   privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
   workDrive: 'F:\\DayZ\\Workdrive',
   workDriveLetter: 'P:',
@@ -24,6 +26,7 @@ test('everything the machine was asked for is there', () => {
     SETTINGS.dayzTools,
     SETTINGS.privateKey,
     SETTINGS.workDrive,
+    SETTINGS.pboProject,
   ]);
 
   assert.deepEqual(environment, [
@@ -55,6 +58,13 @@ test('everything the machine was asked for is there', () => {
       state: 'ok',
       optional: false,
     },
+    {
+      kind: 'builder',
+      setting: 'enfusion.pboProject.path',
+      path: SETTINGS.pboProject,
+      state: 'ok',
+      optional: false,
+    },
   ]);
 });
 
@@ -68,8 +78,36 @@ test('a path that was set but is not there is told apart from one nobody set', (
       ['dayzTools', 'unset'],
       ['privateKey', 'missing'],
       ['workDrive', 'missing'],
+      ['builder', 'missing'],
     ],
   );
+});
+
+/**
+ * The builder is the one entry that is not a setting read straight back: pboProject records its
+ * own executable, AddonBuilder is found under DayZ Tools, and the row sends the developer to
+ * whichever of the two settings would fill in the one they chose.
+ */
+test('the builder shown is the one that was chosen, and the setting offered is the one that names it', () => {
+  const tools = environmentOf({ ...SETTINGS, builder: 'AddonBuilder' }, []);
+
+  assert.deepEqual(tools.at(-1), {
+    kind: 'builder',
+    setting: 'enfusion.dayzTools.path',
+    path: builderExecutableOf({ ...SETTINGS, builder: 'AddonBuilder' }),
+    state: 'missing',
+    optional: false,
+  });
+  assert.equal(
+    builderExecutableOf({ ...SETTINGS, builder: 'AddonBuilder' }),
+    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe',
+  );
+});
+
+test('a builder nobody can find is unset rather than missing, which is a different sentence', () => {
+  const none = environmentOf({ ...SETTINGS, pboProject: '' }, []);
+
+  assert.equal(none.at(-1)?.state, 'unset');
 });
 
 test('an unset private key means the pbo goes unsigned, so it is the one thing that is optional', () => {
@@ -88,7 +126,7 @@ test('what wants attention is a gap, not a choice: an unsigned pbo is nobody in 
 
   assert.deepEqual(
     environment.filter(isWanting).map((entry) => entry.kind),
-    ['dayzTools', 'workDrive'],
+    ['dayzTools', 'workDrive', 'builder'],
   );
 });
 
@@ -100,10 +138,11 @@ test('the paths to ask the disk about are the paths the environment is made of',
     settings.dayz,
     settings.privateKey,
     settings.workDrive,
+    settings.pboProject,
   ]);
   assert.deepEqual(
     environmentOf(settings, environmentPaths(settings)).map((entry) => entry.state),
-    ['ok', 'unset', 'ok', 'ok'],
+    ['ok', 'unset', 'ok', 'ok', 'ok'],
   );
 });
 

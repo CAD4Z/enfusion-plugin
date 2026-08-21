@@ -113,4 +113,6 @@ export type PanelRequest =
   /** Opens the settings on the one that is missing. */
   | { readonly type: 'settings'; readonly id: string }
   /** Runs the work drive command of that action, which the palette runs the same way. */
-  | { readonly type: 'workDrive'; readonly action: WorkDriveAction };
+  | { readonly type: 'workDrive'; readonly action: WorkDriveAction }
+  /** Builds one addon, named the way the panel was given it. */
+  | { readonly type: 'build'; readonly mod: string; readonly addon: string };

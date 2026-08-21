@@ -27,9 +27,9 @@
     },
     "exclude": {
       "type": "array",
-      "description": "Globs the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying.",
+      "description": "File masks and folder names the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying. Left out, a default list of the source formats DayZ modding has settled on is used; naming any replaces that list whole. Handed to pboProject as it is written here. AddonBuilder ignores it: the option it takes an exclude list through crashes it.",
       "items": { "type": "string" },
-      "examples": [["**/*.psd", "**/*.blend"]]
+      "examples": [["*.psd", "*.fbx", "Workbench"]]
     },
     "launch": {
       "$ref": "#/definitions/launch",
@@ -44,7 +44,7 @@
       "properties": {
         "modsDirectory": {
           "type": "string",
-          "description": "Where the @<Mod> folders live: the builder writes them here, and the game is pointed at them here."
+          "description": "Where the @<Mod> folders live: the builder writes them here, and the game is pointed at them here. A relative path is counted from the folder this file is in, which is what keeps it meaning the same thing on every machine that clones the repository."
         },
         "clientMods": {
           "type": "array",

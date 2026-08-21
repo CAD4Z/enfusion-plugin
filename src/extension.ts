@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
+import { registerBuildCommands } from './view/build';
 import { ModsPanel } from './view/modsPanel';
 import { registerWorkDriveCommands } from './view/workDrive';
 
@@ -30,6 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
     registerWorkDriveCommands(log, () => {
       panel.refresh();
     }),
+    // A build writes outside the workspace, so nothing about the panel changes when one finishes.
+    registerBuildCommands(log),
   );
 }
 

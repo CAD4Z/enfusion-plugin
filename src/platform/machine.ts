@@ -43,6 +43,7 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
   return {
     dayz: text(SETTING.dayz) || (await fromRegistry(DAYZ)),
     dayzTools: text(SETTING.dayzTools) || (await fromRegistry(DAYZ_TOOLS)),
+    pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
     privateKey: text(SETTING.privateKey),
     workDrive: text(SETTING.workDrive),
     workDriveLetter: text(SETTING.workDriveLetter),
@@ -87,6 +88,14 @@ const DAYZ_TOOLS: readonly RegistryValue[] = [
   { key: 'HKCU\\SOFTWARE\\Bohemia Interactive\\DayZ Tools', name: 'path' },
   { key: 'HKLM\\SOFTWARE\\WOW6432Node\\Bohemia Interactive\\DayZ Tools', name: 'path' },
   { key: 'HKLM\\SOFTWARE\\Bohemia Interactive\\DayZ Tools', name: 'path' },
+];
+
+/**
+ * Mikero's installer records the executable rather than the folder it sits in, per user and
+ * nowhere else — which is why the setting behind this one names a file and not a directory.
+ */
+const PBOPROJECT: readonly RegistryValue[] = [
+  { key: 'HKCU\\SOFTWARE\\Mikero\\pboProject', name: 'exe' },
 ];
 
 /**

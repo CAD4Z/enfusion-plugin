@@ -146,3 +146,62 @@ vscode-badge.warning {
 .buttons .holds {
   display: inline-flex;
 }
+
+/*
+ * An addon is two things at once — a config.cpp to open and an addon to pack — so its row holds
+ * two buttons rather than being one. The opening half takes the width, and the action sits at the
+ * end of it.
+ */
+.row.addon {
+  cursor: default;
+}
+
+.row.addon:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.row .open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Quiet until the row is pointed at: one Build per addon would otherwise shout down the names. */
+.row .action {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.row:hover .action,
+.row .action:focus-visible {
+  border-color: var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.row .action:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.row .open:focus-visible,
+.row .action:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}

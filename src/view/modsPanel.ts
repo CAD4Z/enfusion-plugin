@@ -25,6 +25,7 @@ import { readEnvironment, readMachineSettings } from '../platform/machine';
 import { platformRefusal, readLinks, readWorkDrive } from '../platform/workDrive';
 import { type Discovery, findMods, prefixesOf } from '../platform/workspace';
 import type { ModsMessage, ModView, PanelRequest, WorkDriveView } from '../webview/protocol';
+import { BUILD_COMMAND, type BuildTarget } from './build';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** A burst of file events — a checkout, a build — should still cost one scan. */
@@ -116,6 +117,11 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       // Through the command, so that the button and the palette do the very same thing.
       case 'workDrive':
         this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
+        return;
+      case 'build':
+        this.report(
+          runCommand(BUILD_COMMAND.addon, { mod: request.mod, addon: request.addon }),
+        );
         return;
     }
   }
@@ -214,8 +220,8 @@ async function openSettings(id: string): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.openSettings', id);
 }
 
-async function runCommand(command: string): Promise<void> {
-  await vscode.commands.executeCommand(command);
+async function runCommand(command: string, argument?: BuildTarget): Promise<void> {
+  await vscode.commands.executeCommand(command, argument);
 }
 
 /**

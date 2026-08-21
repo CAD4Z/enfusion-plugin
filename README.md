@@ -21,11 +21,12 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
-The paths to DayZ and DayZ Tools, the private key, the source and the letter of the work drive, the
-file patching root and the choice of builder are about the machine rather than about the mod, so
-they live in VS Code settings with `scope: machine`, which the editor physically will not let a
-workspace write. The paths to DayZ and DayZ Tools are read out of the registry by default, so in the
-ordinary case nothing has to be entered; what resolved and what did not is visible in the panel.
+The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the private key, the source and the letter
+of the work drive, the file patching root and the choice of builder are about the machine rather
+than about the mod, so they live in VS Code settings with `scope: machine`, which the editor
+physically will not let a workspace write. All three paths are read out of the registry by default,
+so in the ordinary case nothing has to be entered; what resolved and what did not is visible in the
+panel.
 
 The work drive is mounted and unmounted from the same panel: the buttons call `subst` with the
 folder and the letter out of the machine settings, and the panel shows where the letter actually
@@ -37,6 +38,37 @@ pointing elsewhere is repointed, and a real folder in its place is left untouche
 is. Every mod in the list shows whether it is linked or not, so the reason a build would fail is
 visible beforehand. Unpacking the vanilla data and setting the drive up in the first place with DayZ
 Tools is not part of this.
+
+What is built is an **addon** rather than a mod: every addon in the list has a **Build** button of
+its own, and the icon in the panel's header builds the whole workspace — in the dependency order out
+of `requiredAddons`, the same order the addons are listed in. The button is unconditional: staleness
+is not tracked, and the extension will not argue about whether a rebuild is needed. What comes out
+is a `<modsDirectory>\@<Mod>` folder with the pbos, the signatures, `mod.cpp` and the public key;
+`modsDirectory` comes out of the `launch` block of whichever `.enf` owns that mod, and a relative
+path is taken from the folder of that file, so that it means the same thing on any machine.
+
+Three things the Enforce Script plugins suffered for are kept literally, and re-checked against the
+live tools. The builder is started through `start`, in a console of its own — without one pboProject
+exits with code 1 immediately, having built nothing. Success is decided by the pbo appearing rather
+than by the exit code: both builders answer zero to a failure too. A failed build is retried exactly
+once, after which the path to the packing log is shown. A fourth thing turned up during that
+re-check: pboProject pointed at a folder that does not exist quietly does nothing — which is why the
+folders of the built mod are made before it is started.
+
+Signing is a separate step through `DSSignFile.exe`, the same for both builders; an empty key means
+"do not sign", while a key with no `DSSignFile.exe` is a refusal rather than a quietly unsigned pbo.
+The packing exclusions come out of `exclude` in `mod.enf` and replace the default list whole;
+AddonBuilder is not given them, because `-exclude=` brings it down (1.0.240639) with an
+`ArgumentNullException` on any list at all, its own example included. Build errors are read out of
+the packing log and reach Problems — on the line of the file of the workspace the builder was
+talking about, not on its twin on `P:`; an addon that failed without a place to point at is marked
+on its own `config.cpp`. Building is the only thing that puts paths out of a `mod.enf` on a command
+line, so it is the only thing that wants the folder trusted (Workspace Trust).
+
+One more thing about AddonBuilder, nothing to do with this extension but worth knowing in advance:
+it binarises through `binarize.exe -addon="P:"`, which is to say it reads **every** config on the
+work drive. One broken `config.cpp` in any third-party mod on `P:` brings down any build of any mod
+— with an empty message and code 1. pboProject reads only the addon it is packing.
 
 ## Development
 
