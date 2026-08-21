@@ -56,6 +56,16 @@ const extension = {
   plugins: [reportPlugin, problemMatcherPlugin],
 };
 
+/** The panel bundle: browser, ESM, with its stylesheet coming out beside it as `webview.css`. */
+const webview = {
+  ...shared,
+  entryPoints: ['src/webview/main.ts'],
+  outfile: 'dist/webview.js',
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+};
+
 /** Tests bundle one file each, so `node --test` can run plain CommonJS against the sources. */
 function testBuild() {
   const entryPoints = walk('src').filter((file) => file.endsWith('.test.ts'));
@@ -81,17 +91,25 @@ function walk(directory) {
 
 async function main() {
   if (tests) {
+    // Wiped first: a test file that was deleted would otherwise keep running from the last build.
+    fs.rmSync('out/test', { recursive: true, force: true });
     await esbuild.build(testBuild());
     return;
   }
 
-  const context = await esbuild.context(extension);
+  const contexts = await Promise.all([extension, webview].map((build) => esbuild.context(build)));
+
   if (watch) {
-    await context.watch();
+    await Promise.all(contexts.map((context) => context.watch()));
     return;
   }
-  await context.rebuild();
-  await context.dispose();
+
+  await Promise.all(
+    contexts.map(async (context) => {
+      await context.rebuild();
+      await context.dispose();
+    }),
+  );
 }
 
 main().catch((e) => {

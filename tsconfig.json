@@ -15,5 +15,7 @@
     "sourceMap": true,
     "noEmit": true
   },
-  "include": ["src"]
+  // The panel has its own project: it is browser code, and must not reach the host API by accident.
+  "include": ["src"],
+  "exclude": ["src/webview"]
 }

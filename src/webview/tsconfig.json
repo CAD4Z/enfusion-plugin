@@ -1,0 +1,13 @@
+{
+  // The panel is browser code bundled as ESM, so it gets the DOM and neither Node nor the host API.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["."],
+  // Undoes the base project's exclusion of this very folder, which `extends` would carry over.
+  "exclude": []
+}

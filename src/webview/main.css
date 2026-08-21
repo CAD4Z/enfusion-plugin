@@ -1,0 +1,97 @@
+/*
+ * Everything here is expressed in the `--vscode-*` variables VS Code puts on the webview, so the
+ * panel follows the user's theme without knowing which one it is.
+ */
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  font-weight: var(--vscode-font-weight);
+}
+
+.empty {
+  padding: 12px 20px;
+  color: var(--vscode-foreground);
+  line-height: 1.5;
+}
+
+.empty p {
+  margin: 0 0 12px;
+}
+
+.decorations {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+vscode-badge.warning {
+  --vscode-badge-background: var(--vscode-editorWarning-foreground);
+  --vscode-badge-foreground: var(--vscode-editor-background);
+}
+
+.addons {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 6px;
+}
+
+/* A row is a button so that the keyboard reaches the same `config.cpp` the mouse does. */
+.addon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 20px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addon:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.addon:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.addon .name {
+  white-space: nowrap;
+}
+
+.addon .tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.addon .patch {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dashed, because an unresolved name is not an error: vanilla addons are meant to look like this. */
+.addon .unresolved {
+  padding: 0 4px;
+  border: 1px dashed var(--vscode-descriptionForeground);
+  border-radius: 3px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  white-space: nowrap;
+}

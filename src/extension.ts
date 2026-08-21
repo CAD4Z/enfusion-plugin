@@ -4,18 +4,22 @@
 
 import * as vscode from 'vscode';
 import { watchMods } from './platform/workspace';
-import { ModsView } from './view/modsView';
+import { ModsPanel } from './view/modsPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
-  const view = new ModsView(log);
+  const panel = new ModsPanel(context.extensionUri, log);
 
   context.subscriptions.push(
     log,
-    view,
-    vscode.window.createTreeView(ModsView.viewId, { treeDataProvider: view }),
-    watchMods(() => view.refresh()),
-    vscode.commands.registerCommand('enfusion.refresh', () => view.refresh()),
+    panel,
+    vscode.window.registerWebviewViewProvider(ModsPanel.viewId, panel),
+    watchMods(() => {
+      panel.refresh();
+    }),
+    vscode.commands.registerCommand('enfusion.refresh', () => {
+      panel.refresh();
+    }),
   );
 }
 

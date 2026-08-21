@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their config.cpp and nothing is executed."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing is executed."
     }
   },
   "contributes": {
@@ -45,16 +45,11 @@
         {
           "id": "enfusion.mods",
           "name": "Mods",
+          "type": "webview",
           "contextualTitle": "Enfusion"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "enfusion.mods",
-        "contents": "No Enfusion mod was found in this workspace.\n\nA mod is a folder with a `config.cpp` in its root.\n[Refresh](command:enfusion.refresh)"
-      }
-    ],
     "commands": [
       {
         "command": "enfusion.refresh",
@@ -77,7 +72,7 @@
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
-    "check-types": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json && tsc -p src/webview/tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node esbuild.js --tests && node --test \"out/test/**/*.test.js\"",
@@ -88,6 +83,7 @@
     "@eslint/js": "^9.39.5",
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.94.0",
+    "@vscode-elements/elements": "^2.5.1",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.5",
