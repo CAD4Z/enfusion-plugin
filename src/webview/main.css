@@ -205,3 +205,17 @@ vscode-badge.warning {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
+
+/* The way to add an addon sits under the addons, quiet: it is an offer, not one of the mod's own. */
+.row.add .name {
+  color: var(--vscode-descriptionForeground);
+}
+
+.row.add:hover .name {
+  color: var(--vscode-foreground);
+}
+
+/* An empty workspace has one thing to do and one thing to try, so both sit under the sentence. */
+.empty .buttons {
+  padding: 0;
+}

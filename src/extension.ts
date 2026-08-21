@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { registerBuildCommands } from './view/build';
+import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
 import { registerWorkDriveCommands } from './view/workDrive';
@@ -40,6 +41,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // A build writes outside the workspace, so nothing about the panel changes when one finishes.
     registerBuildCommands(log),
+    // Making a mod does change the workspace, and the watcher will say so — but linking the new
+    // mod onto the work drive is a change nothing watches, so these say so themselves.
+    registerInitCommands(log, () => {
+      panel.refresh();
+    }),
   );
 }
 

@@ -232,18 +232,34 @@ function workspaceOf(file: ManifestFileView): HTMLElement {
   return block;
 }
 
+/**
+ * What an empty workspace is shown: the one thing worth doing about it, and the way to look again.
+ * Making a mod is the first button rather than a command to be found in the palette — a developer
+ * who has not made one yet is the developer least likely to know what it is called.
+ */
 function nothingFound(): HTMLElement {
+  const create = document.createElement('vscode-button');
+  create.textContent = 'Create Mod';
+  create.title = 'Make a mod in this folder: a mod.enf, a prefix root and an addon that builds';
+  create.addEventListener('click', () => {
+    host.postMessage({ type: 'init' });
+  });
+
   const refresh = document.createElement('vscode-button');
   refresh.textContent = 'Refresh';
+  refresh.secondary = true;
   refresh.addEventListener('click', () => {
     host.postMessage({ type: 'refresh' });
   });
+
+  const buttons = div('buttons');
+  buttons.append(create, refresh);
 
   const empty = div('empty');
   empty.append(
     paragraph('No Enfusion mod was found in this workspace.'),
     paragraph('A mod is a folder with a mod.enf, holding the prefix root the work drive links to.'),
-    refresh,
+    buttons,
   );
 
   return empty;
@@ -289,9 +305,25 @@ function modOf(mod: ModView): HTMLElement {
     rows.append(linkRow(mod.link));
   }
   rows.append(...mod.addons.map((addon) => addonOf(addon, mod.name)));
+  rows.append(addAddonRow(mod.name));
 
   card.append(...(decorations.hasChildNodes() ? [decorations] : []), rows);
   return card;
+}
+
+/**
+ * The way to add an addon to the mod. Offered whatever the mod's layout is: a mod that packs into
+ * one pbo cannot take one, and being told why by the command that would do it is worth more than
+ * a button that is not there.
+ */
+function addAddonRow(mod: string): HTMLElement {
+  const row = rowButton(`Add an addon to ${mod}: a folder of its own, packed into its own pbo`, 'add');
+  row.addEventListener('click', () => {
+    host.postMessage({ type: 'addon', mod });
+  });
+
+  row.append(span('name', '+ Add addon'));
+  return row;
 }
 
 /**

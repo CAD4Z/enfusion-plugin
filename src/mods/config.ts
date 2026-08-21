@@ -8,6 +8,11 @@
  * The format is Arma's class syntax, so the parser has to cope with what real configs are written
  * with: `#include` lines, both comment styles, and `""` as an escaped quote. It never throws — a
  * config nobody can parse still has to leave the mod visible in the panel.
+ *
+ * The one thing written back is a name in a `requiredAddons` list, which is what a new addon is
+ * added to a mod with. It is an edit rather than a rewrite: the parser keeps where every value it
+ * read sits, so the comments, the order of the members and the way a list is laid out all survive
+ * an addon being written into the file.
  */
 
 /** What a `config.cpp` says about the addon it declares. */
@@ -54,11 +59,29 @@ export function parseConfig(source: string): ConfigCpp {
  */
 interface Body {
   readonly classes: ClassNode[];
-  readonly entries: Map<string, string[]>;
+  readonly entries: Map<string, Entry>;
+  /** What sits between the braces, which is where a member is written into the body. */
+  within: Span;
 }
 
 interface ClassNode extends Body {
   readonly name: string;
+}
+
+/** One `key = value;`: what it says, and where each part of it says it. */
+interface Entry {
+  readonly values: string[];
+  /** An array's insides, between its braces; anything else's own extent. */
+  readonly within: Span;
+  /** Where each value sits, so a list can be written to after its last one rather than after
+   * whatever character comes last — which, in a list with a comment in it, is the comment. */
+  readonly items: readonly Span[];
+}
+
+/** A stretch of the source, from `start` up to but not including `end`. */
+interface Span {
+  readonly start: number;
+  readonly end: number;
 }
 
 /** Where the parser is in the source. */
@@ -74,7 +97,7 @@ function childrenOf(root: Body, name: string): ClassNode[] {
 
 /** The entry's values, empty when it is not there. */
 function valuesOf(node: Body, key: string): string[] {
-  return node.entries.get(key.toLowerCase()) ?? [];
+  return node.entries.get(key.toLowerCase())?.values ?? [];
 }
 
 /** Names are matched the way the engine matches them: without regard for case. */
@@ -83,13 +106,13 @@ export function sameName(a: string, b: string): boolean {
 }
 
 function parse(text: string): Body {
-  const root = emptyBody();
+  const root = emptyBody(0);
   parseBody({ text, at: 0 }, root);
   return root;
 }
 
-function emptyBody(): Body {
-  return { classes: [], entries: new Map() };
+function emptyBody(start: number): Body {
+  return { classes: [], entries: new Map(), within: { start, end: start } };
 }
 
 /** Members until the closing brace or the end of the source, whichever comes first. */
@@ -99,6 +122,8 @@ function parseBody(cursor: Cursor, body: Body): void {
 
     const char = cursor.text[cursor.at];
     if (char === undefined || char === '}') {
+      // The body ends at its closing brace, or wherever the source ran out before one.
+      body.within = { start: body.within.start, end: Math.min(cursor.at, cursor.text.length) };
       cursor.at += 1;
       return;
     }
@@ -137,7 +162,7 @@ function parseClass(cursor: Cursor, body: Body): void {
   }
 
   cursor.at += 1;
-  const node: ClassNode = { name, ...emptyBody() };
+  const node: ClassNode = { name, ...emptyBody(cursor.at) };
   body.classes.push(node);
   parseBody(cursor, node);
 }
@@ -166,51 +191,71 @@ function parseEntry(cursor: Cursor, key: string, body: Body): void {
   }
 
   cursor.at += 1;
-  body.entries.set(key.toLowerCase(), readValue(cursor));
+  body.entries.set(key.toLowerCase(), readEntry(cursor));
 }
 
-function readValue(cursor: Cursor): string[] {
+/** The value, and the stretch of source it was read out of. */
+function readEntry(cursor: Cursor): Entry {
   skipTrivia(cursor);
 
   if (cursor.text[cursor.at] === '{') {
     cursor.at += 1;
-    return readArray(cursor);
+    const start = cursor.at;
+    const array = readArray(cursor);
+
+    // `readArray` stops past the closing brace, or past the end of the source.
+    return {
+      values: array.values,
+      within: { start, end: Math.min(cursor.at - 1, cursor.text.length) },
+      items: array.items,
+    };
   }
 
-  if (cursor.text[cursor.at] === '"') {
-    return [readString(cursor)];
-  }
+  const start = cursor.at;
+  const values = cursor.text[cursor.at] === '"' ? [readString(cursor)] : [readRaw(cursor)];
 
-  return [readRaw(cursor)];
+  return { values, within: { start, end: cursor.at }, items: [{ start, end: cursor.at }] };
+}
+
+/** What an array holds, and where each of it sits. */
+interface ArrayItems {
+  readonly values: string[];
+  readonly items: Span[];
 }
 
 /** Items until the closing brace. Nested arrays are flattened: no entry read here has a shape. */
-function readArray(cursor: Cursor): string[] {
-  const items: string[] = [];
+function readArray(cursor: Cursor): ArrayItems {
+  const values: string[] = [];
+  const items: Span[] = [];
 
   for (;;) {
     skipTrivia(cursor);
 
+    const start = cursor.at;
     const char = cursor.text[cursor.at];
     if (char === undefined || char === '}') {
       cursor.at += 1;
-      return items;
+      return { values, items };
     }
 
     if (char === ',') {
       cursor.at += 1;
     } else if (char === '{') {
       cursor.at += 1;
-      items.push(...readArray(cursor));
+      const nested = readArray(cursor);
+      values.push(...nested.values);
+      items.push(...nested.items);
     } else if (char === '"') {
-      items.push(readString(cursor));
+      values.push(readString(cursor));
+      items.push({ start, end: cursor.at });
     } else {
       const raw = readRaw(cursor);
       if (raw === '') {
         // Nothing consumable here, so step over it rather than spin on the same character.
         cursor.at += 1;
       } else {
-        items.push(raw);
+        values.push(raw);
+        items.push({ start, end: cursor.at });
       }
     }
   }
@@ -327,4 +372,107 @@ function skipTo(cursor: Cursor, char: string): void {
 function skipPast(cursor: Cursor, end: string): void {
   const found = cursor.text.indexOf(end, cursor.at);
   cursor.at = found === -1 ? cursor.text.length : found + end.length;
+}
+
+/**
+ * The source with one more name in the `requiredAddons` of a `CfgPatches` class, or undefined when
+ * the file holds no such class. An addon that nothing requires is one the engine is free to load
+ * in whatever order it likes, which is how a new addon of a mod goes missing without a word.
+ *
+ * The file is edited rather than rewritten: the one name is written where it belongs and
+ * everything else — the comments, the order of the members, the way the list is laid out — is
+ * left exactly as the developer wrote it.
+ */
+export function withRequiredAddon(
+  source: string,
+  patch: string,
+  required: string,
+): string | undefined {
+  const node = childrenOf(parse(source), 'CfgPatches').find((child) => sameName(child.name, patch));
+  if (node === undefined) {
+    return undefined;
+  }
+
+  const entry = node.entries.get(REQUIRED_ADDONS);
+  if (entry === undefined) {
+    return withMember(source, node.within, `requiredAddons[] = { "${required}" };`);
+  }
+
+  // Required already — under another spelling of the same name, as often as not — is nothing to do.
+  if (entry.values.some((value) => sameName(value, required))) {
+    return source;
+  }
+
+  return withItem(source, entry, `"${required}"`);
+}
+
+const REQUIRED_ADDONS = 'requiredaddons';
+
+/**
+ * One more item at the end of a list, written the way the list is already written.
+ *
+ * It goes in right after the last value rather than at the end of what is between the braces,
+ * because the two are not the same thing: a list with a comment after its last item would take the
+ * separating comma into the comment, and one holding nothing but a comment would come out starting
+ * with one.
+ */
+function withItem(source: string, entry: Entry, item: string): string {
+  const last = entry.items.at(-1);
+
+  // A list of no values is filled in rather than added to, whatever else is written between its
+  // braces: `{ , "X" }` is not a list, and a comment in there is not an item to follow.
+  if (last === undefined) {
+    const inner = source.slice(entry.within.start, entry.within.end);
+    const written = inner.replace(TRAILING_SPACE, '');
+    const tail = inner.slice(written.length);
+
+    const before = written === '' ? ' ' : `${written} `;
+
+    return splice(source, entry.within, `${before}${item}${tail === '' ? ' ' : tail}`);
+  }
+
+  const after = source.slice(last.end, entry.within.end);
+  const comma = after.trimStart().startsWith(',') ? '' : ',';
+
+  // A list written a line at a time gets another line; one written along a line gets another item.
+  const added = after.includes('\n')
+    ? `${comma}${newlineOf(source)}${indentAt(source, last.start)}${item}`
+    : `${comma} ${item}`;
+
+  return splice(source, { start: last.end, end: last.end }, added);
+}
+
+/** One more member at the end of a class body, indented the way its members are indented. */
+function withMember(source: string, within: Span, member: string): string {
+  const inner = source.slice(within.start, within.end);
+  const written = inner.replace(TRAILING_SPACE, '');
+  const tail = inner.slice(written.length);
+  const added = tail.includes('\n')
+    ? `${newlineOf(source)}${indentAt(source, within.start + written.length)}${member}`
+    : ` ${member}`;
+
+  return splice(source, within, `${written}${added}${tail}`);
+}
+
+const TRAILING_SPACE = /\s+$/;
+
+/**
+ * How this file ends its lines, so that a line written into it ends the way the rest do. A config
+ * written on Windows — which is most of them — is `\r\n` throughout, and one line of `\n` in it
+ * shows up as the whole file having changed.
+ */
+function newlineOf(source: string): string {
+  return source.includes('\r\n') ? '\r\n' : '\n';
+}
+
+/** What the line holding this offset is indented by, which is what a line under it takes. */
+function indentAt(source: string, at: number): string {
+  // Up to `at` and not including it, because `at` itself can be the newline that ends the line.
+  const line = source.slice(source.lastIndexOf('\n', at - 1) + 1, at);
+
+  return /^[ \t]*/.exec(line)?.[0] ?? '';
+}
+
+function splice(source: string, within: Span, text: string): string {
+  return source.slice(0, within.start) + text + source.slice(within.end);
 }

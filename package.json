@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive, neither of which reads anything of the workspace. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -56,6 +56,18 @@
         "title": "Refresh Mods",
         "category": "Enfusion",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "enfusion.init",
+        "title": "Create Mod",
+        "category": "Enfusion",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "enfusion.addon.add",
+        "title": "Add Addon",
+        "category": "Enfusion",
+        "icon": "$(new-file)"
       },
       {
         "command": "enfusion.workDrive.mount",
@@ -97,14 +109,26 @@
     "menus": {
       "view/title": [
         {
-          "command": "enfusion.build.all",
+          "command": "enfusion.init",
           "when": "view == enfusion.mods",
           "group": "navigation@1"
         },
         {
-          "command": "enfusion.refresh",
+          "command": "enfusion.build.all",
           "when": "view == enfusion.mods",
           "group": "navigation@2"
+        },
+        {
+          "command": "enfusion.refresh",
+          "when": "view == enfusion.mods",
+          "group": "navigation@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "enfusion.init",
+          "when": "explorerResourceIsFolder",
+          "group": "2_workspace@100"
         }
       ]
     },
@@ -250,6 +274,7 @@
   },
   "activationEvents": [
     "workspaceContains:**/mod.enf",
+    "onView:enfusion.mods",
     "onDebugResolve:enfusion",
     "onDebugDynamicConfigurations:enfusion"
   ]

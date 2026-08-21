@@ -28,6 +28,30 @@ are about the machine rather than about the mod, so they live in VS Code setting
 read out of the registry by default, so in the ordinary case nothing has to be entered; what
 resolved and what did not is visible in the panel.
 
+A mod is made by **Enfusion: Create Mod** — from the context menu of a folder in the Explorer, from
+the panel's header, or straight off an empty panel that has nothing else to show. Exactly two things
+are asked: the name, and the layout — one pbo for the whole mod, or a pbo per addon. Everything else
+follows from the name rather than being typed: a mod's name is the folder, `dir` in `CfgMods`,
+`P:\<Name>`, `@<Name>` and the class in `CfgPatches` all at once, and a slip of case in any one of
+them makes a mod that builds and says nothing. What comes out is a `mod.enf` with `modsDirectory`
+filled in and one target, a `config.cpp` with `CfgPatches` and `CfgMods`, four script modules
+(`1_Core`, `3_Game`, `4_World`, `5_Mission`) — each with a file in it, because the builder does not
+carry an empty folder into a pbo — `mod.cpp` for the launcher, `Inputs.xml` with the line in the
+config that points at it, a `stringtable.csv` in the main addon's root (the engine reads it from the
+root of the pbo; there is nowhere to declare it and no need), empty `Missions\Global`,
+`Profiles\Global`, `Profiles\Dev` and `Addons`, and a `.gitignore` that closes off the pbo, the logs
+and the private key. The mod is linked onto the work drive as soon as it is made, so it can be built
+on the spot. The script module paths in `CfgMods` are the same in both layouts, so a mod moves from
+one layout to the other by moving files rather than by rewriting its config.
+
+An addon is added by **Enfusion: Add Addon** — the row under a mod's list of addons in the panel. It
+makes the folder with a `config.cpp` and writes its class into the main addon's `requiredAddons`
+there and then: an addon nobody requires is one the engine is free to load whenever it likes, and it
+will go missing quietly. It writes it as an edit — the comments, the order of the fields and the way
+the list is written stay as they were. A mod whose `config.cpp` sits in the prefix root itself will
+not take an addon, and says why: it is one addon whole already, and splitting it means moving files
+rather than adding a folder.
+
 The work drive is mounted and unmounted from the same panel: the buttons call `subst` with the
 folder and the letter out of the machine settings, and the panel shows where the letter actually
 leads. A drive mounted somewhere other than what is configured is a warning with both folders in it,

@@ -115,4 +115,8 @@ export type PanelRequest =
   /** Runs the work drive command of that action, which the palette runs the same way. */
   | { readonly type: 'workDrive'; readonly action: WorkDriveAction }
   /** Builds one addon, named the way the panel was given it. */
-  | { readonly type: 'build'; readonly mod: string; readonly addon: string };
+  | { readonly type: 'build'; readonly mod: string; readonly addon: string }
+  /** Makes a mod, which is what an empty workspace has to offer. */
+  | { readonly type: 'init' }
+  /** Adds an addon to the mod, named the way the panel was given it. */
+  | { readonly type: 'addon'; readonly mod: string };
