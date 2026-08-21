@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enfusion workspace",
+  "description": "The optional file a monorepo of mods puts above them. It says nothing about any one mod: what it holds is the launch block, and it holds it for every mod under it. A single mod does without this file. The launch block is spelled out here rather than referenced from mod.enf.schema.json, because a relative $ref between two schema files of an extension does not resolve: the editor loses the base URI and goes looking for file:///./<name>. schemas.test.ts keeps the copy in step.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The schema this file is written against, for an editor that finds it that way rather than by the file name."
+    },
+    "launch": {
+      "$ref": "#/definitions/launch",
+      "description": "How the mods of this workspace are launched. This block wins whole: the one in a mod.enf under it is ignored rather than merged."
+    }
+  },
+  "definitions": {
+    "launch": {
+      "type": "object",
+      "description": "Everything about getting the game up: where the built mods are, which third-party mods join them, and what the Run and Debug list offers.",
+      "additionalProperties": false,
+      "properties": {
+        "modsDirectory": {
+          "type": "string",
+          "description": "Where the @<Mod> folders live: the builder writes them here, and the game is pointed at them here."
+        },
+        "clientMods": {
+          "type": "array",
+          "description": "Third-party mods to hand the client, by the name of their folder in modsDirectory.",
+          "items": { "type": "string" }
+        },
+        "serverMods": {
+          "type": "array",
+          "description": "Third-party mods to hand the server, by the name of their folder in modsDirectory.",
+          "items": { "type": "string" }
+        },
+        "targets": {
+          "type": "array",
+          "description": "The entries of the Run and Debug list. Each one says what to put up and where its profile and mission come from.",
+          "items": { "$ref": "#/definitions/target" }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What the Run and Debug list shows this target as."
+        },
+        "mod": {
+          "type": "string",
+          "description": "The mod the profile, the mission and the server.cfg come from. The mod being launched when left out."
+        },
+        "map": {
+          "type": "string",
+          "description": "The world the server loads, which is the tail of the mission folder's name — sakhal, chernarusplus."
+        },
+        "run": {
+          "type": "string",
+          "description": "What this target puts up.",
+          "enum": ["client", "server", "both"],
+          "enumDescriptions": [
+            "The client alone.",
+            "The server alone.",
+            "The server, and a client that joins it."
+          ],
+          "default": "both"
+        },
+        "serverConfig": {
+          "type": "string",
+          "description": "The server.cfg to launch with, relative to the target's mod."
+        }
+      }
+    }
+  }
+}

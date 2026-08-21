@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enfusion mod",
+  "description": "The one file a mod is configured by, the way package.json configures a package. What belongs to the machine — where DayZ is, which key signs the pbo — lives in the VS Code settings instead, so that a file under git never carries it.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The schema this file is written against, for an editor that finds it that way rather than by the file name."
+    },
+    "name": {
+      "type": "string",
+      "description": "How the mod is shown — in the panel and in the launcher. The name of its prefix root when left out."
+    },
+    "description": {
+      "type": "string",
+      "description": "What the mod does, in a sentence."
+    },
+    "author": {
+      "type": "string",
+      "description": "Who made it."
+    },
+    "version": {
+      "type": "string",
+      "description": "The version the launcher shows."
+    },
+    "exclude": {
+      "type": "array",
+      "description": "Globs the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying.",
+      "items": { "type": "string" },
+      "examples": [["**/*.psd", "**/*.blend"]]
+    },
+    "launch": {
+      "$ref": "#/definitions/launch",
+      "description": "How this mod is launched. Ignored whole where the workspace has a workspace.enf: that file owns launch."
+    }
+  },
+  "definitions": {
+    "launch": {
+      "type": "object",
+      "description": "Everything about getting the game up: where the built mods are, which third-party mods join them, and what the Run and Debug list offers.",
+      "additionalProperties": false,
+      "properties": {
+        "modsDirectory": {
+          "type": "string",
+          "description": "Where the @<Mod> folders live: the builder writes them here, and the game is pointed at them here."
+        },
+        "clientMods": {
+          "type": "array",
+          "description": "Third-party mods to hand the client, by the name of their folder in modsDirectory.",
+          "items": { "type": "string" }
+        },
+        "serverMods": {
+          "type": "array",
+          "description": "Third-party mods to hand the server, by the name of their folder in modsDirectory.",
+          "items": { "type": "string" }
+        },
+        "targets": {
+          "type": "array",
+          "description": "The entries of the Run and Debug list. Each one says what to put up and where its profile and mission come from.",
+          "items": { "$ref": "#/definitions/target" }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What the Run and Debug list shows this target as."
+        },
+        "mod": {
+          "type": "string",
+          "description": "The mod the profile, the mission and the server.cfg come from. The mod being launched when left out."
+        },
+        "map": {
+          "type": "string",
+          "description": "The world the server loads, which is the tail of the mission folder's name — sakhal, chernarusplus."
+        },
+        "run": {
+          "type": "string",
+          "description": "What this target puts up.",
+          "enum": ["client", "server", "both"],
+          "enumDescriptions": [
+            "The client alone.",
+            "The server alone.",
+            "The server, and a client that joins it."
+          ],
+          "default": "both"
+        },
+        "serverConfig": {
+          "type": "string",
+          "description": "The server.cfg to launch with, relative to the target's mod."
+        }
+      }
+    }
+  }
+}

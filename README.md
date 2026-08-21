@@ -15,6 +15,18 @@ packs into one pbo, its absence means the addons are subfolders. The order of bo
 addons comes off the `requiredAddons` graph. A folder with a `config.cpp` and no `mod.enf` reaches
 the list as an unconfigured mod; a folder with no mod reaches it not at all.
 
+A mod is configured by one file, `mod.enf` in its root — the way `package.json` configures a
+package; a monorepo may put an optional `workspace.enf` on top. The format is JSONC, with a schema
+registered by file name, so the editor completes the fields and underlines the typos. A `launch`
+block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
+the block in `mod.enf` is ignored entirely.
+
+The paths to DayZ and DayZ Tools, the private key, the work drive source, the file patching root and
+the choice of builder are about the machine rather than about the mod, so they live in VS Code
+settings with `scope: machine`, which the editor physically will not let a workspace write. The
+paths to DayZ and DayZ Tools are read out of the registry by default, so in the ordinary case
+nothing has to be entered; what resolved and what did not is visible in the panel.
+
 ## Development
 
 | Command | What it does |
@@ -38,6 +50,7 @@ src/
   platform/           access to the workspace: findFiles, reading files, the watcher, Uri
   view/               the Mods panel on the extension's side: the webview, the messages, opening files
   webview/            the Mods panel on the browser's side: a tsconfig of its own, DOM instead of Node
+schemas/              the JSON schemas of `mod.enf` and `workspace.enf`, registered through jsonValidation
 ```
 
 The "the domain knows nothing of the host" boundary is held by `no-restricted-imports` in

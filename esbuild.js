@@ -35,6 +35,13 @@ const problemMatcherPlugin = {
   },
 };
 
+/**
+ * The ESM entry of a dependency before its Node one, for the two bundles that run on Node: the UMD
+ * entry jsonc-parser ships hides its requires behind the module-system dance, and esbuild leaves
+ * them in the bundle for Node to fail on at runtime.
+ */
+const NODE_MODULE_FIELDS = { mainFields: ['module', 'main'] };
+
 const shared = {
   bundle: true,
   minify: production,
@@ -52,6 +59,7 @@ const extension = {
   format: 'cjs',
   platform: 'node',
   target: 'node20',
+  ...NODE_MODULE_FIELDS,
   external: ['vscode'],
   plugins: [reportPlugin, problemMatcherPlugin],
 };
@@ -76,6 +84,7 @@ function testBuild() {
     format: 'cjs',
     platform: 'node',
     target: 'node20',
+    ...NODE_MODULE_FIELDS,
     minify: false,
     plugins: [],
     logLevel: 'warning',

@@ -12,7 +12,9 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
+import { isWanting } from '../mods/machine';
 import type { Mod } from '../mods/model';
+import { readEnvironment, readMachineSettings } from '../platform/machine';
 import { type Discovery, findMods } from '../platform/workspace';
 import type { ModsMessage, ModView, PanelRequest } from '../webview/protocol';
 
@@ -25,6 +27,8 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
   private view: vscode.WebviewView | undefined;
   private settling: NodeJS.Timeout | undefined;
+  /** Whether the scan being waited on was asked for by a developer, and so goes to the registry. */
+  private rereading = false;
   /** The `Uri` of everything the last scan found, which is what an `open` request resolves through. */
   private uris: ReadonlyMap<string, vscode.Uri> = new Map();
   /** What the current webview holds; a hidden panel is thrown away and resolved again on return. */
@@ -58,8 +62,26 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
   /** Coalesces the file events of one edit, one checkout, one build into a single scan. */
   refresh(): void {
+    this.schedule();
+  }
+
+  /**
+   * The refresh a developer asked for, which goes back to the registry as well as to the disk —
+   * an installation that appeared while the editor was open is the case this exists for.
+   */
+  reread(): void {
+    this.rereading = true;
+    this.schedule();
+  }
+
+  /** A scan asked for while one is settling joins it, and a reread is not lost to a file event. */
+  private schedule(): void {
     clearTimeout(this.settling);
-    this.settling = setTimeout(() => this.report(this.send()), SETTLE_MS);
+    this.settling = setTimeout(() => {
+      const reread = this.rereading;
+      this.rereading = false;
+      this.report(this.send(reread));
+    }, SETTLE_MS);
   }
 
   dispose(): void {
@@ -71,11 +93,16 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
     switch (request.type) {
       // The panel is rebuilt every time it becomes visible, and asks for the mods when it is.
       case 'ready':
+        this.report(this.send(false));
+        return;
       case 'refresh':
-        this.report(this.send());
+        this.reread();
         return;
       case 'open':
-        this.report(this.open(request.path));
+        this.report(this.open(request.path, request.line, request.column));
+        return;
+      case 'settings':
+        this.report(openSettings(request.id));
         return;
     }
   }
@@ -87,28 +114,49 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
     });
   }
 
-  private async send(): Promise<void> {
+  private async send(reread: boolean): Promise<void> {
     const view = this.view;
     if (view === undefined) {
       return;
     }
 
-    const found = await findMods();
+    const [found, settings] = await Promise.all([findMods(), readMachineSettings(reread)]);
+    const entries = await readEnvironment(settings);
+
     this.uris = found.uris;
     this.log.info(`${found.mods.length} mod(s): ${found.mods.map((mod) => mod.name).join(', ')}`);
+    this.log.info(
+      `environment: ${entries.map((entry) => `${entry.kind} ${entry.state}`).join(', ')}`,
+    );
 
     const message: ModsMessage = {
       type: 'mods',
+      environment: { entries, wanting: entries.filter(isWanting).length },
+      workspaces: [...found.workspaces].map(([path, problems]) => ({
+        path,
+        location: locationOfFile(path, found),
+        owns: ownedBy(path, found),
+        problems,
+      })),
       mods: found.mods.map((mod) => toView(mod, found)),
     };
     await view.webview.postMessage(message);
   }
 
-  private async open(path: string): Promise<void> {
+  /** At the place the panel named, when it named one: a problem is worth landing on. */
+  private async open(path: string, line?: number, column?: number): Promise<void> {
     const uri = this.uris.get(path);
-    if (uri) {
-      await vscode.window.showTextDocument(uri);
+    if (uri === undefined) {
+      return;
     }
+
+    if (line === undefined) {
+      await vscode.window.showTextDocument(uri);
+      return;
+    }
+
+    const at = new vscode.Position(line - 1, (column ?? 1) - 1);
+    await vscode.window.showTextDocument(uri, { selection: new vscode.Range(at, at) });
   }
 
   private page(webview: vscode.Webview): string {
@@ -139,11 +187,22 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
   }
 }
 
+/** The one place a setting is filled in from, which is where a missing one sends the developer. */
+async function openSettings(id: string): Promise<void> {
+  await vscode.commands.executeCommand('workbench.action.openSettings', id);
+}
+
 function toView(mod: Mod, found: Discovery): ModView {
+  const configured = mod.manifest === undefined ? undefined : found.configured.get(mod.manifest);
+  const manifest = configured?.configuration.manifest;
+
   return {
     name: mod.name,
-    location: locationOf(mod, found),
-    configured: mod.manifest !== undefined,
+    location: locationOfMod(mod, found),
+    title: manifest?.name,
+    description: manifest?.description,
+    manifest: mod.manifest,
+    manifestProblems: configured?.problems ?? [],
     addons: mod.addons.map((addon) => ({
       name: addon.name,
       main: addon.main,
@@ -159,9 +218,22 @@ function toView(mod: Mod, found: Discovery): ModView {
  * The mod root has no `Uri` of its own — only files were searched for — so it borrows one from a
  * file inside it. Rebuilding a `Uri` from the path instead would assume the workspace is on disk.
  */
-function locationOf(mod: Mod, found: Discovery): string {
+function locationOfMod(mod: Mod, found: Discovery): string {
   const anchor = found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
-  return anchor
-    ? vscode.workspace.asRelativePath(anchor.with({ path: mod.root }), true)
-    : mod.root;
+  return anchor ? vscode.workspace.asRelativePath(anchor.with({ path: mod.root }), true) : mod.root;
+}
+
+function locationOfFile(path: string, found: Discovery): string {
+  const uri = found.uris.get(path);
+  return uri ? vscode.workspace.asRelativePath(uri, true) : path;
+}
+
+/** The mods this workspace file actually owns the launch of, which is what it is labelled by. */
+function ownedBy(path: string, found: Discovery): string[] {
+  return found.mods.flatMap((mod) => {
+    const manifest = mod.manifest;
+    const owner = manifest === undefined ? undefined : found.configured.get(manifest)?.workspace;
+
+    return owner === path ? [mod.name] : [];
+  });
 }

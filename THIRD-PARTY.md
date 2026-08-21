@@ -1,4 +1,4 @@
-# Third-party assets
+# Third-party
 
 ## resources/enfusion.svg
 
@@ -11,3 +11,10 @@ square, so the `viewBox` here is cropped to the art itself, and the brand blue i
 "Enfusion" and "DayZ", and the mark itself, are trademarks of Bohemia Interactive a.s. The mark is
 used here to identify the engine this extension is built for. The extension is not affiliated with,
 endorsed by, or published by Bohemia Interactive.
+
+## jsonc-parser
+
+The `.enf` files are read with [jsonc-parser](https://github.com/microsoft/node-jsonc-parser),
+Microsoft's scanner and parser for JSON with comments — the same one the editor reads JSONC with,
+so a file the editor accepts is a file the extension accepts. MIT licensed, and bundled into
+`dist/extension.js` rather than shipped as a folder in the `.vsix`.

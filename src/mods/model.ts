@@ -13,6 +13,7 @@
  */
 
 import { parseConfig, sameName } from './config';
+import { folderOf, isWithin, nameOf } from './paths';
 
 /** What a search of the workspace turned up. */
 export interface Scan {
@@ -72,7 +73,7 @@ export type Problem =
 /** The mods of the scan, in build order. */
 export function modsFromScan(scan: Scan): Mod[] {
   const sources = scan.configs.map(read);
-  const manifests = new Map(scan.manifests.map((path) => [parent(path), path] as const));
+  const manifests = new Map(scan.manifests.map((path) => [folderOf(path), path] as const));
   const roots = [...manifests.keys()];
 
   // Sorted before the graph gets a say, so that mods and addons it does not relate — and a search
@@ -80,7 +81,7 @@ export function modsFromScan(scan: Scan): Mod[] {
   const drafts = [
     ...[...manifests].map(([root, manifest]) => draftAt(root, manifest, sources)),
     ...unconfigured(sources.filter((source) => !roots.some((root) => isWithin(source.root, root)))),
-  ].sort(byName(nameOf));
+  ].sort(byName(modName));
 
   const addons = drafts.flatMap((draft) => draft.addons).sort(byName((addon) => addon.name));
   const provider = providerOf(addons);
@@ -144,7 +145,7 @@ function unconfigured(sources: readonly AddonSource[]): Draft[] {
 
     const under = sources.filter((source) => isWithin(source.root, prefixRoot));
     roots.set(prefixRoot, {
-      root: parent(prefixRoot),
+      root: folderOf(prefixRoot),
       manifest: undefined,
       prefixRoot,
       ...addonsOf(prefixRoot, under),
@@ -160,8 +161,8 @@ function byName<T extends { readonly root: string }>(name: (item: T) => string) 
 }
 
 /** The mod's name, which is the prefix root's, and the mod root's only until one is found. */
-function nameOf(draft: Draft): string {
-  return base(draft.prefixRoot ?? draft.root);
+function modName(draft: Draft): string {
+  return nameOf(draft.prefixRoot ?? draft.root);
 }
 
 function toMod(
@@ -173,7 +174,7 @@ function toMod(
   const addons = [...draft.addons].sort((a, b) => rank(a) - rank(b));
 
   return {
-    name: nameOf(draft),
+    name: modName(draft),
     root: draft.root,
     manifest: draft.manifest,
     prefixRoot: draft.prefixRoot,
@@ -212,12 +213,12 @@ interface AddonSource {
 
 function read(file: ConfigFile): AddonSource {
   const parsed = parseConfig(file.source);
-  const root = parent(file.path);
+  const root = folderOf(file.path);
 
   return {
     config: file.path,
     root,
-    name: base(root),
+    name: nameOf(root),
     patches: parsed.patches.map((patch) => patch.name),
     requires: unique(parsed.patches.flatMap((patch) => patch.requiredAddons)),
     main: parsed.mod !== undefined,
@@ -313,8 +314,8 @@ function ordered<T>(
  * The walk stops at `bound`, which is the mod root when there is one.
  */
 function prefixRootFrom(main: AddonSource, bound: string): string {
-  for (let folder = main.root; folder !== '' && isWithin(folder, bound); folder = parent(folder)) {
-    if (sameName(base(folder), main.dir)) {
+  for (let folder = main.root; folder !== '' && isWithin(folder, bound); folder = folderOf(folder)) {
+    if (sameName(nameOf(folder), main.dir)) {
       return folder;
     }
   }
@@ -339,7 +340,7 @@ function addonsOf(
   }
 
   // Only the immediate subfolders: a `config.cpp` deeper than that is packed by the addon above it.
-  return { layout: 'multi', addons: sources.filter((source) => parent(source.root) === prefixRoot) };
+  return { layout: 'multi', addons: sources.filter((source) => folderOf(source.root) === prefixRoot) };
 }
 
 function unique(values: readonly string[]): string[] {
@@ -350,15 +351,3 @@ function lower(value: string): string {
   return value.toLowerCase();
 }
 
-/** True for the folder itself as well, which is what makes a mod root usable as a prefix root. */
-function isWithin(folder: string, root: string): boolean {
-  return folder === root || folder.startsWith(`${root}/`);
-}
-
-function parent(path: string): string {
-  return path.slice(0, path.lastIndexOf('/'));
-}
-
-function base(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}

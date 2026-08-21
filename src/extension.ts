@@ -3,6 +3,7 @@
  */
 
 import * as vscode from 'vscode';
+import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { ModsPanel } from './view/modsPanel';
 
@@ -17,8 +18,12 @@ export function activate(context: vscode.ExtensionContext): void {
     watchMods(() => {
       panel.refresh();
     }),
-    vscode.commands.registerCommand('enfusion.refresh', () => {
+    // The panel shows what the machine resolved to, so a setting changing is a change to show.
+    watchMachineSettings(() => {
       panel.refresh();
+    }),
+    vscode.commands.registerCommand('enfusion.refresh', () => {
+      panel.reread();
     }),
   );
 }

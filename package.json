@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing is executed."
+      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. The one program this extension runs is the registry query that finds the DayZ installation, and its arguments come from the extension alone."
     }
   },
   "contributes": {
@@ -66,6 +66,74 @@
           "group": "navigation@1"
         }
       ]
+    },
+    "languages": [
+      {
+        "id": "jsonc",
+        "filenames": ["mod.enf", "workspace.enf"]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "mod.enf",
+        "url": "./schemas/mod.enf.schema.json"
+      },
+      {
+        "fileMatch": "workspace.enf",
+        "url": "./schemas/workspace.enf.schema.json"
+      }
+    ],
+    "configuration": {
+      "title": "Enfusion",
+      "properties": {
+        "enfusion.dayz.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 1,
+          "markdownDescription": "Where DayZ is installed — the folder holding `DayZDiag_x64.exe`. Left empty, it is read from the registry, which is where the installer put it."
+        },
+        "enfusion.dayzTools.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 2,
+          "markdownDescription": "Where DayZ Tools is installed — the folder holding `bin\\AddonBuilder` and `bin\\DSUtils`. Left empty, it is read from the registry."
+        },
+        "enfusion.signing.privateKey": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 3,
+          "markdownDescription": "The `.biprivatekey` every pbo is signed with. Left empty, the pbo go unsigned, which a server checking signatures will not take."
+        },
+        "enfusion.workDrive.source": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 4,
+          "markdownDescription": "The folder the work drive is mounted from — the one holding the unpacked vanilla data."
+        },
+        "enfusion.filePatching.root": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 5,
+          "markdownDescription": "Where the folder the game is launched in is built. Left empty, it goes under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
+        },
+        "enfusion.builder": {
+          "type": "string",
+          "default": "pboProject",
+          "enum": ["pboProject", "AddonBuilder"],
+          "enumDescriptions": [
+            "Mikero pboProject.",
+            "AddonBuilder, which comes with DayZ Tools."
+          ],
+          "scope": "machine",
+          "order": 6,
+          "markdownDescription": "The program that packs an addon into a pbo."
+        }
+      }
     }
   },
   "scripts": {
@@ -89,5 +157,8 @@
     "eslint": "^9.39.5",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.67.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }
