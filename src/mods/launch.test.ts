@@ -9,6 +9,7 @@ import {
   type LaunchTarget,
   type TargetSource,
   filePatchingPlanOf,
+  launchPathsOf,
   launchPlanOf,
   runRootOf,
   targetById,
@@ -20,8 +21,33 @@ import type { LinkFact } from './workDrive';
 const GAME = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
 const DIAG = `${GAME}\\DayZDiag_x64.exe`;
 const RUN = 'C:\\Users\\dev\\AppData\\Local\\Enfusion\\run\\cad4z';
-const CORE = mod('CADCore', 'F:\\Code\\cad4z\\CADCore\\CADCore');
-const MAP = mod('CADMap', 'F:\\Code\\cad4z\\CADMap\\CADMap');
+const CORE = mod('CADCore', 'F:\\Code\\cad4z\\CADCore');
+const MAP = mod('CADMap', 'F:\\Code\\cad4z\\CADMap');
+
+/** The arguments every client is started with, which no test is about and every one carries. */
+const CLIENT_ARGUMENTS: readonly string[] = [
+  '-filePatching',
+  '-scriptDebug=true',
+  '-newErrorsAreWarnings=1',
+  '-doLogs',
+  '-adminlog',
+  '-nopause',
+  '-nosplash',
+  '-window',
+];
+
+/** And the server's. */
+const SERVER_ARGUMENTS: readonly string[] = [
+  '-server',
+  '-filePatching',
+  '-scriptDebug=true',
+  '-newErrorsAreWarnings=1',
+  '-doLogs',
+  '-adminlog',
+  '-nopause',
+  '-nosplash',
+  '-world=none',
+];
 
 /**
  * The whole plan for the plainest case there is: one mod, one target, everything in place.
@@ -35,39 +61,147 @@ test('a client target comes out as the run folder, its links and one command lin
     refusals: [],
     warnings: [],
     filePatching: {
-      root: RUN,
+      root: `${RUN}\\game`,
       junctions: [
-        { path: `${RUN}\\Addons`, target: `${GAME}\\Addons` },
-        { path: `${RUN}\\sakhal`, target: `${GAME}\\sakhal` },
-        { path: `${RUN}\\CADCore`, target: CORE.prefixRoot },
+        { path: `${RUN}\\game\\Addons`, target: `${GAME}\\Addons` },
+        { path: `${RUN}\\game\\sakhal`, target: `${GAME}\\sakhal` },
+        { path: `${RUN}\\game\\CADCore`, target: CORE.prefixRoot },
       ],
       remove: [],
-      copies: [{ from: `${GAME}\\steam_appid.txt`, to: `${RUN}\\steam_appid.txt` }],
+      copies: [{ from: `${GAME}\\steam_appid.txt`, to: `${RUN}\\game\\steam_appid.txt` }],
       conflicts: [],
     },
-    folders: [RUN, `${RUN}\\profiles\\CADCore\\client`],
+    folders: [`${RUN}\\game`, `${RUN}\\profiles\\CADCore\\client`],
+    copies: [
+      { from: `${CORE.root}\\Profiles\\Global`, to: `${RUN}\\profiles\\CADCore\\client` },
+      { from: `${CORE.root}\\Profiles\\Dev`, to: `${RUN}\\profiles\\CADCore\\client` },
+      { from: `${CORE.root}\\Profiles\\Client`, to: `${RUN}\\profiles\\CADCore\\client` },
+    ],
     processes: [
       {
         role: 'client',
         what: 'Starting the client for Chernarus',
         program: DIAG,
         arguments: [
-          '-filePatching',
-          '-scriptDebug=true',
-          '-newErrorsAreWarnings=1',
-          '-doLogs',
-          '-adminlog',
-          '-nopause',
-          '-nosplash',
-          '-window',
+          ...CLIENT_ARGUMENTS,
           `-profiles=${RUN}\\profiles\\CADCore\\client`,
           '-mod=P:\\Mods\\@CADCore',
           '-mission=dayzOffline.chernarusplus',
         ],
-        cwd: RUN,
+        cwd: `${RUN}\\game`,
       },
     ],
   });
+});
+
+/**
+ * And the whole plan for what the ticket is about: one launch, two processes, the server first and
+ * a client that joins it. The profile, the mission and the `server.cfg` all come out of the mod
+ * the target names, which is what makes the same target the same launch on another machine.
+ */
+test('a target that puts up both starts the server and a client that joins it', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'both' }) }));
+
+  assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(plan.warnings, []);
+  assert.deepEqual(plan.folders, [
+    `${RUN}\\game`,
+    `${RUN}\\profiles\\CADCore\\server`,
+    `${RUN}\\profiles\\CADCore\\client`,
+    `${RUN}\\missions\\CADCore.chernarusplus`,
+  ]);
+  assert.deepEqual(plan.copies, [
+    { from: `${CORE.root}\\Profiles\\Global`, to: `${RUN}\\profiles\\CADCore\\server` },
+    { from: `${CORE.root}\\Profiles\\Dev`, to: `${RUN}\\profiles\\CADCore\\server` },
+    { from: `${CORE.root}\\Profiles\\Server`, to: `${RUN}\\profiles\\CADCore\\server` },
+    { from: `${CORE.root}\\Profiles\\Maps\\chernarusplus`, to: `${RUN}\\profiles\\CADCore\\server` },
+    { from: `${CORE.root}\\Profiles\\Global`, to: `${RUN}\\profiles\\CADCore\\client` },
+    { from: `${CORE.root}\\Profiles\\Dev`, to: `${RUN}\\profiles\\CADCore\\client` },
+    { from: `${CORE.root}\\Profiles\\Client`, to: `${RUN}\\profiles\\CADCore\\client` },
+    {
+      from: `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      to: `${RUN}\\missions\\CADCore.chernarusplus`,
+    },
+    { from: `${CORE.root}\\Missions\\Global`, to: `${RUN}\\missions\\CADCore.chernarusplus` },
+    { from: `${CORE.root}\\Missions\\Dev`, to: `${RUN}\\missions\\CADCore.chernarusplus` },
+  ]);
+  assert.deepEqual(plan.processes, [
+    {
+      role: 'server',
+      what: 'Starting the server for Chernarus',
+      program: DIAG,
+      arguments: [
+        ...SERVER_ARGUMENTS,
+        '-port=2302',
+        `-config=${CORE.root}\\server.cfg`,
+        `-profiles=${RUN}\\profiles\\CADCore\\server`,
+        `-mission=${RUN}\\missions\\CADCore.chernarusplus`,
+        '-mod=P:\\Mods\\@CADCore',
+      ],
+      cwd: `${RUN}\\game`,
+    },
+    {
+      role: 'client',
+      what: 'Starting the client for Chernarus',
+      program: DIAG,
+      arguments: [
+        ...CLIENT_ARGUMENTS,
+        `-profiles=${RUN}\\profiles\\CADCore\\client`,
+        '-mod=P:\\Mods\\@CADCore',
+        '-connect=127.0.0.1',
+        '-port=2302',
+      ],
+      cwd: `${RUN}\\game`,
+    },
+  ]);
+});
+
+test('a target that puts up the server alone starts the server and nothing else', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'server' }) }));
+
+  assert.deepEqual(
+    plan.processes.map((process_) => process_.role),
+    ['server'],
+  );
+  assert.deepEqual(plan.folders, [
+    `${RUN}\\game`,
+    `${RUN}\\profiles\\CADCore\\server`,
+    `${RUN}\\missions\\CADCore.chernarusplus`,
+  ]);
+});
+
+/**
+ * The game's root holds a `Missions` of its own, and a launch builds a `missions` of its own. On a
+ * filesystem that tells neither name apart those would be the one folder — the junction could not
+ * be made, or the mission would be written through it into the DayZ installation. So nothing of
+ * ours goes inside the folder the game's root is mirrored into.
+ */
+test('nothing a launch builds sits inside the folder the game root is mirrored into', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'both' }),
+      game: { entries: [folder('Addons'), folder('Missions'), folder('profiles')] },
+    }),
+  );
+
+  assert.deepEqual(plan.filePatching.conflicts, []);
+  assert.ok(
+    plan.filePatching.junctions.some((junction) => junction.path === `${RUN}\\game\\Missions`),
+    plan.filePatching.junctions.map((junction) => junction.path).join(' '),
+  );
+
+  const mirrored = `${RUN}\\game\\`.toLowerCase();
+  for (const path of [...plan.folders.slice(1), ...plan.copies.map((copy) => copy.to)]) {
+    assert.ok(!path.toLowerCase().startsWith(mirrored), path);
+  }
+});
+
+/** A client that has a server to join has no business loading a mission of its own. */
+test('a client joining the local server is not given an offline mission as well', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'both' }) }));
+  const client = plan.processes.find((process_) => process_.role === 'client');
+
+  assert.ok(!client?.arguments.some((argument) => argument.startsWith('-mission=')));
 });
 
 /**
@@ -211,7 +345,7 @@ test('a link is recognised whatever the case it was written in', () => {
 });
 
 test('a mod named after a folder of the game takes the name', () => {
-  const addons = mod('Addons', 'F:\\Code\\Addons\\Addons');
+  const addons = mod('Addons', 'F:\\Code\\Addons');
   const plan = patching({ mods: [addons] });
 
   assert.deepEqual(plan.junctions, [
@@ -260,13 +394,39 @@ test('the third-party mods are handed to the client first, the workspace’s own
   );
 });
 
-test('a target naming a mod the workspace has not got starts nothing', () => {
-  const plan = launchPlanOf(input({ mods: [MAP], target: target({ mod: 'CADCore' }) }));
+/** The server runs the same mods the client does, plus the ones only a server ever loads. */
+test('the server mods reach -serverMod= and the workspace’s own stay out of it', () => {
+  const plan = launchPlanOf(
+    input({
+      mods: [CORE, MAP],
+      target: target({
+        run: 'both',
+        launch: launch({ clientMods: ['@CF'], serverMods: ['DayZ-Expansion-Licensed', '@VPPAdminTools'] }),
+      }),
+    }),
+  );
+  const server = plan.processes.find((process_) => process_.role === 'server');
 
-  assert.deepEqual(plan.refusals, [
-    'Chernarus launches CADCore, which is not a mod of this workspace.',
-  ]);
-  assert.deepEqual(plan.processes, []);
+  assert.ok(
+    server?.arguments.includes('-mod=P:\\Mods\\@CF;P:\\Mods\\@CADCore;P:\\Mods\\@CADMap'),
+    server?.arguments.join(' '),
+  );
+  assert.ok(
+    server?.arguments.includes(
+      '-serverMod=P:\\Mods\\@DayZ-Expansion-Licensed;P:\\Mods\\@VPPAdminTools',
+    ),
+    server?.arguments.join(' '),
+  );
+});
+
+/** An empty `-serverMod=` is not the same thing as no `-serverMod=`: the game takes it badly. */
+test('a mod list nobody filled in is left off the command line rather than passed empty', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'both' }) }));
+  const said = plan.processes.flatMap((process_) => process_.arguments);
+
+  assert.deepEqual(plan.refusals, []);
+  assert.ok(!said.some((argument) => argument.startsWith('-serverMod=')), said.join(' '));
+  assert.ok(!said.some((argument) => argument.endsWith('=')), said.join(' '));
 });
 
 test('a relative mods directory is counted from the file that set it', () => {
@@ -280,22 +440,214 @@ test('a relative mods directory is counted from the file that set it', () => {
   );
 });
 
-test('a target that puts up a server too starts the client and says the server is not started', () => {
-  const plan = launchPlanOf(input({ target: target({ run: 'both' }) }));
+/**
+ * The profile and the mission are the target's mod's own. A launch that took them from whatever
+ * else the workspace holds would be a different launch on every machine.
+ */
+test('the profile and the mission come from the target’s mod, not from its neighbours', () => {
+  const plan = launchPlanOf(
+    input({ mods: [CORE, MAP], target: target({ run: 'both', mod: 'CADMap' }) }),
+  );
 
-  assert.deepEqual(plan.warnings, [
-    'Chernarus asks for a server as well, and only the client is started: starting the server is ' +
-      'not implemented yet.',
+  assert.ok(
+    plan.copies.every((copy) => copy.from.startsWith(MAP.root)),
+    plan.copies.map((copy) => copy.from).join(' '),
+  );
+  assert.deepEqual(plan.folders, [
+    `${RUN}\\game`,
+    `${RUN}\\profiles\\CADMap\\server`,
+    `${RUN}\\profiles\\CADMap\\client`,
+    `${RUN}\\missions\\CADMap.chernarusplus`,
   ]);
-  assert.equal(plan.processes.length, 1);
 });
 
-test('a target that puts up the server alone starts nothing', () => {
-  const plan = launchPlanOf(input({ target: target({ run: 'server' }) }));
+test('a named serverConfig is taken relative to the target’s mod', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'server', serverConfig: 'Configs\\dev.cfg' }),
+      found: [
+        `${CORE.root}\\Configs\\dev.cfg`,
+        'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+        `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      ],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, []);
+  assert.ok(
+    plan.processes[0]?.arguments.includes(`-config=${CORE.root}\\Configs\\dev.cfg`),
+    plan.processes[0]?.arguments.join(' '),
+  );
+});
+
+/**
+ * A monorepo configures its dev server once, beside the `workspace.enf` that owns the launch, and
+ * a mod that wants its own says so by keeping one.
+ */
+test('a server.cfg the target’s mod has not got is taken from the file that owns the launch', () => {
+  const workspace = target({ run: 'server', configuredIn: 'F:\\Code\\cad4z' });
+  const plan = launchPlanOf(
+    input({
+      target: workspace,
+      found: [
+        'F:\\Code\\cad4z\\server.cfg',
+        'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+        `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      ],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, []);
+  assert.ok(
+    plan.processes[0]?.arguments.includes('-config=F:\\Code\\cad4z\\server.cfg'),
+    plan.processes[0]?.arguments.join(' '),
+  );
+});
+
+test('a launch refuses when there is no server.cfg to start the server with', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'both', configuredIn: 'F:\\Code\\cad4z' }),
+      found: ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo'],
+    }),
+  );
+
+  assert.ok(
+    plan.refusals.some((refusal) => refusal.includes('no server.cfg')),
+    plan.refusals.join(' '),
+  );
+  assert.ok(
+    plan.refusals.some((refusal) => refusal.includes('F:\\Code\\cad4z\\server.cfg')),
+    plan.refusals.join(' '),
+  );
+  assert.deepEqual(plan.processes, []);
+});
+
+test('a server target with no world to load a mission of is refused', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'server', map: undefined }) }));
+
+  assert.ok(
+    plan.refusals.some((refusal) => refusal.includes('"map"')),
+    plan.refusals.join(' '),
+  );
+  assert.deepEqual(plan.processes, []);
+});
+
+/**
+ * The failure this exists to prevent: the game comes up without the mod, whatever depended on it
+ * fails in a script error, and it reads as a bug in the mod rather than as a mod never built.
+ */
+test('a mod that is not built stops the launch and is named', () => {
+  const plan = launchPlanOf(input({ mods: [CORE, MAP], found: [] }));
 
   assert.deepEqual(plan.refusals, [
-    'Chernarus puts up the server alone, and starting the server is not implemented yet.',
+    'CADCore is not built: nothing is at P:\\Mods\\@CADCore\\Addons\\CADCore.pbo. Build it and ' +
+      'launch again.',
+    'CADMap is not built: nothing is at P:\\Mods\\@CADMap\\Addons\\CADMap.pbo. Build it and ' +
+      'launch again.',
   ]);
+  assert.deepEqual(plan.processes, []);
+});
+
+test('a mod of several addons is not built until every one of its pbo is there', () => {
+  const many = { ...CORE, addons: ['CADCore', 'CADCore_Scripts'] };
+  const plan = launchPlanOf(
+    input({ mods: [many], found: ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo'] }),
+  );
+
+  assert.deepEqual(plan.refusals, [
+    'CADCore is not built: nothing is at P:\\Mods\\@CADCore\\Addons\\CADCore_Scripts.pbo. Build ' +
+      'it and launch again.',
+  ]);
+});
+
+test('a third-party mod that is not in the mods directory stops the launch and is named', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'both', launch: launch({ clientMods: ['CF'], serverMods: ['@VPPAdminTools'] }) }),
+      found: [
+        'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+        `${CORE.root}\\server.cfg`,
+        `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      ],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, [
+    '@CF is not in the mods directory: nothing is at P:\\Mods\\@CF.',
+    '@VPPAdminTools is not in the mods directory: nothing is at P:\\Mods\\@VPPAdminTools.',
+  ]);
+});
+
+/** Only the server ever loads them, so a client-only target is not held up over one. */
+test('a server mod that is missing does not stop a target that puts up no server', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ launch: launch({ serverMods: ['@VPPAdminTools'] }) }),
+      found: ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo'],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, []);
+});
+
+/** The layers alone make a mission the engine will load, so this is a sentence rather than a stop. */
+test('a world the target’s mod keeps no mission for is a warning, not a refusal', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'server' }),
+      found: ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo', `${CORE.root}\\server.cfg`],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(plan.warnings, [
+    `Nothing is at ${CORE.root}\\Missions\\CADCore.chernarusplus, so the server starts with ` +
+      "whatever the layers of Missions hold and no mission of CADCore's own.",
+  ]);
+});
+
+/**
+ * What the plan wants a yes or no about, which is what the extension asks the disk before making
+ * it: the pbo of everything it would load, and the server's two files where a server is put up.
+ */
+test('the paths a launch asks the disk about are the built mods and the server’s own files', () => {
+  assert.deepEqual(launchPathsOf(target({ run: 'client' }), [CORE, MAP]), [
+    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+    'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo',
+  ]);
+
+  assert.deepEqual(
+    launchPathsOf(
+      target({ run: 'both', configuredIn: 'F:\\Code\\cad4z', launch: launch({ clientMods: ['@CF'] }) }),
+      [CORE],
+    ),
+    [
+      'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+      'P:\\Mods\\@CF',
+      `${CORE.root}\\server.cfg`,
+      'F:\\Code\\cad4z\\server.cfg',
+      `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+    ],
+  );
+});
+
+/** A mod whose manifest sits in its own root asks about one `server.cfg`, not the same one twice. */
+test('the same server.cfg looked for twice is asked about once', () => {
+  assert.deepEqual(launchPathsOf(target({ run: 'server' }), [CORE]), [
+    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+    `${CORE.root}\\server.cfg`,
+    `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+  ]);
+});
+
+test('a target naming a mod the workspace has not got starts nothing', () => {
+  const plan = launchPlanOf(input({ mods: [MAP], target: target({ mod: 'CADCore' }) }));
+
+  assert.ok(
+    plan.refusals.includes('Chernarus launches CADCore, which is not a mod of this workspace.'),
+    plan.refusals.join(' '),
+  );
   assert.deepEqual(plan.processes, []);
 });
 
@@ -347,9 +699,12 @@ test('a quotation mark in what the manifest puts on a command line is refused', 
     input({ target: target({ launch: launch({ clientMods: ['@CF" -connect=elsewhere'] }) }) }),
   );
 
-  assert.deepEqual(plan.refusals, [
-    'mod.enf has a quotation mark in "@CF" -connect=elsewhere", which no path can hold.',
-  ]);
+  assert.ok(
+    plan.refusals.includes(
+      'mod.enf has a quotation mark in "@CF" -connect=elsewhere", which no path can hold.',
+    ),
+    plan.refusals.join(' '),
+  );
 });
 
 /**
@@ -456,16 +811,21 @@ function patching(over: Partial<Parameters<typeof filePatchingPlanOf>[0]> = {}):
   });
 }
 
+/** Everything in place unless a test says otherwise, `found` included: what is asked for is there. */
 function input(
   over: Omit<Partial<LaunchInput>, 'game'> & { game?: Partial<LaunchInput['game']> } = {},
 ): LaunchInput {
+  const chosen = over.target ?? target();
+  const mods = over.mods ?? [CORE];
+
   return {
-    target: target(),
-    mods: [CORE],
+    target: chosen,
+    mods,
     settings: settings(),
     drive: { letter: 'P:', source: 'F:\\Workdrive', at: 'F:\\Workdrive', state: 'mounted' },
     runRoot: RUN,
     present: new Map(),
+    found: launchPathsOf(chosen, mods),
     ...over,
     game: {
       path: GAME,
@@ -532,8 +892,9 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   };
 }
 
-function mod(name: string, prefixRoot: string): LaunchMod {
-  return { name, prefixRoot };
+/** A mod of one addon named after itself, which is the single-addon layout every test but one is. */
+function mod(name: string, root: string): LaunchMod {
+  return { name, root, prefixRoot: `${root}\\${name}`, addons: [name] };
 }
 
 function folder(name: string): GameEntry {

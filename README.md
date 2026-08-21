@@ -65,35 +65,59 @@ talking about, not on its twin on `P:`; an addon that failed without a place to 
 on its own `config.cpp`. Building is one of the two places where a path out of a `mod.enf` reaches a
 command line (the other is launching), so it wants the folder trusted (Workspace Trust).
 
-The client is launched by the editor's own **Run and Debug**: the configurations are handed out
+The game is launched by the editor's own **Run and Debug**: the configurations are handed out
 dynamically from the targets of the `launch` block, so `launch.json` is not needed and is never
 created. One written by hand is useless for configuring, too: a debug configuration takes exactly
 `type`, `request` and `target`, and any other field is an error pointing at `mod.enf`. The selected
 target is shown in the status bar and changed there; `target` in a configuration is a target's name,
 and targets of the same name in different mods are told apart as `<Mod>: <Name>`. The debugger does
 exactly two things, start and stop: there are no breakpoints, no stacks and no variables, but
-**Stop** puts the game down along with its children (`taskkill /T`), and the session ends by itself
-when the game is closed from inside.
+**Stop** puts down every process of the launch along with its children (`taskkill /T`). The session
+ends when any one of them goes on its own: a client with no server left has nobody to talk to, and a
+server nobody connects to any more would otherwise hang about without a single line in the editor to
+say it is there.
 
-Before a launch the **file patching root** is put together — the working directory the game will
-get, by default `%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it are junctions onto **every
-folder of the game root**, obtained by listing it, plus junctions onto the prefix roots of the
-workspace's mods and a copy of `steam_appid.txt`; neither the game folder nor the work drive is
-changed by any of it. The listing is not a detail: the Workbench plugins had the list hardcoded as
-`Addons`, `bliss` and `sakhal`, while a live installation has had no `bliss` for a long time and
-does have `!Workshop`, `dta`, `Missions`, `MainMenu.*` and the rest. A second launch redoes nothing:
-a link pointing where it should stays, one that has moved is repointed, one no longer wanted is
-taken off, and whatever the game itself wrote into the working directory (logs, dumps) is not
-touched at all. A launch refuses to start where the work drive is not mounted, or where there is no
-game executable — by default `DayZDiag_x64.exe`, because only the diagnostic build understands
-`-filePatching`; the name or the path is changed by the `enfusion.dayz.executable` setting.
+Before a launch the run folder is put together — by default
+`%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it is `game\`, the **file patching root**: the
+working directory the game will get, holding junctions onto **every folder of the game root**,
+obtained by listing it, plus junctions onto the prefix roots of the workspace's mods and a copy of
+`steam_appid.txt`; neither the game folder nor the work drive is changed by any of it. The listing
+is not a detail: the Workbench plugins had the list hardcoded as `Addons`, `bliss` and `sakhal`,
+while a live installation has had no `bliss` for a long time and does have `!Workshop`, `dta`,
+`Missions`, `MainMenu.*` and the rest. A second launch redoes nothing: a link pointing where it
+should stays, one that has moved is repointed, one no longer wanted is taken off, and whatever the
+game itself wrote into the working directory (logs, dumps) is not touched at all. A launch refuses
+to start where the work drive is not mounted, or where there is no game executable — by default
+`DayZDiag_x64.exe`, because only the diagnostic build understands `-filePatching`; the name or the
+path is changed by the `enfusion.dayz.executable` setting.
 
-The client gets `-filePatching`, a profile of its own inside the working directory, a `-mod=` with
-the list of the mods that were built (the third-party ones out of `clientMods` first, then ours in
-dependency order) and, where the target named a map, `-mission=dayzOffline.<map>`. Like a build, a
-launch puts paths out of a `mod.enf` on a command line, so it wants the folder trusted too. The
-server (`run: "server"` and `"both"`) is not put up yet: a server-only target refuses to start, and
-a target that says both puts up the client and says so.
+A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
+server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
+connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
+directory and a `-mod=` with the list of the mods that were built — the third-party ones out of
+`clientMods` first, then ours in dependency order; a client with nothing to connect to loads
+`-mission=dayzOffline.<map>` instead. The server gets the same `-mod=`, plus `-serverMod=` out of
+`serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`. An empty list does not become
+an empty argument but is not passed at all: the game takes an empty `-mod=` badly.
+
+The profile and the mission come from the mod the target belongs to rather than from its neighbours
+in the workspace — otherwise a launch would mean different things on different machines. The profile
+is layered out of the mod's `Profiles`: `Global`, `Dev` and then `Client` or `Server`, and a server
+one takes `Maps\<map>` as well; the mission comes out of `Missions\<Mod>.<map>` with `Global` and
+`Dev` laid over it. Both are assembled in the run folder, but beside `game\` rather than inside it:
+beside, because the game root has a `Missions` of its own and Windows does not tell it apart from
+our `missions` — in one folder the mission would ride into the DayZ installation straight through a
+junction. Neither the mod's sources nor the work drive is changed by a launch, still. A layer the
+mod does not have is not asked for by anybody. `server.cfg` is taken from the target's mod, and
+where it is not there, from beside the `.enf` that owns the `launch` block; the `serverConfig` field
+points at any path relative to the mod instead.
+
+Before the start it is checked that everything to be loaded has been built: for our own mods, the
+pbo of every addon in `<modsDirectory>\@<Mod>\Addons`, for third-party ones the `@<Mod>` folder
+itself. A mod that is not built is named and the launch does not begin — rather than the game coming
+up quietly without it while everything that depended on it falls into a script error. A server
+target with no `map`, and a missing `server.cfg`, are refused the same way. Like a build, a launch
+puts paths out of a `mod.enf` on a command line, so it wants the folder trusted too.
 
 One more thing about AddonBuilder, nothing to do with this extension but worth knowing in advance:
 it binarises through `binarize.exe -addon="P:"`, which is to say it reads **every** config on the

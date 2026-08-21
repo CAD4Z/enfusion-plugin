@@ -18,6 +18,8 @@ import * as vscode from 'vscode';
 import {
   type LaunchTarget,
   type TargetSource,
+  filePatchingRootOf,
+  launchPathsOf,
   launchPlanOf,
   runRootOf,
   targetById,
@@ -28,13 +30,14 @@ import {
   type GameProcess,
   localAppData,
   prepareLaunch,
+  readFound,
   readGameRoot,
-  readRunRoot,
+  readLinkFacts,
   startGame,
 } from '../platform/launch';
 import { readMachineSettings } from '../platform/machine';
 import { readWorkDrive } from '../platform/workDrive';
-import { type Discovery, findMods, ownedOf, prefixesOf } from '../platform/workspace';
+import { type Discovery, findMods, launchModsOf, ownedOf } from '../platform/workspace';
 
 /** The debug type contributed in `package.json`; a configuration names it as `"type"`. */
 export const LAUNCH_TYPE = 'enfusion';
@@ -42,7 +45,7 @@ export const LAUNCH_TYPE = 'enfusion';
 export const LAUNCH_COMMAND = { select: 'enfusion.selectTarget' } as const;
 
 /** The fields a configuration of ours takes. Anything else is the manifest's business. */
-const CONFIGURATION_FIELDS: readonly string[] = ['type', 'request', 'name', 'target'];
+const CONFIGURATION_FIELDS: readonly string[] = ['type', 'request', 'name', 'target', 'noDebug'];
 
 /** Where the chosen target is remembered, so a reopened workspace opens on the same one. */
 const CHOSEN_KEY = 'enfusion.launch.target';
@@ -294,8 +297,8 @@ class Launcher {
     return targetsOf(sourcesOf(await findMods()));
   }
 
-  /** The game, running — or the sentence saying why it is not. */
-  async start(id: string, say: (text: string) => void): Promise<GameProcess | string> {
+  /** The processes of the launch, running — or the sentence saying why none of them is. */
+  async start(id: string, say: (text: string) => void): Promise<GameProcess[] | string> {
     // A launch is one of the two things that puts a path out of a `mod.enf` on a command line, so
     // like a build it waits until the developer has said the folder is theirs.
     if (!vscode.workspace.isTrusted) {
@@ -305,32 +308,28 @@ class Launcher {
       );
     }
 
-    const [found, settings] = await Promise.all([findMods(), readMachineSettings()]);
-    const target = targetById(targetsOf(sourcesOf(found)), id);
+    const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
+    const target = targetById(targetsOf(sourcesOf(discovery)), id);
     if (target === undefined) {
       return `No launch target is called "${id}" any more.`;
     }
 
+    const mods = launchModsOf(discovery);
     const runRoot = runRootOf(
       settings.filePatchingRoot,
       localAppData(),
       vscode.workspace.name ?? '',
     );
-    const [drive, game, present] = await Promise.all([
+    const [drive, game, present, found] = await Promise.all([
       readWorkDrive(settings),
       readGameRoot(settings),
-      readRunRoot(runRoot),
+      readLinkFacts(filePatchingRootOf(runRoot)),
+      // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
+      // for by the plan itself, so that the two can never go looking at different paths.
+      readFound(launchPathsOf(target, mods)),
     ]);
 
-    const plan = launchPlanOf({
-      target,
-      mods: prefixesOf(found).map((prefix) => ({ name: prefix.name, prefixRoot: prefix.target })),
-      settings,
-      drive,
-      runRoot,
-      game,
-      present,
-    });
+    const plan = launchPlanOf({ target, mods, settings, drive, runRoot, game, present, found });
 
     if (plan.refusals.length > 0) {
       return plan.refusals.join(' ');
@@ -344,19 +343,21 @@ class Launcher {
     await prepareLaunch(plan);
     this.log.info(
       `launch: ${plan.filePatching.junctions.length} link(s) made, ` +
-        `${plan.filePatching.remove.length} taken off, in ${runRoot}`,
+        `${plan.filePatching.remove.length} taken off, ${plan.copies.length} layer(s) laid down, ` +
+        `in ${runRoot}`,
     );
 
-    const process_ = plan.processes[0];
-    if (process_ === undefined) {
+    if (plan.processes.length === 0) {
       return `${target.id} puts nothing up.`;
     }
 
-    const command = `${process_.program} ${process_.arguments.join(' ')}`;
-    this.log.info(command);
-    say(command);
+    return plan.processes.map((process_) => {
+      const command = `${process_.program} ${process_.arguments.join(' ')}`;
+      this.log.info(command);
+      say(command);
 
-    return startGame(process_);
+      return startGame(process_);
+    });
   }
 }
 
@@ -382,13 +383,19 @@ interface DapRequest {
  * The debug adapter: start on `launch`, kill on `terminate` or `disconnect`, and end the session
  * when the game goes away on its own. Every other request is answered so that the editor is not
  * left waiting, and none of them does anything — there is nothing here to step through.
+ *
+ * A launch is one session however many processes it put up, so Stop takes down every one of them.
+ * And when any one of them goes, so do the rest: a client whose server has gone is a client with
+ * nothing to talk to, and a server nobody is joining any more would otherwise be left running with
+ * nothing in the editor to show it.
  */
 class GameSession implements vscode.DebugAdapter {
   private readonly messages = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
   readonly onDidSendMessage = this.messages.event;
 
   private sequence = 1;
-  private game: GameProcess | undefined;
+  private games: readonly GameProcess[] = [];
+  private over = false;
 
   constructor(
     private readonly target: string,
@@ -437,7 +444,8 @@ class GameSession implements vscode.DebugAdapter {
         return;
       case 'terminate':
       case 'disconnect':
-        await this.game?.kill();
+        this.over = true;
+        await this.stop();
         this.respond(request);
         this.event('terminated');
         return;
@@ -459,15 +467,44 @@ class GameSession implements vscode.DebugAdapter {
       return;
     }
 
-    this.game = outcome;
+    this.games = outcome;
     this.respond(request);
 
-    // The session lasts as long as the game does, so that Stop stays a way of ending it and the
+    // Stop, pressed while the run folder was still being made: the session is already over, and
+    // these were started after it ended. Detached processes with nothing left to stop them is
+    // exactly the task manager this exists to save a developer from.
+    if (this.over) {
+      await this.stop();
+      return;
+    }
+
+    // The session lasts as long as the launch does, so that Stop stays a way of ending it and the
     // toolbar stops showing one after the game has been closed from inside.
-    void outcome.exited.then((code) => {
-      this.output(code === undefined ? 'The game is gone.' : `The game exited with ${code}.`);
-      this.event('terminated');
-    });
+    for (const game of outcome) {
+      void game.exited.then((code) => {
+        void this.finish(
+          code === undefined
+            ? `The ${game.role} is gone.`
+            : `The ${game.role} exited with ${code}.`,
+        );
+      });
+    }
+  }
+
+  /** The first process to go ends the launch, and takes whatever else it started with it. */
+  private async finish(said: string): Promise<void> {
+    if (this.over) {
+      return;
+    }
+
+    this.over = true;
+    this.output(said);
+    await this.stop();
+    this.event('terminated');
+  }
+
+  private async stop(): Promise<void> {
+    await Promise.all(this.games.map((game) => game.kill()));
   }
 
   private respond(request: DapRequest, body?: object): void {

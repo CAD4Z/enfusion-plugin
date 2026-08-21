@@ -12,7 +12,7 @@
  */
 
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import type { GameEntry, GameRoot, LaunchPlan, LaunchProcess } from '../mods/launch';
@@ -44,20 +44,37 @@ export async function readGameRoot(settings: MachineSettings): Promise<GameRoot>
   };
 }
 
-/** What is in the run folder now, by the name it goes by there. Nothing there is nothing to say. */
-export async function readRunRoot(root: string): Promise<Map<string, LinkFact>> {
-  const names = (await entriesOf(root)).map((entry) => entry.name);
+/**
+ * What is in a folder now and what each of them is — a link of ours, a link elsewhere, or something
+ * real. Asked of the file patching root, whose links are the whole of what a launch remakes.
+ * Nothing there is nothing to say, which is what a first launch finds.
+ */
+export async function readLinkFacts(folder: string): Promise<Map<string, LinkFact>> {
+  const names = (await entriesOf(folder)).map((entry) => entry.name);
   const facts = await Promise.all(
-    names.map(async (name) => [name, await linkFactAt(windowsPath(root, name))] as const),
+    names.map(async (name) => [name, await linkFactAt(windowsPath(folder, name))] as const),
   );
 
   return new Map(facts);
 }
 
 /**
+ * Which of the paths the plan asked about are there. Every one of them is a yes-or-no the plan
+ * turns into a refusal or a command line, and none of them is judged here.
+ */
+export async function readFound(paths: readonly string[]): Promise<string[]> {
+  const answers = await Promise.all(
+    paths.map(async (path) => ({ path, there: await exists(path) })),
+  );
+
+  return answers.filter((answer) => answer.there).map((answer) => answer.path);
+}
+
+/**
  * The run folder made ready: the folders, then the links that are in the way taken off, then the
- * links made, then the files carried over. In that order, because a link cannot be made where one
- * already is.
+ * links made, then the files carried over, then the profile and the mission laid down. In that
+ * order, because a link cannot be made where one already is, and a layer cannot be copied into a
+ * folder that has not been made yet.
  */
 export async function prepareLaunch(plan: LaunchPlan): Promise<void> {
   for (const folder of plan.folders) {
@@ -76,6 +93,23 @@ export async function prepareLaunch(plan: LaunchPlan): Promise<void> {
     await mkdir(windowsFolder(copy.to), { recursive: true });
     await copyFile(copy.from, copy.to);
   }
+
+  for (const copy of plan.copies) {
+    await layer(copy.from, copy.to);
+  }
+}
+
+/**
+ * One layer of a profile or of a mission, laid over what is there already. A layer no mod keeps is
+ * the ordinary case rather than a failure — the plan names every layer there could be — so a source
+ * that is not there is passed over, and anything else is left to be reported as what it is.
+ */
+async function layer(from: string, to: string): Promise<void> {
+  if (!(await exists(from))) {
+    return;
+  }
+
+  await cp(from, to, { recursive: true, force: true });
 }
 
 /** A game that is running: what it is, and the two things anybody wants from it. */

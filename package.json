@@ -179,7 +179,7 @@
           "default": "",
           "scope": "machine",
           "order": 7,
-          "markdownDescription": "Where the folder the game is launched in is built. Left empty, it goes under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
+          "markdownDescription": "Where the run folders are built — one per workspace, each holding the folder the game is started in, the profiles and the mission of the dev server. Left empty, they go under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
         },
         "enfusion.builder": {
           "type": "string",

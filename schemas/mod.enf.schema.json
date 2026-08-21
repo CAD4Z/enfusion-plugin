@@ -94,7 +94,7 @@
         },
         "map": {
           "type": "string",
-          "description": "The world this target is about, which is the tail of the mission folder name — sakhal, chernarusplus. A client with no server to join loads dayzOffline.<map>."
+          "description": "The world this target is about, which is the tail of the mission folder name — sakhal, chernarusplus. A server loads the mission the target's mod keeps for it, Missions\\<Mod>.<map>, with the Global and Dev layers of Missions laid over it; a client with no server to join loads dayzOffline.<map> instead."
         },
         "run": {
           "type": "string",
@@ -113,7 +113,7 @@
         },
         "serverConfig": {
           "type": "string",
-          "description": "The server.cfg to launch with, relative to the target's mod."
+          "description": "The server.cfg the dev server is started with, relative to the target's mod. Left out, the mod's own server.cfg is used, and failing that the one beside the file that owns this launch block."
         }
       }
     }

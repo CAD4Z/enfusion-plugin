@@ -13,6 +13,7 @@ import {
   WORKSPACE_FILE,
   configurationsOf,
 } from '../mods/enf';
+import type { LaunchMod } from '../mods/launch';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan } from '../mods/model';
 import { nameOf, windowsFolder } from '../mods/paths';
 import type { Prefix } from '../mods/workDrive';
@@ -72,6 +73,31 @@ export function prefixesOf(found: Discovery): Prefix[] {
     }
 
     return [{ prefixRoot, name: mod.name, target: anchor.with({ path: prefixRoot }).fsPath }];
+  });
+}
+
+/**
+ * The mods a launch loads, with the folders it takes them out of as paths on disk: the prefix root
+ * it links, and the mod root the profile and the mission are laid down from. The same borrowing of
+ * a `Uri` as `prefixesOf`, and for the same reason.
+ */
+export function launchModsOf(found: Discovery): LaunchMod[] {
+  return found.mods.flatMap((mod) => {
+    const prefixRoot = mod.prefixRoot;
+    const anchor = found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
+
+    if (prefixRoot === undefined || anchor === undefined) {
+      return [];
+    }
+
+    return [
+      {
+        name: mod.name,
+        root: anchor.with({ path: mod.root }).fsPath,
+        prefixRoot: anchor.with({ path: prefixRoot }).fsPath,
+        addons: mod.addons.map((addon) => addon.name),
+      },
+    ];
   });
 }
 
