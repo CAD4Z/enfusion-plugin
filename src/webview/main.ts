@@ -7,10 +7,10 @@
  * follows the editor's theme through the `--vscode-*` variables VS Code puts on the document.
  */
 
-import '@vscode-elements/elements/dist/vscode-badge/index.js';
 import '@vscode-elements/elements/dist/vscode-button/index.js';
 import '@vscode-elements/elements/dist/vscode-collapsible/index.js';
 import type { ManifestProblem } from '../mods/enf';
+import { badge, div, paragraph, problemRow as problemOf, span } from './dom';
 import type { EnvironmentEntry, EnvironmentKind } from '../mods/machine';
 import type { Problem } from '../mods/model';
 import type { LinkState, WorkDriveAction } from '../mods/workDrive';
@@ -433,13 +433,9 @@ function describeLink(link: LinkView): { label: string; title: string } {
 
 /** A mistake in a `.enf`, which opens the file on the very place it is. */
 function problemRow(path: string, problem: ManifestProblem): HTMLElement {
-  const row = rowButton('Open the file here', 'problem');
-  row.addEventListener('click', () => {
+  return problemOf(problem, () => {
     host.postMessage({ type: 'open', path, line: problem.line, column: problem.column });
   });
-
-  row.append(span('where', `${problem.line}:${problem.column}`), span('message', problem.message));
-  return row;
 }
 
 function fileRow(name: string, location: string, path: string, title: string): HTMLElement {
@@ -467,14 +463,6 @@ function describe(problem: Problem): { label: string; title: string } {
   }
 }
 
-function badge(text: string, title: string, className = ''): HTMLElement {
-  const badge = document.createElement('vscode-badge');
-  badge.className = className;
-  badge.textContent = text;
-  badge.title = title;
-  return badge;
-}
-
 /** A row is a button so that the keyboard reaches everything the mouse does. */
 function rowButton(title: string, kind = ''): HTMLElement {
   const row = document.createElement('button');
@@ -488,24 +476,3 @@ function staticRow(kind = ''): HTMLElement {
   return div(kind === '' ? 'row static' : `row static ${kind}`);
 }
 
-function span(className: string, text: string, title?: string): HTMLElement {
-  const span = document.createElement('span');
-  span.className = className;
-  span.textContent = text;
-  if (title !== undefined) {
-    span.title = title;
-  }
-  return span;
-}
-
-function paragraph(text: string): HTMLElement {
-  const paragraph = document.createElement('p');
-  paragraph.textContent = text;
-  return paragraph;
-}
-
-function div(className: string): HTMLElement {
-  const div = document.createElement('div');
-  div.className = className;
-  return div;
-}

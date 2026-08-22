@@ -102,8 +102,10 @@ class InitCommands {
     this.log.info(`created ${name} (${layout}) in ${root.fsPath}`);
     this.changed();
 
-    // The manifest is what the mod is configured by, so it is what the developer is left looking at.
-    await vscode.window.showTextDocument(vscode.Uri.joinPath(root, MANIFEST_FILE));
+    // The manifest is what the mod is configured by, so it is what the developer is left looking
+    // at — through the editor's own opening, so it comes up the way a `.enf` comes up everywhere
+    // else: as the form, where the fields a new mod has not answered for are boxes to fill in.
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(root, MANIFEST_FILE));
     await this.link(root, name, `Made ${name}`);
   }
 
@@ -157,8 +159,9 @@ class InitCommands {
     this.changed();
 
     // The manifest is what the mod is configured by, so it is what the developer is left looking
-    // at: the fields it was filled in with are the ones worth reading over.
-    await vscode.window.showTextDocument(vscode.Uri.joinPath(root, MANIFEST_FILE));
+    // at: the fields it was filled in with are the ones worth reading over, and the form is where
+    // they read as fields.
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(root, MANIFEST_FILE));
 
     // And onto the work drive, the way a new mod goes: an adopted mod that cannot be built until
     // another button is found is not a mod that was configured for the developer.

@@ -64,11 +64,15 @@ const extension = {
   plugins: [reportPlugin, problemMatcherPlugin],
 };
 
-/** The panel bundle: browser, ESM, with its stylesheet coming out beside it as `webview.css`. */
+/**
+ * The two browser bundles — the Mods panel and the form over a `.enf` — as ESM, each with its
+ * stylesheet coming out beside it under the same name. Bundled apart rather than together: an
+ * editor tab loads the form alone, and a panel that is only a list has no business carrying it.
+ */
 const webview = {
   ...shared,
-  entryPoints: ['src/webview/main.ts'],
-  outfile: 'dist/webview.js',
+  entryPoints: { webview: 'src/webview/main.ts', form: 'src/webview/form.ts' },
+  outdir: 'dist',
   format: 'esm',
   platform: 'browser',
   target: 'es2022',

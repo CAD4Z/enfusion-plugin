@@ -188,8 +188,11 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       return;
     }
 
+    // Through the editor's own opening, so that a `.enf` opens the way it opens everywhere else —
+    // as the form, unless the developer has told the editor otherwise. A place to land on is a
+    // text thing, though, and no form has a line 12 to put a cursor on.
     if (line === undefined) {
-      await vscode.window.showTextDocument(uri);
+      await vscode.commands.executeCommand('vscode.open', uri);
       return;
     }
 

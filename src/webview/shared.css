@@ -1,0 +1,56 @@
+/*
+ * What the Mods panel and the `.enf` form are both made of.
+ *
+ * Everything here is expressed in the `--vscode-*` variables VS Code puts on the webview, so both
+ * follow the user's theme without knowing which one it is. What is not here is what the two
+ * genuinely differ on — a panel is a narrow column and a form is a page, so they indent their rows
+ * differently and one of them has room to let a sentence run.
+ */
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  font-weight: var(--vscode-font-weight);
+}
+
+/* A row is a button so that the keyboard reaches the same file the mouse does. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.row:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.row.problem .where {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.row.problem .message {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+vscode-badge.warning {
+  --vscode-badge-background: var(--vscode-editorWarning-foreground);
+  --vscode-badge-foreground: var(--vscode-editor-background);
+}

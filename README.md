@@ -21,6 +21,34 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
+Both files open as a **form**: `mod.enf` and `workspace.enf` are fields rather than text, so the
+field names need not be remembered, and what each one means is written under it. The form is a
+second view of the same document, not a second copy of it: undo, the unsaved dot, `Ctrl+S`, the diff
+and conflict resolution all stay exactly what they are for the text. An edit by hand shows in the
+form at once, an edit in the form shows in the text; switching is the editor's own — **Reopen Editor
+With...**, or the **Edit as Text** button in the form's header. What the form writes is not the
+whole file but the piece of text the field sits in, so the comments, the order of the fields and the
+layout around them stay as they were, and the diff shows exactly the line that changed. An empty
+field is a field the file does not have: cleared, it is removed rather than written as an empty
+string; and the form will not write back what is already there, so as not to mark the file dirty for
+nothing. Removing a field is the form's own work rather than `jsonc-parser`'s: that one takes
+everything between the field and its neighbour, which is to say the trailing comment on the line
+above and the comment over the line below as well — and the last element of a single-line list it
+leaves unparsable altogether. Only what belongs to the field goes: the lines it is written on, the
+comments and blank lines above it that no neighbour is written on, and the comma it was stitched on
+by.
+
+There are three cases where the form shows the file but does not write to it, and says why. A syntax
+error: there is nothing to aim at, and guessing means losing the half of the manifest that did
+parse. A key written twice: one of them is shown, and an edit would land in the other. A list that
+was not read whole — a number among the masks, a target with no name: fewer rows are visible than
+the file has elements, and every one after the gap sits somewhere other than where it looks. In all
+three the file is shown read as far as it read, with a list of errors, each of which opens the text
+at its own place.
+
+A `launch` block in a `mod.enf` that a `workspace.enf` above it owns is marked by the form as
+ignored, right where it is written.
+
 The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the game executable to run, the private
 key, the source and the letter of the work drive, the file patching root and the choice of builder
 are about the machine rather than about the mod, so they live in VS Code settings with
@@ -188,8 +216,8 @@ src/
   extension.ts        composition root: everything is made and disposed here
   mods/               the domain: the model of the mods and the config.cpp parsing, with no vscode — hence tests on bare Node
   platform/           access to the workspace: findFiles, reading files, the watcher, Uri
-  view/               the Mods panel on the extension's side: the webview, the messages, opening files
-  webview/            the Mods panel on the browser's side: a tsconfig of its own, DOM instead of Node
+  view/               the Mods panel and the .enf editor on the extension's side: the webview, the messages, the document edits
+  webview/            the Mods panel and the .enf form on the browser's side: a tsconfig of its own, DOM instead of Node
 schemas/              the JSON schemas of `mod.enf` and `workspace.enf`, registered through jsonValidation
 ```
 

@@ -12,6 +12,7 @@ import {
   NO_LAUNCH,
   WORKSPACE_FILE,
   configurationsOf,
+  workspaceFor,
 } from '../mods/enf';
 import type { LaunchMod } from '../mods/launch';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan } from '../mods/model';
@@ -148,6 +149,23 @@ function rootOf(root: string, found: Discovery): string {
   const anchor = [...found.uris.values()].find((uri) => uri.path.startsWith(`${root}/`));
 
   return anchor ? anchor.with({ path: root }).fsPath : '';
+}
+
+/**
+ * The `workspace.enf` that owns a mod's launch block, named the way it is shown, or undefined
+ * where the mod owns its own. Only the workspace files are searched for: a form over one manifest
+ * has no business scanning the whole workspace for mods to answer one question about itself.
+ */
+export async function launchOwnerOf(modRoot: string): Promise<string | undefined> {
+  const found = await vscode.workspace.findFiles(`**/${WORKSPACE_FILE}`, EXCLUDE_GLOB);
+  // Which file owns which mod is the domain's call here as much as it is in `findMods`.
+  const owner = workspaceFor(
+    modRoot,
+    found.map((uri) => uri.path),
+  );
+  const uri = found.find((candidate) => candidate.path === owner);
+
+  return uri === undefined ? undefined : vscode.workspace.asRelativePath(uri, true);
 }
 
 /**

@@ -1,0 +1,147 @@
+/*
+ * The `.enf` form's own look. What it shares with the Mods panel — the theme variables on the
+ * body, the row that is a button, the way a problem reads — is in `shared.css`.
+ */
+
+@import './shared.css';
+
+/* The width of a settings page: a form of one-line boxes read badly across a wide editor. */
+.form {
+  max-width: 720px;
+  padding: 12px 20px 40px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+.header .file {
+  font-family: var(--vscode-editor-font-family);
+  font-size: 1.1em;
+}
+
+.form h2 {
+  margin: 24px 0 4px;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.form p {
+  margin: 0;
+}
+
+/* What the file will not be written into, said before the first box rather than after a lost edit. */
+.banner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--vscode-editorWarning-foreground);
+  background-color: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+  line-height: 1.5;
+}
+
+.problems {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+/* The form is a page rather than an indented column, and it has room to let a sentence run. */
+.row.problem {
+  align-items: baseline;
+  padding: 2px 4px;
+}
+
+/* A block written here and obeyed elsewhere: said where it is written, not found out later. */
+.ignored {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 8px;
+  line-height: 1.5;
+}
+
+.ignored .message {
+  color: var(--vscode-descriptionForeground);
+}
+
+vscode-textfield,
+vscode-single-select {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* An item of a list and the way to take it off, on one line. */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 420px;
+  margin-bottom: 4px;
+}
+
+.item vscode-textfield {
+  flex: 1;
+}
+
+.remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.remove:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.remove:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.remove:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* A target is a block of fields of its own, so it is boxed off from the ones around it. */
+.targets {
+  margin-top: 16px;
+}
+
+.card {
+  margin: 8px 0;
+  padding: 4px 12px 12px;
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, transparent));
+  border-radius: 3px;
+}
+
+.buttons {
+  display: flex;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.nothing {
+  padding: 4px 0;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}

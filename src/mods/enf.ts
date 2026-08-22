@@ -219,13 +219,27 @@ export const NO_LAUNCH: Launch = {
 /** `$schema` is how a developer points an editor at the schema, so every file may carry it. */
 const SCHEMA_FIELD = '$schema';
 
-const MOD_FIELDS = [SCHEMA_FIELD, 'name', 'description', 'author', 'version', 'exclude', 'launch'];
+/*
+ * The fields of each block, in the order the schema writes them. Two jobs at once: a key on none
+ * of these lists is a field nobody declared, and the order is where the form puts a field it is
+ * adding — so a manifest filled in by the form reads the way one written by hand does.
+ */
 
-const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'launch'];
+export const MOD_FIELDS = [
+  SCHEMA_FIELD,
+  'name',
+  'description',
+  'author',
+  'version',
+  'exclude',
+  'launch',
+];
 
-const LAUNCH_FIELDS = ['modsDirectory', 'clientMods', 'serverMods', 'targets'];
+export const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'launch'];
 
-const TARGET_FIELDS = ['name', 'mod', 'map', 'run', 'serverConfig'];
+export const LAUNCH_FIELDS = ['modsDirectory', 'clientMods', 'serverMods', 'targets'];
+
+export const TARGET_FIELDS = ['name', 'mod', 'map', 'run', 'serverConfig'];
 
 const RUN: readonly Run[] = ['client', 'server', 'both'];
 

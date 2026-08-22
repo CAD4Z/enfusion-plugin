@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { registerBuildCommands } from './view/build';
+import { EnfEditor } from './view/enfEditor';
 import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
@@ -23,6 +24,12 @@ export function activate(context: vscode.ExtensionContext): void {
     panel,
     launching,
     vscode.window.registerWebviewViewProvider(ModsPanel.viewId, panel),
+    // The form over a `.enf`. A second view of the very same document, so the text editor is
+    // still there — under Reopen Editor With, and under the button the form itself carries.
+    vscode.window.registerCustomEditorProvider(
+      EnfEditor.viewType,
+      new EnfEditor(context.extensionUri, log),
+    ),
     watchMods(() => {
       panel.refresh();
       // A target added to a `.enf` shows on the status bar without anything being pressed.

@@ -1,16 +1,9 @@
 /*
- * Everything here is expressed in the `--vscode-*` variables VS Code puts on the webview, so the
- * panel follows the user's theme without knowing which one it is.
+ * The Mods panel's own look. What it shares with the form over a `.enf` — the theme variables on
+ * the body, the row that is a button, the way a problem reads — is in `shared.css`.
  */
 
-body {
-  margin: 0;
-  padding: 0;
-  color: var(--vscode-foreground);
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  font-weight: var(--vscode-font-weight);
-}
+@import './shared.css';
 
 .empty {
   padding: 12px 20px;
@@ -28,11 +21,6 @@ body {
   gap: 4px;
 }
 
-vscode-badge.warning {
-  --vscode-badge-background: var(--vscode-editorWarning-foreground);
-  --vscode-badge-foreground: var(--vscode-editor-background);
-}
-
 .rows {
   display: flex;
   flex-direction: column;
@@ -45,28 +33,9 @@ vscode-badge.warning {
   padding: 4px 0;
 }
 
-/* A row is a button so that the keyboard reaches the same file the mouse does. */
+/* The panel is an indented column, which is the one thing its rows do not share with the form. */
 .row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
   padding: 2px 20px;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.row:hover {
-  background-color: var(--vscode-list-hoverBackground);
-}
-
-.row:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
 }
 
 .row .name {
@@ -112,15 +81,8 @@ vscode-badge.warning {
   white-space: nowrap;
 }
 
-.row.problem .where {
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
-  font-size: 0.9em;
-  white-space: nowrap;
-}
-
+/* No room in a side panel for a sentence to wrap, so it is cut rather than allowed to. */
 .row.problem .message {
-  color: var(--vscode-editorWarning-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

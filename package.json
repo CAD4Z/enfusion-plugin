@@ -147,6 +147,21 @@
         ]
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "enfusion.enf",
+        "displayName": "Enfusion Manifest",
+        "selector": [
+          {
+            "filenamePattern": "mod.enf"
+          },
+          {
+            "filenamePattern": "workspace.enf"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "jsonValidation": [
       {
         "fileMatch": "mod.enf",
