@@ -3,23 +3,37 @@
 A VS Code extension for Enfusion mods: what the Workbench plugins do today, in the editor the code
 is written in anyway.
 
-For now this is a skeleton: the Activity Bar gains an **Enfusion** container with a **Mods** panel,
-which shows the mods of the open workspace, and under each of them its addons in the order they will
-be built.
+The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top is a row of
+buttons for everything at once: **Start** puts the game up, **Build** builds the workspace, and the
+three square ones on the right mount the work drive, unmount it, and link the mods onto it. A button
+that would only fail is disabled and says why in its tooltip, so the reason is there before the
+press rather than after it. Below the row is `workspace.enf` and the mods under it, each mod with
+its addons in the order they will be built.
 
-A mod is a folder with a `mod.enf`. Inside it is the **prefix root**, the folder named after the
-mod: that one is linked onto the work drive (`P:\<Mod>`) and loaded by the game (`@<Mod>`). Inside
-the prefix root are the **addons**, folders with a `config.cpp`, one pbo each. The layout is worked
-out from the tree rather than declared: a `config.cpp` in the prefix root itself means the whole mod
-packs into one pbo, its absence means the addons are subfolders. The order of both the mods and the
-addons comes off the `requiredAddons` graph. A folder with a `config.cpp` and no `mod.enf` reaches
-the list as an unconfigured mod; a folder with no mod reaches it not at all.
+A mod's row is its manifest: clicking it opens `mod.enf`, the way a file in the explorer does, and
+the only thing written on it is the mod's name. No paths are written there because there is nothing
+to write: the mod's name is `P:\<Mod>` and `@<Mod>`.
+
+A mod is a folder with a `mod.enf`. Inside it is the **prefix root**: that folder is what gets
+linked onto the work drive (`P:\<Mod>`) and what the game loads (`@<Mod>`). Inside the prefix root
+are the **addons**, folders with a `config.cpp`, one pbo each. The layout is worked out from the
+tree rather than declared: a `config.cpp` in the prefix root itself means the whole mod packs into
+one pbo, its absence means the addons are subfolders. The order of both the mods and the addons
+comes off the `requiredAddons` graph. A folder with a `config.cpp` and no `mod.enf` reaches the list
+as an unconfigured mod; a folder with no mod reaches it not at all.
 
 A mod is configured by one file, `mod.enf` in its root — the way `package.json` configures a
 package; a monorepo may put an optional `workspace.enf` on top. The format is JSONC, with a schema
 registered by file name, so the editor completes the fields and underlines the typos. A `launch`
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
+
+The `name` field in `mod.enf` is not a title but a name: the panel shows the mod under it, its
+prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the same name has to
+stand in `dir` in `CfgMods`. A mod that did not name itself is called after its folder — which is
+why a mod in a folder called `client` that is really `NavigationClient` has to write its name down,
+or it links as `P:\client` and builds into `@client`. What the launcher shows a player is
+`mod.cpp`'s business, and the title there can be anything at all.
 
 Both files open as a **form**: `mod.enf` and `workspace.enf` are fields rather than text, so the
 field names need not be remembered, and what each one means is written under it. The form is a
@@ -52,9 +66,15 @@ ignored, right where it is written.
 The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the game executable to run, the private
 key, the source and the letter of the work drive, the file patching root and the choice of builder
 are about the machine rather than about the mod, so they live in VS Code settings with
-`scope: machine`, which the editor physically will not let a workspace write. All three paths are
-read out of the registry by default, so in the ordinary case nothing has to be entered; what
-resolved and what did not is visible in the panel.
+`scope: machine`, which the editor physically will not let a workspace write. In the ordinary case
+nothing has to be entered at all. All three paths are read out of the registry, where the installers
+wrote them; DayZ and DayZ Tools are looked for through Steam as well — by its own list of libraries
+and by the app manifest — and that is what covers a registry path that now leads nowhere: a game
+moved to another library, a key written by another user. The work drive source defaults to the
+folder the letter is already mounted from: the drive DayZ Tools put up is this machine's work drive.
+What resolved and what did not is written to the **Enfusion** log on every scan; the panel does not
+carry it, because there is nothing to look at there, and what was missing is said by the refusal of
+the button that missed it.
 
 A mod is made by **Enfusion: Create Mod** — from the context menu of a folder in the Explorer, from
 the panel's header, or straight off an empty panel that has nothing else to show. Exactly two things
@@ -99,32 +119,47 @@ the list is written stay as they were. A mod whose `config.cpp` sits in the pref
 not take an addon, and says why: it is one addon whole already, and splitting it means moving files
 rather than adding a folder.
 
-The work drive is mounted and unmounted from the same panel: the buttons call `subst` with the
-folder and the letter out of the machine settings, and the panel shows where the letter actually
-leads. A drive mounted somewhere other than what is configured is a warning with both folders in it,
-rather than a quiet build of the wrong sources. The **Link mods** button lays junctions across the
-root of the drive onto the prefix roots of every mod of the workspace — what `SetupWorkdrive.bat`
-used to do: a junction already pointing where it should is not an error and is not repointed, one
-pointing elsewhere is repointed, and a real folder in its place is left untouched and shown as it
-is. Every mod in the list shows whether it is linked or not, so the reason a build would fail is
-visible beforehand. Unpacking the vanilla data and setting the drive up in the first place with DayZ
-Tools is not part of this.
+The work drive is mounted and unmounted by the three buttons on the right of the row: they call
+`subst` with the folder and the letter out of the machine settings. A drive mounted somewhere other
+than what is configured is a refusal with both folders in the tooltip, rather than a quiet build of
+the wrong sources. The third, **link**, lays junctions across the root of the drive onto the prefix
+roots of every mod of the workspace — what `SetupWorkdrive.bat` used to do: a junction already
+pointing where it should is not an error and is not repointed, one pointing elsewhere is repointed,
+and a real folder in its place is left untouched and shown as it is. A mod that is not linked is
+marked in the list, so the reason a build would fail is visible beforehand; a linked one is marked
+with nothing, which is how it should be. Unpacking the vanilla data and setting the drive up in the
+first place with DayZ Tools is not part of this.
 
 What is built is an **addon** rather than a mod: every addon in the list has a **Build** button of
-its own, and the icon in the panel's header builds the whole workspace — in the dependency order out
-of `requiredAddons`, the same order the addons are listed in. The button is unconditional: staleness
-is not tracked, and the extension will not argue about whether a rebuild is needed. What comes out
-is a `<modsDirectory>\@<Mod>` folder with the pbos, the signatures, `mod.cpp` and the public key;
+its own, and the square **Build** at the top builds everything the workspace turned out to hold — in
+the dependency order out of `requiredAddons`, the same order the addons are listed in. The button is
+unconditional: staleness is not tracked, and the extension will not argue about whether a rebuild is
+needed.
+
+Builds run one at a time, and a second one is refused rather than queued. Two builds of one
+workspace do not share the work, they fight over one pbo — one taking the file while the other
+writes it — and each of them puts a builder process per addon on the machine. The objection is not
+theoretical: a button that stays focused is a button a held key presses over and over, and the
+machine that met that got five hundred builders and stopped answering. A queue would have been the
+same heap of processes, only later. **Start** is one at a time for the same reason: two launches put
+up two servers on one port and lay two sets of junctions into one run folder. What comes out is a
+`<modsDirectory>\@<Mod>` folder with the pbos, the signatures, `mod.cpp` and the public key;
 `modsDirectory` comes out of the `launch` block of whichever `.enf` owns that mod, and a relative
 path is taken from the folder of that file, so that it means the same thing on any machine.
 
 Three things the Enforce Script plugins suffered for are kept literally, and re-checked against the
 live tools. The builder is started through `start`, in a console of its own — without one pboProject
-exits with code 1 immediately, having built nothing. Success is decided by the pbo appearing rather
-than by the exit code: both builders answer zero to a failure too. A failed build is retried exactly
-once, after which the path to the packing log is shown. A fourth thing turned up during that
-re-check: pboProject pointed at a folder that does not exist quietly does nothing — which is why the
-folders of the built mod are made before it is started.
+exits with code 1 immediately, having built nothing. That console comes up minimised (`/MIN`), and
+that is not a matter of taste either: pboProject is a windowed program that *attaches* a console to
+itself (`AttachConsole`, `CONOUT$`, and `Cannot Attach_Console` when it could not), and failing that
+shows its own panel. The extension host has no console of its own, and it hands its children a
+hidden window state which every console below it inherits; without `/MIN`, what opens in the console
+is the builder's dialog rather than a build. Naming a show state explicitly breaks that inheritance,
+and minimised is the only one that does so without taking the screen. Success is decided by the pbo
+appearing rather than by the exit code: both builders answer zero to a failure too. A failed build
+is retried exactly once, after which the path to the packing log is shown. A fourth thing turned up
+during that re-check: pboProject pointed at a folder that does not exist quietly does nothing —
+which is why the folders of the built mod are made before it is started.
 
 Signing is a separate step through `DSSignFile.exe`, the same for both builders; an empty key means
 "do not sign", while a key with no `DSSignFile.exe` is a refusal rather than a quietly unsigned pbo.
@@ -136,31 +171,39 @@ talking about, not on its twin on `P:`; an addon that failed without a place to 
 on its own `config.cpp`. Building is one of the two places where a path out of a `mod.enf` reaches a
 command line (the other is launching), so it wants the folder trusted (Workspace Trust).
 
-The game is launched by the editor's own **Run and Debug**: the configurations are handed out
-dynamically from the targets of the `launch` block, so `launch.json` is not needed and is never
-created. One written by hand is useless for configuring, too: a debug configuration takes exactly
-`type`, `request` and `target`, and any other field is an error pointing at `mod.enf`. The selected
-target is shown in the status bar and changed there; `target` in a configuration is a target's name,
-and targets of the same name in different mods are told apart as `<Mod>: <Name>`. The debugger does
-exactly two things, start and stop: there are no breakpoints, no stacks and no variables, but
-**Stop** puts down every process of the launch along with its children (`taskkill /T`). The session
-ends when any one of them goes on its own: a client with no server left has nobody to talk to, and a
-server nobody connects to any more would otherwise hang about without a single line in the editor to
-say it is there.
+The game is launched by the editor's own **Run and Debug** — and by the blue **Start** in the row at
+the top, which does exactly the same thing: the same configuration resolved the same way, so it puts
+up the target that is selected in the status bar, and asks only when nothing is selected. The
+configurations are handed out dynamically from the targets of the `launch` block, so `launch.json`
+is not needed and is never created. One written by hand is useless for configuring, too: a debug
+configuration takes exactly `type`, `request` and `target`, and any other field is an error pointing
+at `mod.enf`. The selected target is shown in the status bar and changed there; `target` in a
+configuration is a target’s name, and targets of the same name in different mods are told apart as
+`<Mod>: <Name>`. The debugger does exactly two things, start and stop: there are no breakpoints, no
+stacks and no variables, but **Stop** puts down every process of the launch along with its children
+(`taskkill /T`). The session ends when any one of them goes on its own: a client with no server left
+has nobody to talk to, and a server nobody connects to any more would otherwise hang about without a
+single line in the editor to say it is there.
 
 Before a launch the run folder is put together — by default
 `%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it is `game\`, the **file patching root**: the
 working directory the game will get, holding junctions onto **every folder of the game root**,
-obtained by listing it, plus junctions onto the prefix roots of the workspace's mods and a copy of
-`steam_appid.txt`; neither the game folder nor the work drive is changed by any of it. The listing
-is not a detail: the Workbench plugins had the list hardcoded as `Addons`, `bliss` and `sakhal`,
+obtained by listing it, plus junctions onto the prefix roots of the workspace's mods, plus **copies
+of every file of the root** except the programs, the libraries and the logs; neither the game folder
+nor the work drive is changed by any of it. The listing is not a detail, and that goes for both
+halves. Folders: the Workbench plugins had the list hardcoded as `Addons`, `bliss` and `sakhal`,
 while a live installation has had no `bliss` for a long time and does have `!Workshop`, `dta`,
-`Missions`, `MainMenu.*` and the rest. A second launch redoes nothing: a link pointing where it
-should stays, one that has moved is repointed, one no longer wanted is taken off, and whatever the
-game itself wrote into the working directory (logs, dumps) is not touched at all. A launch refuses
-to start where the work drive is not mounted, or where there is no game executable — by default
-`DayZDiag_x64.exe`, because only the diagnostic build understands `-filePatching`; the name or the
-path is changed by the `enfusion.dayz.executable` setting.
+`Missions`, `MainMenu.*` and the rest. Files: there was one name on the list, `steam_appid.txt`,
+while the engine also reads `DayZSetting.xml` and `dayz.gproj` out of the working directory, and
+without the latter it gets as far as "Cannot find game project settings!", "Failed to create
+Enfusion engine" and dies of an access violation, having said nothing. So here too it is a listing
+now, and what is written down is only the list of what not to carry over: the game finds its `.exe`
+and `.dll` by the path it was started with, and it writes its `.log` itself. A second launch redoes
+nothing: a link pointing where it should stays, one that has moved is repointed, one no longer
+wanted is taken off, and whatever the game itself wrote into the working directory (logs, dumps) is
+not touched at all. A launch refuses to start where the work drive is not mounted, or where there is
+no game executable — by default `DayZDiag_x64.exe`, because only the diagnostic build understands
+`-filePatching`; the name or the path is changed by the `enfusion.dayz.executable` setting.
 
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
@@ -179,9 +222,19 @@ one takes `Maps\<map>` as well; the mission comes out of `Missions\<Mod>.<map>` 
 beside, because the game root has a `Missions` of its own and Windows does not tell it apart from
 our `missions` — in one folder the mission would ride into the DayZ installation straight through a
 junction. Neither the mod's sources nor the work drive is changed by a launch, still. A layer the
-mod does not have is not asked for by anybody. `server.cfg` is taken from the target's mod, and
-where it is not there, from beside the `.enf` that owns the `launch` block; the `serverConfig` field
-points at any path relative to the mod instead.
+mod does not have is not asked for by anybody.
+
+The profile is the one part of a launch that is read by human eyes: `.RPT`, `.ADM`, whatever a
+server mod keeps its configuration in. So its place is the `enfusion.launch.profiles` setting, and
+by default that is the run folder. The layout under it is `<Mod>\<role>`, exactly the one the
+Workbench plugins use, so pointing the setting at their folder (`P:\Profiles`) leaves one profile
+for both tools instead of two that drift apart quietly. Only the profile moves, though: the file
+patching root stays in the run folder whatever is set there, because it is a mirror of the whole
+game installation, and the work drive is the one place it must not be — pboProject reads what lies
+on that drive, and AddonBuilder binarises through `-addon="P:"`, which is to say every config on it
+at once. `server.cfg` is taken from the target's mod, and where it is not there, from beside the
+`.enf` that owns the `launch` block; the `serverConfig` field points at any path relative to the mod
+instead.
 
 Before the start it is checked that everything to be loaded has been built: for our own mods, the
 pbo of every addon in `<modsDirectory>\@<Mod>\Addons`, for third-party ones the `@<Mod>` folder

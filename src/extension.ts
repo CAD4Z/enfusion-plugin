@@ -14,6 +14,13 @@ import { registerWorkDriveCommands } from './view/workDrive';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
+
+  // Which version is actually running, said once at the top of the log. Installing over a running
+  // extension leaves the old code in the host until the window is reloaded, and every symptom of
+  // that looks like a bug in the new version: a setting that is ignored, a panel that stays blank.
+  // The log is the only place that can answer it, so it answers it without being asked.
+  log.info(`Enfusion ${versionOf(context)} activated`);
+
   const panel = new ModsPanel(context.extensionUri, log);
   // The chosen target is the workspace's rather than the machine's: it names a target of this
   // workspace's `.enf`, and means nothing in another one.
@@ -54,6 +61,13 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.refresh();
     }),
   );
+}
+
+/** Out of the manifest the editor loaded, which is the one that is running rather than the one on disk. */
+function versionOf(context: vscode.ExtensionContext): string {
+  const version: unknown = (context.extension.packageJSON as { version?: unknown }).version;
+
+  return typeof version === 'string' ? version : 'of an unknown version';
 }
 
 export function deactivate(): void {
