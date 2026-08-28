@@ -7,7 +7,11 @@
  * The layout is read off the tree rather than declared: a `config.cpp` in the prefix root itself
  * means the whole mod packs into one pbo, and its absence means the addons are the subfolders.
  * Which folder is the prefix root comes from the main addon — the one whose `config.cpp` carries
- * `CfgMods` — because `dir` there is the very name the mod is linked and loaded under.
+ * `CfgMods` — and from the name the manifest declares, both of which name it.
+ *
+ * What the mod is *called* is the manifest's to say and nobody else's: one name, which the panel
+ * shows, `P:\<name>` goes up as and `@<name>` is built into. Only a mod that declares none falls
+ * back to the name of its folder.
  *
  * Paths are `/` separated throughout, which is what `Uri.path` hands over on every platform.
  */
@@ -21,6 +25,13 @@ export interface Scan {
   readonly manifests: readonly string[];
   /** Every `config.cpp` with its text, which is where the addons come from. */
   readonly configs: readonly ConfigFile[];
+  /**
+   * The name each `mod.enf` declares, by the path of that file. It is the one name a mod has —
+   * what the panel shows, what `P:\<name>` goes up as, what the built `@<name>` is called — so a
+   * mod whose folder is called something else says so there rather than being guessed at. A mod
+   * that declares none is simply not in the map, and falls back to its folder's name.
+   */
+  readonly declared?: ReadonlyMap<string, string>;
 }
 
 export interface ConfigFile {
@@ -33,7 +44,10 @@ export type Layout = 'single' | 'multi';
 
 /** One mod of the workspace. */
 export interface Mod {
-  /** Name of the prefix root: what the mod is linked (`P:\<name>`) and loaded (`@<name>`) as. */
+  /**
+   * The mod's one name: what the panel shows, and what it is linked (`P:\<name>`) and loaded
+   * (`@<name>`) as. Its `mod.enf` declares it; failing that, it is the folder's own name.
+   */
   readonly name: string;
   /** The mod root: the folder holding `mod.enf`, or the prefix root's parent without one. */
   readonly root: string;
@@ -79,7 +93,9 @@ export function modsFromScan(scan: Scan): Mod[] {
   // Sorted before the graph gets a say, so that mods and addons it does not relate — and a search
   // hands them over in whatever order it likes — still come out the same way every scan.
   const drafts = [
-    ...[...manifests].map(([root, manifest]) => draftAt(root, manifest, sources)),
+    ...[...manifests].map(([root, manifest]) =>
+      draftAt(root, manifest, scan.declared?.get(manifest), sources),
+    ),
     ...unconfigured(sources.filter((source) => !roots.some((root) => isWithin(source.root, root)))),
   ].sort(byName(modName));
 
@@ -114,6 +130,19 @@ export function mainAddonOf(mod: Mod): Addon | undefined {
   return mod.addons.find((addon) => addon.main);
 }
 
+/**
+ * The pbo an addon packs into, which is not always its folder's name.
+ *
+ * A builder names the pbo after the last folder of the path it was pointed at, and that path runs
+ * through the work drive: `P:\<Mod>\<Addon>` for an addon inside the prefix root, and `P:\<Mod>`
+ * for the addon that *is* the prefix root — because the prefix root goes onto the drive under the
+ * mod's name rather than under its own. So a mod in a folder called `client` that calls itself
+ * `CADNavigationClient` packs into `CADNavigationClient.pbo`.
+ */
+export function pboNameOf(mod: Mod, addon: Addon): string {
+  return addon.root === mod.prefixRoot ? mod.name : addon.name;
+}
+
 /** The file whose presence declares a folder to be a mod. */
 export const MANIFEST_FILE = 'mod.enf';
 
@@ -124,17 +153,24 @@ export const CONFIG_FILE = 'config.cpp';
 interface Draft {
   readonly root: string;
   readonly manifest: string | undefined;
+  /** What its `mod.enf` calls it; undefined where that file says nothing, or where there is none. */
+  readonly declared: string | undefined;
   readonly prefixRoot: string | undefined;
   readonly layout: Layout | undefined;
   readonly addons: readonly AddonSource[];
 }
 
-function draftAt(root: string, manifest: string, sources: readonly AddonSource[]): Draft {
+function draftAt(
+  root: string,
+  manifest: string,
+  declared: string | undefined,
+  sources: readonly AddonSource[],
+): Draft {
   const under = sources.filter((source) => isWithin(source.root, root));
   const main = under.find((source) => source.main);
-  const prefixRoot = main && prefixRootFrom(main, root);
+  const prefixRoot = main && prefixRootFrom(main, root, declared);
 
-  return { root, manifest, prefixRoot, ...addonsOf(prefixRoot, under) };
+  return { root, manifest, declared, prefixRoot, ...addonsOf(prefixRoot, under) };
 }
 
 /**
@@ -147,7 +183,7 @@ function unconfigured(sources: readonly AddonSource[]): Draft[] {
 
   for (const main of sources.filter((source) => source.main)) {
     // With no `mod.enf` to bound it, the walk up stops wherever the paths do.
-    const prefixRoot = prefixRootFrom(main, '');
+    const prefixRoot = prefixRootFrom(main, '', undefined);
     if (roots.has(prefixRoot)) {
       continue;
     }
@@ -156,6 +192,7 @@ function unconfigured(sources: readonly AddonSource[]): Draft[] {
     roots.set(prefixRoot, {
       root: folderOf(prefixRoot),
       manifest: undefined,
+      declared: undefined,
       prefixRoot,
       ...addonsOf(prefixRoot, under),
     });
@@ -169,9 +206,13 @@ function byName<T extends { readonly root: string }>(name: (item: T) => string) 
   return (a: T, b: T) => name(a).localeCompare(name(b)) || a.root.localeCompare(b.root);
 }
 
-/** The mod's name, which is the prefix root's, and the mod root's only until one is found. */
+/**
+ * The mod's name: the one its `mod.enf` declares, and failing that its folder's own — the prefix
+ * root's, and the mod root's only until one is found. A mod whose folder goes by something other
+ * than the mod does — `client` holding `CADNavigationClient` — is what declaring one is for.
+ */
 function modName(draft: Draft): string {
-  return nameOf(draft.prefixRoot ?? draft.root);
+  return draft.declared ?? nameOf(draft.prefixRoot ?? draft.root);
 }
 
 function toMod(
@@ -320,11 +361,15 @@ function ordered<T>(
 /**
  * The main addon names the prefix root through `dir`, so the prefix root is the nearest folder up
  * from it that goes by that name — itself in a single-addon mod, its parent in a multi-addon one.
+ * The name the manifest declares answers for it just as well: the two are the same name, and a mod
+ * that has written its down should not have to wait for its config to agree before it is found.
  * The walk stops at `bound`, which is the mod root when there is one.
  */
-function prefixRootFrom(main: AddonSource, bound: string): string {
+function prefixRootFrom(main: AddonSource, bound: string, declared: string | undefined): string {
+  const names = [main.dir, declared ?? ''].filter((name) => name !== '');
+
   for (let folder = main.root; folder !== '' && isWithin(folder, bound); folder = folderOf(folder)) {
-    if (sameName(nameOf(folder), main.dir)) {
+    if (names.some((name) => sameName(nameOf(folder), name))) {
       return folder;
     }
   }

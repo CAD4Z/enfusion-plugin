@@ -112,9 +112,11 @@ function modSection(mod: NonNullable<ManifestMessage['mod']>, writable: boolean)
       {
         path: ['name'],
         label: 'Name',
-        help: 'How the mod is shown, in the panel and in the launcher.',
+        help:
+          'The mod’s one name: what the panel shows, what its prefix root goes onto the work ' +
+          'drive as, and what it is built into. The same name as "dir" in CfgMods.',
         value: mod.name,
-        placeholder: "The prefix root's name",
+        placeholder: "The mod folder's name",
       },
       writable,
     ),

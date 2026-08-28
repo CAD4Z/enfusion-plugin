@@ -42,7 +42,12 @@ export interface ManifestProblem {
 
 /** `mod.enf`: what the mod says about itself, plus a launch block the workspace may override. */
 export interface ModManifest {
-  /** How the mod is shown — in the panel and, later, in `mod.cpp`. The folder name if unset. */
+  /**
+   * The mod's one name: what the panel shows it as, what its prefix root goes onto the work drive
+   * as (`P:\<name>`), and what it is built into (`@<name>`). The folder's own name if unset —
+   * which is why a mod whose folder is called something else (`client`, holding
+   * `CADNavigationClient`) is a mod that has to write its name down.
+   */
   readonly name: string | undefined;
   readonly description: string | undefined;
   readonly author: string | undefined;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { modsFromScan } from './model';
+import { modsFromScan, pboNameOf } from './model';
 
 test('a mod is a folder with mod.enf, and a config.cpp in its prefix root is one addon', () => {
   const mods = modsFromScan({
@@ -240,6 +240,124 @@ test('mods the graph does not relate are listed by name, not in the order the sc
     mods.map((mod) => mod.name),
     ['Alpha', 'Zulu'],
   );
+});
+
+test('the name the manifest declares is the mod, whatever the folder is called', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/CADNavigation/client/mod.enf'],
+    configs: [
+      {
+        path: '/w/CADNavigation/client/config.cpp',
+        source: config({ patch: 'CADNavigationClient', dir: 'CADNavigationClient' }),
+      },
+    ],
+    declared: new Map([['/w/CADNavigation/client/mod.enf', 'CADNavigationClient']]),
+  });
+
+  assert.equal(mods[0]?.name, 'CADNavigationClient');
+  // The folder that goes onto the work drive is still the folder: it is what is linked, and it is
+  // linked under the name, not renamed to it.
+  assert.equal(mods[0]?.prefixRoot, '/w/CADNavigation/client');
+});
+
+test('a manifest that declares no name leaves the mod named after its folder', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/CADCore/mod.enf'],
+    configs: [
+      {
+        path: '/w/CADCore/CADCore/config.cpp',
+        source: config({ patch: 'CADCore', dir: 'CADCore' }),
+      },
+    ],
+    declared: new Map(),
+  });
+
+  assert.equal(mods[0]?.name, 'CADCore');
+});
+
+/** The two name the same folder, so either of them finding it is enough. */
+test('the declared name finds the prefix root where the config does not name it', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/Mod/mod.enf'],
+    configs: [
+      {
+        path: '/w/Mod/Alpha/Scripts/config.cpp',
+        source: config({ patch: 'Alpha_Scripts', dir: 'NotAFolderHere' }),
+      },
+      {
+        path: '/w/Mod/Alpha/Data/config.cpp',
+        source: config({ patch: 'Alpha_Data', requires: ['Alpha_Scripts'] }),
+      },
+    ],
+    declared: new Map([['/w/Mod/mod.enf', 'Alpha']]),
+  });
+
+  assert.equal(mods[0]?.name, 'Alpha');
+  assert.equal(mods[0]?.prefixRoot, '/w/Mod/Alpha');
+  assert.deepEqual(
+    mods[0]?.addons.map((addon) => addon.name),
+    ['Scripts', 'Data'],
+  );
+});
+
+/** Two mods of one project, told apart by what each of them declares and not by their folders. */
+test('mods sit in the order of the names they declare, not of the folders they are in', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/Nav/server/mod.enf', '/w/Nav/client/mod.enf'],
+    configs: [
+      { path: '/w/Nav/server/config.cpp', source: config({ patch: 'NavServer', dir: 'NavServer' }) },
+      { path: '/w/Nav/client/config.cpp', source: config({ patch: 'NavClient', dir: 'NavClient' }) },
+    ],
+    declared: new Map([
+      ['/w/Nav/server/mod.enf', 'NavServer'],
+      ['/w/Nav/client/mod.enf', 'NavClient'],
+    ]),
+  });
+
+  assert.deepEqual(
+    mods.map((mod) => mod.name),
+    ['NavClient', 'NavServer'],
+  );
+});
+
+/**
+ * Which pbo an addon ends up in is not a question about its folder alone: the builder is pointed
+ * at a path on the work drive, and the prefix root sits there under the mod's name.
+ */
+test('the addon that is the prefix root packs into a pbo named after the mod', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/Nav/client/mod.enf'],
+    configs: [
+      {
+        path: '/w/Nav/client/config.cpp',
+        source: config({ patch: 'NavClient', dir: 'NavClient' }),
+      },
+    ],
+    declared: new Map([['/w/Nav/client/mod.enf', 'NavClient']]),
+  });
+  const mod = mods[0];
+  const addon = mod?.addons[0];
+
+  assert.ok(mod && addon);
+  assert.equal(addon.name, 'client');
+  assert.equal(pboNameOf(mod, addon), 'NavClient');
+});
+
+test('an addon inside the prefix root keeps its own folder name for its pbo', () => {
+  const mods = modsFromScan({
+    manifests: ['/w/CADCore/mod.enf'],
+    configs: [
+      {
+        path: '/w/CADCore/CADCore/Scripts/config.cpp',
+        source: config({ patch: 'CADCore_Scripts', dir: 'CADCore' }),
+      },
+    ],
+  });
+  const mod = mods[0];
+  const addon = mod?.addons[0];
+
+  assert.ok(mod && addon);
+  assert.equal(pboNameOf(mod, addon), 'Scripts');
 });
 
 /** A `config.cpp` in the shape a real one is written in, with only the parts the model reads. */

@@ -9,14 +9,15 @@ import {
   type Launch,
   type ManifestProblem,
   type ManifestSource,
+  type ModLocation,
   NO_LAUNCH,
   WORKSPACE_FILE,
   configurationsOf,
   workspaceFor,
 } from '../mods/enf';
-import type { LaunchMod } from '../mods/launch';
-import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan } from '../mods/model';
-import { nameOf, windowsFolder } from '../mods/paths';
+import type { LaunchMod, TargetSource } from '../mods/launch';
+import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan, pboNameOf } from '../mods/model';
+import { folderOf, nameOf, windowsFolder } from '../mods/paths';
 import type { Prefix } from '../mods/workDrive';
 
 /** The three files a workspace of mods is made of, anywhere in the open folders. */
@@ -49,12 +50,31 @@ export async function findMods(): Promise<Discovery> {
   const manifests = enf
     .filter((file) => nameOf(file.path) === MANIFEST_FILE)
     .map((file) => file.path);
-  const mods = modsFromScan({ manifests, configs });
 
-  // Which file configures which mod is the domain's call, not this module's.
-  const configurations = configurationsOf(mods, enf);
+  // The manifests are read before the mods are worked out, because the name in one is what the mod
+  // is called — and which file configures which mod needs no more than where each of them sits,
+  // which is the folder its `mod.enf` is in. Which is the domain's call all the same, not this
+  // module's.
+  const configurations = configurationsOf(locationsOf(manifests), enf);
+  const mods = modsFromScan({ manifests, configs, declared: declaredOf(configurations.mods) });
 
   return { mods, uris, configured: configurations.mods, workspaces: configurations.workspaces };
+}
+
+/** All the cascade asks about a mod: where it sits, and which file configures it. */
+function locationsOf(manifests: readonly string[]): ModLocation[] {
+  return manifests.map((manifest) => ({ root: folderOf(manifest), manifest }));
+}
+
+/** The name each manifest declares, for the mods to be named by; one that declares none is absent. */
+function declaredOf(configured: ReadonlyMap<string, Configured>): Map<string, string> {
+  return new Map(
+    [...configured].flatMap(([path, mod]) => {
+      const name = mod.configuration.manifest.name;
+
+      return name === undefined || name === '' ? [] : [[path, name] as const];
+    }),
+  );
 }
 
 /**
@@ -96,7 +116,9 @@ export function launchModsOf(found: Discovery): LaunchMod[] {
         name: mod.name,
         root: anchor.with({ path: mod.root }).fsPath,
         prefixRoot: anchor.with({ path: prefixRoot }).fsPath,
-        addons: mod.addons.map((addon) => addon.name),
+        // By the name each of them packs into rather than by its folder's, because what this is
+        // for is looking the pbo up in the built mod before the game is told to load it.
+        addons: mod.addons.map((addon) => pboNameOf(mod, addon)),
       },
     ];
   });
@@ -138,6 +160,21 @@ export function ownedOf(found: Discovery): Owned[] {
       exclude: configured?.configuration.manifest.exclude ?? [],
     };
   });
+}
+
+/**
+ * The launch blocks of the workspace, one per mod, for the targets to be read out of. Both the
+ * launcher and the panel ask for these — one to put the game up, the other to know whether there
+ * is anything to put up — and a second way of gathering them would be a second answer.
+ */
+export function targetSourcesOf(found: Discovery): TargetSource[] {
+  return ownedOf(found).map((owned) => ({
+    mod: owned.mod.name,
+    owner: owned.owner,
+    configuredBy: owned.configuredBy,
+    configuredIn: owned.configuredIn,
+    launch: owned.launch,
+  }));
 }
 
 /**

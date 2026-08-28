@@ -59,7 +59,7 @@ export interface Adoption extends InitPlan {
 
 /** What a `mod.enf` says about the mod itself, as far as a `config.cpp` can answer for it. */
 export interface ModFields {
-  /** Always something: the prefix root's name, where the config gives no name of its own. */
+  /** Always something: the name the config declares the mod under, or the prefix root's own. */
   readonly name: string;
   readonly description: string | undefined;
   readonly author: string | undefined;
@@ -219,12 +219,18 @@ function adoptionRefusalOf(mod: Mod, folders: readonly string[]): string | undef
 /**
  * What the config already says about the mod. `CfgMods` is where a mod describes itself, and its
  * addon is the second place to ask: `author` and `version` in a `CfgPatches` class are an Arma
- * habit that plenty of DayZ configs keep. The name falls back to the prefix root's, because that
- * is the name the mod is linked and loaded under whatever else it calls itself.
+ * habit that plenty of DayZ configs keep.
+ *
+ * The name is taken from `dir` rather than from `name`, and this is the one field where the two
+ * differ on purpose. A manifest's name is not a title: it is the name the mod is linked and loaded
+ * under, which is what `dir` holds. What the config's `name` says — "Foreign Mod", with a space in
+ * it — is what the launcher shows, and the launcher reads that out of `mod.cpp`, which the mod
+ * already has and adoption does not touch. The prefix root's name is the last resort, for a config
+ * that names no `dir` at all.
  */
 export function modFieldsOf(config: ConfigCpp, name: string): ModFields {
   return {
-    name: config.mod?.name ?? name,
+    name: config.mod?.dir ?? name,
     description: config.mod?.overview,
     author: config.mod?.author ?? patchFieldOf(config, (patch) => patch.author),
     version: config.mod?.version ?? patchFieldOf(config, (patch) => patch.version),
@@ -374,13 +380,14 @@ const MODULES: readonly ScriptModule[] = [
  * until a field is found is not a mod that was started for the developer; a field nobody has
  * answered for is left as a comment, which is both the hint and the place to write the answer.
  *
- * `name` is the mod's own; `mod` is the prefix root, which is what the built folder is called and
- * so what the path in the comment is worked out from. For a new mod the two are the same name,
- * and for an adopted one they are whatever its config said.
+ * `name` is the mod's one name — what it is called, linked and loaded as; `mod` is the name the
+ * model already has it under, which is what the path in the comment is worked out from. For a new
+ * mod the two are the same, and for an adopted one they are whatever its config said.
  */
 function manifestOf(mod: string, fields: ModFields): string {
   return `{
-  // What the panel and the launcher call this mod; the prefix root's name when left out.
+  // The mod's name: what the panel shows, what it goes onto the work drive as (P:\\${fields.name})
+  // and what it is built into (@${fields.name}). The folder's own name when left out.
   "name": ${quoted(fields.name)},
   "version": ${quoted(fields.version ?? VERSION)},
 ${fieldLine('description', fields.description, 'What the mod does, in a sentence.')}

@@ -39,7 +39,8 @@ test('a single-addon mod comes out whole, with every name in it worked out from 
       {
         path: 'mod.enf',
         content: `{
-  // What the panel and the launcher call this mod; the prefix root's name when left out.
+  // The mod's name: what the panel shows, what it goes onto the work drive as (P:\\MyMod)
+  // and what it is built into (@MyMod). The folder's own name when left out.
   "name": "MyMod",
   "version": "0.1.0",
   // "description": "What the mod does, in a sentence.",
@@ -358,7 +359,7 @@ test('with no main addon to require it, the addon is still made and the silence 
  */
 test('the fields of a mod.enf are read off the config that already carries them', () => {
   assert.deepEqual(modFieldsOf(parseConfig(foreignConfig()), 'Foreign'), {
-    name: 'Foreign Mod',
+    name: 'Foreign',
     description: 'What somebody else made it do.',
     author: 'somebody',
     version: '1.4',
@@ -394,7 +395,7 @@ test('an unconfigured mod is adopted by the one file it is missing, and nothing 
 
   assert.deepEqual(adoptionOf(mod, foreignConfig(), ['/w']), {
     fields: {
-      name: 'Foreign Mod',
+      name: 'Foreign',
       description: 'What somebody else made it do.',
       author: 'somebody',
       version: '1.4',
@@ -547,8 +548,9 @@ function foreignMod(config: string): Mod {
 
 function adoptedManifest(): string {
   return `{
-  // What the panel and the launcher call this mod; the prefix root's name when left out.
-  "name": "Foreign Mod",
+  // The mod's name: what the panel shows, what it goes onto the work drive as (P:\\Foreign)
+  // and what it is built into (@Foreign). The folder's own name when left out.
+  "name": "Foreign",
   "version": "1.4",
   "description": "What somebody else made it do.",
   "author": "somebody",
