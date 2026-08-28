@@ -16,9 +16,18 @@ body {
   font-weight: var(--vscode-font-weight);
 }
 
-/* A row is a button so that the keyboard reaches the same file the mouse does. */
+/*
+ * A row is a button so that the keyboard reaches the same file the mouse does.
+ *
+ * `border-box` is not a preference here. A row is full width and padded on both sides, and under
+ * `content-box` those two make it wider than what holds it — so whatever sits at the end of the
+ * row, which is the button that does something to it, is pushed off the right edge of the panel.
+ * A `<button>` row gets away with it because the browser's own stylesheet already says
+ * `border-box` for one; a row that is a `<div>` does not.
+ */
 .row {
   display: flex;
+  box-sizing: border-box;
   align-items: center;
   gap: 6px;
   width: 100%;

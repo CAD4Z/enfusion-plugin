@@ -2,7 +2,7 @@
   "name": "enfusion-plugin",
   "displayName": "Enfusion",
   "description": "Enfusion mod tooling for VS Code: the mods of the open workspace, without the Workbench",
-  "version": "0.0.1",
+  "version": "0.0.11",
   "publisher": "hurfy",
   "license": "MIT",
   "private": true,
@@ -110,6 +110,12 @@
         "title": "Select Launch Target",
         "category": "Enfusion",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "enfusion.launch",
+        "title": "Start the Game",
+        "category": "Enfusion",
+        "icon": "$(debug-start)"
       }
     ],
     "menus": {
@@ -120,14 +126,9 @@
           "group": "navigation@1"
         },
         {
-          "command": "enfusion.build.all",
-          "when": "view == enfusion.mods",
-          "group": "navigation@2"
-        },
-        {
           "command": "enfusion.refresh",
           "when": "view == enfusion.mods",
-          "group": "navigation@3"
+          "group": "navigation@2"
         }
       ],
       "explorer/context": [
@@ -226,6 +227,13 @@
           "order": 7,
           "markdownDescription": "Where the run folders are built — one per workspace, each holding the folder the game is started in, the profiles and the mission of the dev server. Left empty, they go under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
         },
+        "enfusion.launch.profiles": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 8,
+          "markdownDescription": "Where the profiles a launch builds are put, as `<this>\\<Mod>\\client` and `<this>\\<Mod>\\server`. Left empty, they go inside the run folder beside the file patching root. It is the one part of a launch that gets read rather than only run — the `.RPT`, the `.ADM`, whatever a server mod keeps its configuration in — so it is worth being able to put somewhere reachable. `P:\\Profiles` is where the Workbench plugins put theirs, and pointing this at the same folder leaves one profile for both instead of two that drift. Only the profiles move: the file patching root stays in the run folder whatever this says, because it mirrors the whole game installation and the work drive is the one place that must not be."
+        },
         "enfusion.builder": {
           "type": "string",
           "default": "pboProject",
@@ -238,15 +246,15 @@
             "AddonBuilder, which comes with DayZ Tools. It ignores the exclude list: the option it takes one through crashes it."
           ],
           "scope": "machine",
-          "order": 8,
+          "order": 9,
           "markdownDescription": "The program that packs an addon into a pbo."
         },
         "enfusion.pboProject.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 9,
-          "markdownDescription": "`pboProject.exe` itself, not the folder holding it. Left empty, it is read from the registry, which is where its installer put it."
+          "order": 10,
+          "markdownDescription": "`pboProject.exe`, or the folder holding it — a path that names no executable is taken as the folder and completed. Left empty, it is read from the registry, which is where its installer put it."
         }
       }
     },

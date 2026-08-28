@@ -1,28 +1,31 @@
 /**
  * The Mods panel, on the browser side of the webview.
  *
+ * Two things, one above the other. A row of buttons: the game, the build, and the work drive —
+ * everything that acts on the whole workspace rather than on one thing in it. Below it the
+ * workspace and its mods, each mod a bar that opens its `mod.enf` and, under it, the addons it
+ * packs into pbo.
+ *
  * It renders what it is sent and reports what was clicked; every decision — which folders are
- * mods, in what order, what is wrong with them, what of the machine resolved — was made in
- * `src/mods/` before it got here. Components come from `@vscode-elements/elements`, so the panel
- * follows the editor's theme through the `--vscode-*` variables VS Code puts on the document.
+ * mods, what they are called, in what order, what is wrong with them, which button would refuse
+ * and why — was made in `src/mods/` before it got here.
  */
 
 import '@vscode-elements/elements/dist/vscode-button/index.js';
-import '@vscode-elements/elements/dist/vscode-collapsible/index.js';
 import type { ManifestProblem } from '../mods/enf';
-import { badge, div, paragraph, problemRow as problemOf, span } from './dom';
-import type { EnvironmentEntry, EnvironmentKind } from '../mods/machine';
 import type { Problem } from '../mods/model';
-import type { LinkState, WorkDriveAction } from '../mods/workDrive';
+import type { LinkState } from '../mods/workDrive';
+import { badge, div, icon, paragraph, problemRow as problemOf, span } from './dom';
+import type { IconName } from './icons';
 import type {
+  ActionView,
   AddonView,
-  EnvironmentView,
   LinkView,
   ManifestFileView,
-  ModsMessage,
   ModView,
+  ModsMessage,
   PanelRequest,
-  WorkDriveView,
+  ToolsView,
 } from './protocol';
 import './main.css';
 
@@ -31,7 +34,14 @@ declare function acquireVsCodeApi(): { postMessage(message: PanelRequest): void 
 const host = acquireVsCodeApi();
 const root = document.body.appendChild(div('mods'));
 
-window.addEventListener('message', (event: MessageEvent<ModsMessage>) => {
+/**
+ * What actually arrives, which is whatever the extension behind this page sent. The two are
+ * separate files updated separately: installing a new version over a running one leaves this
+ * script new and the extension host still the old one, until the window is reloaded.
+ */
+type Incoming = Partial<ModsMessage> & { readonly type?: string };
+
+window.addEventListener('message', (event: MessageEvent<Incoming>) => {
   if (event.data.type === 'mods') {
     render(event.data);
   }
@@ -40,192 +50,112 @@ window.addEventListener('message', (event: MessageEvent<ModsMessage>) => {
 // The panel is built from scratch every time it becomes visible, so it asks rather than waits.
 host.postMessage({ type: 'ready' });
 
-function render(message: ModsMessage): void {
+function render(message: Incoming): void {
+  const tools = message.tools;
+
+  // A message with nothing this page can read is the extension being older than the page, and
+  // saying so is worth more than the blank panel that reading it anyway would leave.
+  if (tools === undefined) {
+    root.replaceChildren(stale());
+    return;
+  }
+
+  const mods = message.mods ?? [];
   root.replaceChildren(
-    environmentOf(message.environment),
-    workDriveOf(message.workDrive),
-    ...message.workspaces.map(workspaceOf),
-    ...(message.mods.length === 0 ? [nothingFound()] : message.mods.map(modOf)),
+    toolsOf(tools),
+    ...(message.workspaces ?? []).map(workspaceOf),
+    ...(mods.length === 0 ? [nothingFound()] : mods.map(modOf)),
   );
 }
 
-/** What the machine answered for, and what it did not: a refusal seen before the first build. */
-function environmentOf(environment: EnvironmentView): HTMLElement {
-  const card = document.createElement('vscode-collapsible');
-  card.heading = 'Environment';
-  card.description = environment.wanting === 0 ? 'ready' : `${environment.wanting} to set`;
-  // Quiet while everything resolved, and open on the settings that did not.
-  card.open = environment.wanting > 0;
-
-  const entries = div('rows');
-  entries.append(...environment.entries.map(entryOf));
-
-  card.append(entries);
-  return card;
-}
-
-const LABELS: Record<EnvironmentKind, string> = {
-  dayz: 'DayZ',
-  dayzTools: 'DayZ Tools',
-  privateKey: 'Private key',
-  workDrive: 'Work drive',
-  builder: 'Builder',
-};
-
-function entryOf(entry: EnvironmentEntry): HTMLElement {
-  const row = rowButton('Open this setting');
-  row.addEventListener('click', () => {
-    host.postMessage({ type: 'settings', id: entry.setting });
+/** The one thing that settles a page and an extension host of different ages. */
+function stale(): HTMLElement {
+  const reload = document.createElement('vscode-button');
+  reload.textContent = 'Reload Window';
+  reload.title = 'Restart the extension host, so that it is the same version as this panel';
+  reload.addEventListener('click', () => {
+    host.postMessage({ type: 'reload' });
   });
 
-  row.append(span('name', LABELS[entry.kind]));
+  const buttons = div('buttons');
+  buttons.append(reload);
 
-  switch (entry.state) {
-    case 'ok':
-      row.append(span('value', entry.path));
-      break;
-    case 'missing':
-      row.append(
-        span('value', entry.path),
-        badge('not there', 'The setting points at something that does not exist', 'warning'),
-      );
-      break;
-    case 'unset':
-      row.append(
-        entry.optional
-          ? span('unset', 'not set — pbo go unsigned')
-          : span('unset', 'not set, and not in the registry either'),
-      );
-      break;
-  }
+  const empty = div('empty');
+  empty.append(
+    paragraph('This panel is newer than the extension running behind it.'),
+    // The words as well as the button: the extension that is too old to read this page may be too
+    // old to have been told what the button asks for, and then the palette is the way through.
+    paragraph('Reload the window — “Developer: Reload Window” — and the mods come back.'),
+    buttons,
+  );
+
+  return empty;
+}
+
+/**
+ * The buttons everything else is done with, in the order they are reached for: put the game up,
+ * build what it would load, and — off to the side, because they are done once and then forgotten
+ * — the three that the work drive is made of.
+ */
+function toolsOf(tools: ToolsView): HTMLElement {
+  const row = div('tools');
+
+  row.append(
+    tool('start', tools.start, 'Start', { type: 'launch' }),
+    tool('build', tools.build, undefined, { type: 'buildAll' }),
+    div('spacer'),
+    ...tools.workDrive.map((action) =>
+      tool(action.action, action, undefined, { type: 'workDrive', action: action.action }),
+    ),
+  );
 
   return row;
 }
 
 /**
- * The work drive: the letter, the folder behind it, and the three buttons. A button that would
- * only fail is disabled and says why, so the reason is there before it is pressed rather than in
- * a message box after.
+ * One button of that row. A label makes it the wide one — there is a single action a panel is
+ * mostly opened for, and it should not be a square the same size as the rest.
+ *
+ * The reason it would refuse rides on the wrapper rather than on the button: a disabled button
+ * takes no pointer events, and a tooltip nobody can hover is no way to say why it is disabled.
  */
-function workDriveOf(view: WorkDriveView): HTMLElement {
-  const card = document.createElement('vscode-collapsible');
-  card.heading = 'Work drive';
-  card.description = describeDrive(view);
-  // Quiet while the drive is up and every mod is on it, and open on whatever is not.
-  card.open = view.state !== 'mounted' || view.unlinked > 0;
-
-  const decorations = div('decorations');
-  decorations.slot = 'decorations';
-  if (view.warning !== undefined) {
-    // Which folder it is mounted from is the usual warning; anything else is the drive being
-    // out of reach altogether, and calling that "wrong folder" would name the wrong problem.
-    const label = view.state === 'elsewhere' ? 'wrong folder' : 'unavailable';
-    decorations.append(badge(label, view.warning, 'warning'));
-  }
-  if (view.unlinked > 0) {
-    decorations.append(
-      badge(`${view.unlinked} not linked`, 'Mods that are not on the work drive', 'warning'),
-    );
-  }
-
-  const rows = div('rows');
-  rows.append(driveRow(view));
-  if (view.warning !== undefined) {
-    rows.append(warningRow(view.warning));
-  }
-  rows.append(buttons(view));
-
-  card.append(...(decorations.hasChildNodes() ? [decorations] : []), rows);
-  return card;
-}
-
-/** The letter and the folder it is set to, which is what a mount would use. */
-function driveRow(view: WorkDriveView): HTMLElement {
-  const row = rowButton('Open this setting');
-  row.addEventListener('click', () => {
-    host.postMessage({ type: 'settings', id: view.setting });
+function tool(
+  name: IconName,
+  action: ActionView,
+  label: string | undefined,
+  request: PanelRequest,
+): HTMLElement {
+  const button = document.createElement('button');
+  button.className = label === undefined ? 'tool' : 'tool wide';
+  button.disabled = action.refusal !== undefined;
+  button.addEventListener('click', () => {
+    host.postMessage(request);
   });
 
-  row.append(span('name', view.letter));
-  row.append(
-    view.source === ''
-      ? span('unset', 'no folder set to mount from')
-      : span('value', view.source, 'The folder the work drive is mounted from'),
-  );
-
-  if (view.state === 'unmounted') {
-    row.append(span('unset', 'not mounted'));
+  button.append(icon(name));
+  if (label !== undefined) {
+    button.append(span('label', label));
   }
 
-  return row;
-}
+  const holder = span('holds', '', action.refusal ?? action.title);
+  holder.append(button);
 
-function warningRow(message: string): HTMLElement {
-  const row = staticRow('problem');
-  row.append(span('message', message));
-  return row;
-}
-
-const ACTION_LABELS: Record<WorkDriveAction, string> = {
-  mount: 'Mount',
-  unmount: 'Unmount',
-  link: 'Link mods',
-};
-
-const ACTION_TITLES: Record<WorkDriveAction, string> = {
-  mount: 'Put the folder the settings name up under the drive letter',
-  unmount: 'Take the work drive down and free the letter',
-  link: 'Put the prefix root of every mod of this workspace onto the work drive',
-};
-
-function buttons(view: WorkDriveView): HTMLElement {
-  const row = div('buttons');
-
-  for (const { action, refusal } of view.actions) {
-    const button = document.createElement('vscode-button');
-    button.textContent = ACTION_LABELS[action];
-    button.secondary = action !== 'link';
-    button.disabled = refusal !== undefined;
-    button.addEventListener('click', () => {
-      host.postMessage({ type: 'workDrive', action });
-    });
-
-    // On the wrapper rather than the button: a disabled one takes no pointer events, and a
-    // tooltip nobody can hover is no way to say why the button is disabled.
-    const holder = span('holds', '', refusal ?? ACTION_TITLES[action]);
-    holder.append(button);
-    row.append(holder);
-  }
-
-  return row;
-}
-
-function describeDrive(view: WorkDriveView): string {
-  switch (view.state) {
-    case 'unset':
-      return 'no folder set';
-    case 'unmounted':
-      return `${view.letter} not mounted`;
-    case 'mounted':
-      return `${view.letter} ${view.source}`;
-    case 'elsewhere':
-      return `${view.letter} ${view.at}`;
-  }
+  return holder;
 }
 
 /**
  * The workspace file, and the mods whose launch block it owns: named rather than implied, because
- * a nearer workspace.enf takes the mods under it.
+ * a nearer `workspace.enf` takes the mods under it.
  */
 function workspaceOf(file: ManifestFileView): HTMLElement {
   const owns =
     file.owns.length === 0
-      ? 'The launch block for the mods under it; none of them are here'
-      : `Owns the launch of ${file.owns.join(', ')}`;
+      ? `${file.location} — the launch block for the mods under it; none of them are here`
+      : `${file.location} — owns the launch of ${file.owns.join(', ')}`;
 
   const block = div('workspace');
   block.append(
-    fileRow('workspace.enf', file.location, file.path, owns),
+    fileRow('workspace.enf', file.path, owns),
     ...file.problems.map((problem) => problemRow(file.path, problem)),
   );
 
@@ -265,20 +195,55 @@ function nothingFound(): HTMLElement {
   return empty;
 }
 
+/**
+ * One mod: its name, whatever is wrong with it, and the addons it packs into pbo.
+ *
+ * The bar is the manifest — one click, one file, the way a file in the explorer opens — so nothing
+ * else is written on it. Its name is the whole of what the mod is called: `mod.enf` says it, and
+ * that same name is `P:\<name>` and `@<name>`, so there is no second one to show beside it.
+ */
 function modOf(mod: ModView): HTMLElement {
-  const card = document.createElement('vscode-collapsible');
-  card.heading = mod.title ?? mod.name;
-  card.description = mod.description ?? mod.location;
-  card.open = true;
+  const block = div('mod');
+  const manifest = mod.manifest;
 
-  const decorations = div('decorations');
-  decorations.slot = 'decorations';
-  // The name the mod is linked and loaded under, shown where mod.enf calls the mod something else.
-  if (mod.title !== undefined && mod.title !== mod.name) {
-    decorations.append(badge(mod.name, 'The prefix root: what the mod is linked and loaded as'));
-  }
+  block.append(
+    manifest === undefined
+      ? unconfiguredRow(mod)
+      : modRow(mod, manifest),
+    ...(manifest === undefined
+      ? [adoptRow(mod.name)]
+      : mod.manifestProblems.map((problem) => problemRow(manifest, problem))),
+    ...mod.addons.map((addon) => addonOf(addon, mod.name)),
+    addAddonRow(mod.name),
+  );
+
+  return block;
+}
+
+function modRow(mod: ModView, manifest: string): HTMLElement {
+  const row = rowButton(`Open the mod.enf of ${mod.name}`, 'bar');
+  row.addEventListener('click', () => {
+    host.postMessage({ type: 'open', path: manifest });
+  });
+
+  row.append(span('name', mod.name), ...marksOf(mod));
+  return row;
+}
+
+/** A mod with no `mod.enf` has no bar to open one: the row says so, and the line below writes it. */
+function unconfiguredRow(mod: ModView): HTMLElement {
+  const row = staticRow('bar');
+  row.append(span('name', mod.name), ...marksOf(mod));
+
+  return row;
+}
+
+/** Everything worth putting next to a mod's name, and nothing that is merely true of it. */
+function marksOf(mod: ModView): HTMLElement[] {
+  const marks: HTMLElement[] = [];
+
   if (mod.manifest === undefined) {
-    decorations.append(
+    marks.push(
       badge(
         'not configured',
         'No mod.enf: this mod was found by its config.cpp, and can be given one from what it says',
@@ -287,35 +252,22 @@ function modOf(mod: ModView): HTMLElement {
   }
   // Only when it is not linked: that is the one that explains a build failing before it runs.
   if (mod.link !== undefined && mod.link.state !== 'linked' && mod.link.state !== 'unavailable') {
-    const { label, title } = describeLink(mod.link);
-    decorations.append(badge(label, title, 'warning'));
+    marks.push(badgeFor(describeLink(mod.link)));
   }
   for (const problem of mod.problems) {
-    const { label, title } = describe(problem);
-    decorations.append(badge(label, title, 'warning'));
+    marks.push(badgeFor(describe(problem)));
   }
   if (mod.manifestProblems.length > 0) {
-    decorations.append(
+    marks.push(
       badge(`${mod.manifestProblems.length} in mod.enf`, 'What the manifest got wrong', 'warning'),
     );
   }
 
-  const rows = div('rows');
-  const manifest = mod.manifest;
-  if (manifest === undefined) {
-    rows.append(adoptRow(mod.name));
-  } else {
-    rows.append(fileRow('mod.enf', mod.location, manifest, 'What configures this mod'));
-    rows.append(...mod.manifestProblems.map((problem) => problemRow(manifest, problem)));
-  }
-  if (mod.link !== undefined) {
-    rows.append(linkRow(mod.link));
-  }
-  rows.append(...mod.addons.map((addon) => addonOf(addon, mod.name)));
-  rows.append(addAddonRow(mod.name));
+  return marks;
+}
 
-  card.append(...(decorations.hasChildNodes() ? [decorations] : []), rows);
-  return card;
+function badgeFor({ label, title }: { label: string; title: string }): HTMLElement {
+  return badge(label, title, 'warning');
 }
 
 /**
@@ -332,9 +284,9 @@ function adoptRow(mod: string): HTMLElement {
 }
 
 /**
- * The way to add an addon to the mod. Offered whatever the mod's layout is: a mod that packs into
- * one pbo cannot take one, and being told why by the command that would do it is worth more than
- * a button that is not there.
+ * The way to add an addon to the mod, under the addons it already has. Offered whatever the mod's
+ * layout is: a mod that packs into one pbo cannot take one, and being told why by the command that
+ * would do it is worth more than a button that is not there.
  */
 function addAddonRow(mod: string): HTMLElement {
   return actionRow(
@@ -357,8 +309,11 @@ function actionRow(label: string, title: string, request: PanelRequest): HTMLEle
 
 /**
  * One addon: what it packs into, what it is called by whoever requires it, and the button that
- * packs it. The row is not itself a button any more — it holds two, because an addon is both a
- * file to open and a thing to build, and one click cannot mean both.
+ * packs it alone — the one above builds the lot. The row is not itself a button: an addon is both
+ * a file to open and a thing to build, and one click cannot mean both.
+ *
+ * What it requires and nothing here declares is not shown. Every mod requires `DZ_Scripts`, so the
+ * mark was on every row of every mod, and a mark that is always there says nothing.
  */
 function addonOf(addon: AddonView, mod: string): HTMLElement {
   const row = staticRow('addon');
@@ -381,35 +336,15 @@ function addonOf(addon: AddonView, mod: string): HTMLElement {
     open.append(span('patch', patch, 'The CfgPatches class other addons require it by'));
   }
 
-  for (const required of addon.unresolved) {
-    open.append(span('unresolved', required, 'Required, and declared by no addon of this workspace'));
-  }
-
   const build = document.createElement('button');
   build.className = 'action';
   build.textContent = 'Build';
-  build.title = `Pack ${addon.name} into ${addon.name}.pbo`;
+  build.title = `Pack ${addon.name} into its pbo`;
   build.addEventListener('click', () => {
     host.postMessage({ type: 'build', mod, addon: addon.name });
   });
 
   row.append(open, build);
-  return row;
-}
-
-/**
- * Where the mod sits on the work drive. Shown whichever way it went: a build reads the sources
- * through this link and nothing else, so "linked" is as much worth seeing as "not linked".
- */
-function linkRow(link: LinkView): HTMLElement {
-  const { label, title } = describeLink(link);
-  const row = staticRow();
-
-  row.append(span('name', link.path), span('patch', label, title));
-  if (link.state === 'elsewhere') {
-    row.append(span('unresolved', link.at, 'Where it points now, which is not this mod'));
-  }
-
   return row;
 }
 
@@ -428,7 +363,11 @@ const LINK_LABELS: Record<LinkState, { label: string; title: string }> = {
 };
 
 function describeLink(link: LinkView): { label: string; title: string } {
-  return LINK_LABELS[link.state];
+  const said = LINK_LABELS[link.state];
+
+  return link.state === 'elsewhere'
+    ? { label: said.label, title: `${said.title}: ${link.path} points at ${link.at}` }
+    : { label: said.label, title: `${said.title}: ${link.path}` };
 }
 
 /** A mistake in a `.enf`, which opens the file on the very place it is. */
@@ -438,13 +377,13 @@ function problemRow(path: string, problem: ManifestProblem): HTMLElement {
   });
 }
 
-function fileRow(name: string, location: string, path: string, title: string): HTMLElement {
-  const row = rowButton(title);
+function fileRow(name: string, path: string, title: string): HTMLElement {
+  const row = rowButton(title, 'bar');
   row.addEventListener('click', () => {
     host.postMessage({ type: 'open', path });
   });
 
-  row.append(span('name', name), span('patch', location));
+  row.append(span('name', name));
   return row;
 }
 
@@ -471,8 +410,7 @@ function rowButton(title: string, kind = ''): HTMLElement {
   return row;
 }
 
-/** The same row, for what has nothing behind it to open: a drive letter is not a file. */
+/** The same row, for what has nothing behind it to open: a mod with no manifest yet. */
 function staticRow(kind = ''): HTMLElement {
   return div(kind === '' ? 'row static' : `row static ${kind}`);
 }
-

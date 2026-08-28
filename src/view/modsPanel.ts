@@ -1,10 +1,9 @@
 /**
  * The Mods panel of the Enfusion container.
  *
- * A webview rather than a tree, because everything the next steps put here — build and run
- * buttons, the state of the work drive — needs more room than a tree item gives. The panel itself
- * holds no state: it is handed the mods and renders them, and every path it sends back is one it
- * was given.
+ * A webview rather than a tree, because a row of buttons over a list of mods is not something a
+ * tree item gives room for. The panel itself holds no state: it is handed the mods, the buttons
+ * and the words for both, and every path it sends back is one it was given.
  *
  * The list is read on every change rather than cached: `findFiles` is the editor's own indexed
  * search, and a stale list costs more than the search does.
@@ -12,21 +11,29 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { SETTING, isWanting } from '../mods/machine';
-import type { Mod } from '../mods/model';
+import { targetsOf } from '../mods/launch';
+import { isWanting } from '../mods/machine';
+import { MANIFEST_FILE, type Mod } from '../mods/model';
 import {
   type Link,
   type WorkDrive,
+  type WorkDriveAction,
   WORK_DRIVE_ACTIONS,
   isUnlinked,
   refusalOf,
 } from '../mods/workDrive';
 import { readEnvironment, readMachineSettings } from '../platform/machine';
 import { platformRefusal, readLinks, readWorkDrive } from '../platform/workDrive';
-import { type Discovery, findMods, prefixesOf } from '../platform/workspace';
-import type { ModsMessage, ModView, PanelRequest, WorkDriveView } from '../webview/protocol';
+import {
+  type Discovery,
+  findMods,
+  prefixesOf,
+  targetSourcesOf,
+} from '../platform/workspace';
+import type { ModView, ModsMessage, PanelRequest, ToolsView } from '../webview/protocol';
 import { BUILD_COMMAND, type BuildTarget } from './build';
 import { INIT_COMMAND } from './init';
+import { LAUNCH_COMMAND } from './launch';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** A burst of file events — a checkout, a build — should still cost one scan. */
@@ -109,20 +116,26 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'refresh':
         this.reread();
         return;
+      // Asked for by a page that found the extension behind it to be of another version, which
+      // is what installing over a running one leaves until the window is restarted.
+      case 'reload':
+        this.report(runCommand('workbench.action.reloadWindow'));
+        return;
       case 'open':
         this.report(this.open(request.path, request.line, request.column));
         return;
-      case 'settings':
-        this.report(openSettings(request.id));
+      // Through the commands, so that the buttons and the palette do the very same things.
+      case 'launch':
+        this.report(runCommand(LAUNCH_COMMAND.start));
         return;
-      // Through the command, so that the button and the palette do the very same thing.
       case 'workDrive':
         this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
         return;
       case 'build':
-        this.report(
-          runCommand(BUILD_COMMAND.addon, { mod: request.mod, addon: request.addon }),
-        );
+        this.report(runCommand(BUILD_COMMAND.addon, { mod: request.mod, addon: request.addon }));
+        return;
+      case 'buildAll':
+        this.report(runCommand(BUILD_COMMAND.all));
         return;
       case 'init':
         this.report(runCommand(INIT_COMMAND.mod));
@@ -158,8 +171,12 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
     this.uris = found.uris;
     this.log.info(`${found.mods.length} mod(s): ${found.mods.map((mod) => mod.name).join(', ')}`);
+    // The panel shows none of this any more, so the log is where a machine that answered for
+    // nothing is seen at all — before a build refuses over it rather than during.
+    const wanting = entries.filter(isWanting);
     this.log.info(
-      `environment: ${entries.map((entry) => `${entry.kind} ${entry.state}`).join(', ')}`,
+      `environment: ${entries.map((entry) => `${entry.kind} ${entry.state}`).join(', ')}` +
+        `${wanting.length === 0 ? ' — ready' : ` — ${wanting.length} to set`}`,
     );
     this.log.info(
       `work drive: ${drive.letter} ${drive.state}${drive.at === '' ? '' : ` at ${drive.at}`}, ` +
@@ -168,8 +185,7 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
     const message: ModsMessage = {
       type: 'mods',
-      environment: { entries, wanting: entries.filter(isWanting).length },
-      workDrive: workDriveViewOf(drive, links),
+      tools: toolsOf(drive, found),
       workspaces: [...found.workspaces].map(([path, problems]) => ({
         path,
         location: locationOfFile(path, found),
@@ -228,11 +244,6 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
   }
 }
 
-/** The one place a setting is filled in from, which is where a missing one sends the developer. */
-async function openSettings(id: string): Promise<void> {
-  await vscode.commands.executeCommand('workbench.action.openSettings', id);
-}
-
 async function runCommand(
   command: string,
   argument?: BuildTarget | { mod: string },
@@ -240,39 +251,55 @@ async function runCommand(
   await vscode.commands.executeCommand(command, argument);
 }
 
+/** What each work drive button does, said the way the command that does it would say it. */
+function workDriveTitle(action: WorkDriveAction, drive: WorkDrive): string {
+  switch (action) {
+    case 'mount':
+      return drive.source === ''
+        ? `Put the folder the settings name up under ${drive.letter}`
+        : `Put ${drive.source} up under ${drive.letter}`;
+    case 'unmount':
+      return `Take ${drive.letter} down and free the letter`;
+    case 'link':
+      return `Put the prefix root of every mod of this workspace onto ${drive.letter}`;
+  }
+}
+
 /**
- * The work drive as the panel shows it. Every button carries the reason it would refuse, so the
- * one that is disabled says why without being pressed; the warning is the same sentence, because
- * "mounted from the wrong folder" is one fact and deserves one wording.
+ * The row of buttons, with the reason each one would refuse already on it: the disabled button
+ * says why without being pressed, and it says it in the same words the command would.
  */
-function workDriveViewOf(drive: WorkDrive, links: readonly Link[]): WorkDriveView {
+function toolsOf(drive: WorkDrive, found: Discovery): ToolsView {
   const platform = platformRefusal();
+  const targets = targetsOf(targetSourcesOf(found));
+  const addons = found.mods.reduce((count, mod) => count + mod.addons.length, 0);
 
   return {
-    letter: drive.letter,
-    source: drive.source,
-    at: drive.at,
-    state: drive.state,
-    setting: SETTING.workDrive,
-    warning: platform ?? (drive.state === 'elsewhere' ? refusalOf(drive, 'link') : undefined),
-    actions: WORK_DRIVE_ACTIONS.map((action) => ({
+    start: {
+      title: 'Put the game up: the launch target chosen on the status bar',
+      refusal:
+        targets.length === 0
+          ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
+          : undefined,
+    },
+    build: {
+      title: 'Pack every addon of this workspace into its pbo, in dependency order',
+      refusal: addons === 0 ? 'No addon of this workspace can be built.' : undefined,
+    },
+    workDrive: WORK_DRIVE_ACTIONS.map((action) => ({
       action,
+      title: workDriveTitle(action, drive),
       refusal: platform ?? refusalOf(drive, action),
     })),
-    unlinked: links.filter(isUnlinked).length,
   };
 }
 
 function toView(mod: Mod, found: Discovery, links: readonly Link[]): ModView {
   const configured = mod.manifest === undefined ? undefined : found.configured.get(mod.manifest);
-  const manifest = configured?.configuration.manifest;
   const link = links.find((made) => made.prefixRoot === mod.prefixRoot);
 
   return {
     name: mod.name,
-    location: locationOfMod(mod, found),
-    title: manifest?.name,
-    description: manifest?.description,
     manifest: mod.manifest,
     manifestProblems: configured?.problems ?? [],
     link: link && { state: link.state, path: link.path, at: link.at },
@@ -281,19 +308,9 @@ function toView(mod: Mod, found: Discovery, links: readonly Link[]): ModView {
       main: addon.main,
       config: addon.config,
       patches: addon.patches,
-      unresolved: addon.unresolved,
     })),
     problems: mod.problems,
   };
-}
-
-/**
- * The mod root has no `Uri` of its own — only files were searched for — so it borrows one from a
- * file inside it. Rebuilding a `Uri` from the path instead would assume the workspace is on disk.
- */
-function locationOfMod(mod: Mod, found: Discovery): string {
-  const anchor = found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
-  return anchor ? vscode.workspace.asRelativePath(anchor.with({ path: mod.root }), true) : mod.root;
 }
 
 function locationOfFile(path: string, found: Discovery): string {

@@ -12,6 +12,15 @@ square, so the `viewBox` here is cropped to the art itself, and the brand blue i
 used here to identify the engine this extension is built for. The extension is not affiliated with,
 endorsed by, or published by Bohemia Interactive.
 
+## Codicons
+
+The five icons on the Mods panel's button row — `debug-start`, `package`, `plug`,
+`debug-disconnect` and `link` — are the paths of the icons VS Code draws those very actions with,
+from [@vscode/codicons](https://github.com/microsoft/vscode-codicons), CC-BY-4.0. They are copied
+into `src/webview/icons.ts` as path data rather than loaded as a font: a webview reaches nothing it
+has not been shipped and pointed at through its content security policy, and five glyphs are not
+worth a font file in the `.vsix` for.
+
 ## jsonc-parser
 
 The `.enf` files are read with [jsonc-parser](https://github.com/microsoft/node-jsonc-parser),

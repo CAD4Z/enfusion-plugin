@@ -10,6 +10,34 @@
 
 import '@vscode-elements/elements/dist/vscode-badge/index.js';
 import type { ManifestProblem } from '../mods/enf';
+import { ICON, type IconName } from './icons';
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+/**
+ * One icon, drawn at the text colour of whatever holds it, and out of the reach of the screen
+ * reader: every button carrying one has a title saying the same thing in words.
+ */
+export function icon(name: IconName): SVGElement {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+
+  for (const path of ICON[name]) {
+    const element = document.createElementNS(SVG, 'path');
+    element.setAttribute('d', path.d);
+    if (path.evenOdd === true) {
+      element.setAttribute('fill-rule', 'evenodd');
+      element.setAttribute('clip-rule', 'evenodd');
+    }
+    svg.append(element);
+  }
+
+  return svg;
+}
 
 export function div(className: string): HTMLElement {
   const div = document.createElement('div');

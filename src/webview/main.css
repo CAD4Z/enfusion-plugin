@@ -1,9 +1,84 @@
 /*
  * The Mods panel's own look. What it shares with the form over a `.enf` — the theme variables on
  * the body, the row that is a button, the way a problem reads — is in `shared.css`.
+ *
+ * The panel is a column of rows under a row of buttons, indented by what a thing belongs to: the
+ * workspace file at the edge, its mods a step in, and each mod's addons a step in from that.
  */
 
 @import './shared.css';
+
+/*
+ * The buttons that act on the whole workspace. They stay put while the mods scroll: the one thing
+ * this panel is opened to press should not be somewhere off the top of it.
+ */
+.tools {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+/* What holds the two on the left apart from the three on the right. */
+.tools .spacer {
+  flex: 1;
+}
+
+/* Carries the tooltip for the button inside it, which when disabled takes no pointer events. */
+.tools .holds {
+  display: inline-flex;
+}
+
+.tool {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tool:hover:not(:disabled) {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* The one action a panel is mostly opened for, so it is the one that is not a square. */
+.tool.wide {
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.tool.wide:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tool:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.tool .label {
+  white-space: nowrap;
+}
 
 .empty {
   padding: 12px 20px;
@@ -15,27 +90,47 @@
   margin: 0 0 12px;
 }
 
-.decorations {
+/* An empty workspace has one thing to do and one thing to try, so both sit under the sentence. */
+.empty .buttons {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 0;
 }
 
-.rows {
-  display: flex;
-  flex-direction: column;
-  padding: 2px 0 6px;
-}
-
-.workspace {
+.workspace,
+.mod {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
+  padding-bottom: 4px;
 }
 
-/* The panel is an indented column, which is the one thing its rows do not share with the form. */
 .row {
-  padding: 2px 20px;
+  padding: 2px 12px;
+}
+
+/* The bar of a file: the workspace's, and each mod's — one click, one manifest. */
+.row.bar {
+  padding: 3px 12px;
+  gap: 6px;
+}
+
+.row.bar .name {
+  font-weight: 600;
+}
+
+/* A mod belongs to the workspace above it, and its addons to the mod. */
+.mod > .row.bar {
+  padding-left: 22px;
+}
+
+.mod > .row.addon,
+.mod > .row.add,
+.mod > .row.problem {
+  padding-left: 34px;
+}
+
+.workspace > .row.problem {
+  padding-left: 24px;
 }
 
 .row .name {
@@ -52,32 +147,12 @@
   letter-spacing: 0.04em;
 }
 
-.row .patch,
-.row .value {
+.row .patch {
   color: var(--vscode-descriptionForeground);
   font-family: var(--vscode-editor-font-family);
   font-size: 0.9em;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A setting nobody filled in reads as absent rather than as a value. */
-.row .unset {
-  color: var(--vscode-descriptionForeground);
-  font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Dashed, because an unresolved name is not an error: vanilla addons are meant to look like this. */
-.row .unresolved {
-  padding: 0 4px;
-  border: 1px dashed var(--vscode-descriptionForeground);
-  border-radius: 3px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.9em;
   white-space: nowrap;
 }
 
@@ -88,25 +163,13 @@
   white-space: nowrap;
 }
 
-/* The buttons of the work drive sit on one line under what they act on. */
-.buttons {
-  display: flex;
-  gap: 6px;
-  padding: 6px 20px 2px;
-}
-
-/* A row with nothing behind it to open: a drive letter is not a file. */
+/* A row with nothing behind it to open: a mod that has no manifest to be opened yet. */
 .row.static {
   cursor: default;
 }
 
 .row.static:hover {
   background-color: transparent;
-}
-
-/* Carries the tooltip for the button inside it, which when disabled takes no pointer events. */
-.buttons .holds {
-  display: inline-flex;
 }
 
 /*
@@ -171,13 +234,9 @@
 /* The way to add an addon sits under the addons, quiet: it is an offer, not one of the mod's own. */
 .row.add .name {
   color: var(--vscode-descriptionForeground);
+  font-weight: normal;
 }
 
 .row.add:hover .name {
   color: var(--vscode-foreground);
-}
-
-/* An empty workspace has one thing to do and one thing to try, so both sit under the sentence. */
-.empty .buttons {
-  padding: 0;
 }
