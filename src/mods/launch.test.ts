@@ -171,6 +171,35 @@ test('a target that puts up the server alone starts the server and nothing else'
 });
 
 /**
+ * The profile is the one part of a launch a developer reads rather than merely runs, so where it
+ * lands is a setting. Pointed at the folder the Workbench plugins use, both toolchains write one
+ * profile instead of two that drift — the layout under it, `<Mod>\<role>`, is already the same.
+ */
+test('the profiles go where the settings say, and the mirror of the game stays where it is', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'both' }),
+      settings: settings({ profiles: 'P:\\Profiles' }),
+    }),
+  );
+
+  assert.deepEqual(plan.folders, [
+    `${RUN}\\game`,
+    'P:\\Profiles\\CADCore\\server',
+    'P:\\Profiles\\CADCore\\client',
+    `${RUN}\\missions\\CADCore.chernarusplus`,
+  ]);
+  assert.ok(
+    plan.processes.every((process_) =>
+      process_.arguments.some((argument) => argument === `-profiles=P:\\Profiles\\CADCore\\${process_.role}`),
+    ),
+  );
+  // The file patching root is a mirror of the whole installation, and the work drive is the one
+  // place it must never be: both builders read every config on that drive.
+  assert.equal(plan.filePatching.root, `${RUN}\\game`);
+});
+
+/**
  * The game's root holds a `Missions` of its own, and a launch builds a `missions` of its own. On a
  * filesystem that tells neither name apart those would be the one folder — the junction could not
  * be made, or the mission would be written through it into the DayZ installation. So nothing of
@@ -243,19 +272,25 @@ test('a world added by a patch is linked without anything being told about it', 
  * The executables and their libraries are what the rest of the root is, and the game finds those
  * through the path it was started by. Copying them would mean copying the installation.
  */
-test('only the files the game reads out of its working directory are carried over', () => {
+test('every file of the game root is carried over but the programs and the logs', () => {
   const plan = patching({
     entries: [
       folder('Addons'),
       file('steam_appid.txt'),
+      // The two the engine will not start without, and the reason this is a listing and not a list.
+      file('DayZSetting.xml'),
+      file('dayz.gproj'),
       file('DayZ_x64.exe'),
       file('DayZDiag_x64.exe'),
       file('steam_api64.dll'),
+      file('crash_2025-05-04_21-55-23.log'),
     ],
   });
 
   assert.deepEqual(plan.copies, [
     { from: `${GAME}\\steam_appid.txt`, to: `${RUN}\\steam_appid.txt` },
+    { from: `${GAME}\\DayZSetting.xml`, to: `${RUN}\\DayZSetting.xml` },
+    { from: `${GAME}\\dayz.gproj`, to: `${RUN}\\dayz.gproj` },
   ]);
   assert.deepEqual(
     plan.junctions.map((junction) => junction.path),
@@ -887,6 +922,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
     workDrive: 'F:\\Workdrive',
     workDriveLetter: 'P:',
     filePatchingRoot: '',
+    profiles: '',
     builder: 'pboProject',
     ...over,
   };

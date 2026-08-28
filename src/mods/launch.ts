@@ -220,13 +220,21 @@ export interface FilePatchingInput {
 }
 
 /**
- * The files the game reads out of its working directory rather than out of its own folder. Unlike
- * the folders this is a list rather than a listing, and it can be: what is on it is the handful of
- * small files that have to sit beside the process, while the rest of the root is executables and
- * their libraries — which the game finds through the path it was started by, and which copying
- * would mean copying hundreds of megabytes on every launch.
+ * What of the game's root is *not* carried into the run folder beside the links.
+ *
+ * The engine reads several files out of its working directory rather than out of the folder its
+ * executable sits in: `DayZSetting.xml`, and `dayz.gproj`, without which it gets as far as
+ * "Cannot find game project settings!" and then "Failed to create Enfusion engine" — a server that
+ * exits with an access violation and says nothing a developer could act on.
+ *
+ * Which files those are is not something to write down. This was a list of names once, and the
+ * list held one name and was wrong for the same reason the hardcoded folder list was wrong: nobody
+ * finds out what is missing until a patch or a machine has it. So the root is listed, exactly as
+ * it is listed for the links, and what is skipped is named instead — the programs and libraries
+ * the loader takes from beside the executable, which are hundreds of megabytes and are found
+ * through the path the game was started by, and the logs the game itself wrote there.
  */
-const CARRIED_FILES: readonly string[] = ['steam_appid.txt'];
+const NOT_CARRIED = /\.(exe|dll|log)$/i;
 
 /**
  * The run folder as it should be, against what is in it now.
@@ -306,7 +314,7 @@ function wantedOf(input: FilePatchingInput): Map<string, Junction> {
 
 function carriedOf(input: FilePatchingInput): FileCopy[] {
   return input.entries
-    .filter((entry) => !entry.directory && CARRIED_FILES.some((file) => sameName(file, entry.name)))
+    .filter((entry) => !entry.directory && !NOT_CARRIED.test(entry.name))
     .map((entry) => ({
       from: windowsPath(input.game, entry.name),
       to: windowsPath(input.root, entry.name),
@@ -822,7 +830,31 @@ function modsDirectoryOf(target: LaunchTarget): string {
  * keep their own logs and their own settings rather than writing over each other's.
  */
 function profileOf(input: LaunchInput, role: LaunchRole): string {
-  return windowsPath(input.runRoot, PROFILES_FOLDER, modNameOf(input.target, input.mods), role);
+  return windowsPath(
+    profilesRootOf(input.settings.profiles, input.runRoot),
+    modNameOf(input.target, input.mods),
+    role,
+  );
+}
+
+/**
+ * Where the profiles are built: the folder the settings name, or the one in the run folder.
+ *
+ * It is the one part of a launch a developer reads rather than merely runs — the `.RPT`, the
+ * `.ADM`, whatever a server mod keeps its configuration in — so where it lands is worth being
+ * able to say. Under it the layout is `<Mod>\<role>`, which is the layout the Workbench plugins
+ * use as well: pointed at the same folder they point at, both toolchains write one profile
+ * instead of two that drift.
+ *
+ * Only the profiles move. The file patching root stays in the run folder whatever this says,
+ * because it is a mirror of the whole game installation and the work drive is the one place it
+ * must never be: pboProject and AddonBuilder both read what is on that drive, and AddonBuilder
+ * binarises with `-addon="P:"`, which is every config on it.
+ */
+export function profilesRootOf(configured: string, runRoot: string): string {
+  return configured.trim() === ''
+    ? windowsPath(runRoot, PROFILES_FOLDER)
+    : configured.trim();
 }
 
 /**

@@ -17,7 +17,6 @@
 import * as vscode from 'vscode';
 import {
   type LaunchTarget,
-  type TargetSource,
   filePatchingRootOf,
   launchPathsOf,
   launchPlanOf,
@@ -37,12 +36,15 @@ import {
 } from '../platform/launch';
 import { readMachineSettings } from '../platform/machine';
 import { readWorkDrive } from '../platform/workDrive';
-import { type Discovery, findMods, launchModsOf, ownedOf } from '../platform/workspace';
+import { findMods, launchModsOf, targetSourcesOf } from '../platform/workspace';
 
 /** The debug type contributed in `package.json`; a configuration names it as `"type"`. */
 export const LAUNCH_TYPE = 'enfusion';
 
-export const LAUNCH_COMMAND = { select: 'enfusion.selectTarget' } as const;
+export const LAUNCH_COMMAND = {
+  select: 'enfusion.selectTarget',
+  start: 'enfusion.launch',
+} as const;
 
 /** The fields a configuration of ours takes. Anything else is the manifest's business. */
 const CONFIGURATION_FIELDS: readonly string[] = ['type', 'request', 'name', 'target', 'noDebug'];
@@ -62,8 +64,11 @@ export function registerLaunch(
   const launcher = new Launcher(log);
   const bar = new TargetBar(memento, launcher);
   const configurations = new Configurations(launcher, bar);
+  const started = new Started(log);
 
   const disposable = vscode.Disposable.from(
+    vscode.debug.onDidStartDebugSession((session) => started.began(session)),
+    vscode.debug.onDidTerminateDebugSession((session) => started.ended(session)),
     bar,
     // Twice on purpose: the dynamic registration is what fills the Run and Debug list, and the
     // ordinary one is what gets asked to resolve a configuration before it is launched.
@@ -80,6 +85,7 @@ export function registerLaunch(
         ),
     }),
     vscode.commands.registerCommand(LAUNCH_COMMAND.select, () => bar.choose()),
+    vscode.commands.registerCommand(LAUNCH_COMMAND.start, () => started.start()),
   );
 
   bar.refresh();
@@ -92,6 +98,76 @@ export function registerLaunch(
       bar.refresh();
     },
   };
+}
+
+/**
+ * The panel's Start button, and the one launch it is allowed to have up.
+ *
+ * The button is the F5 a developer would have pressed rather than a second way of doing the same
+ * thing: the very same configuration, resolved the very same way, so it puts up the target the
+ * status bar shows, asks which one only where nothing is chosen, and shows in the debug toolbar
+ * for as long as the game is up.
+ *
+ * One at a time, and not merely as a courtesy. Two launches of a workspace put two servers on the
+ * one port and lay two sets of junctions into the one run folder. And a button that keeps the
+ * keyboard focus is a button a held key presses again and again — which is how a single press
+ * becomes a machine full of processes.
+ *
+ * Run and Debug is left alone: a developer who starts a second session from the debug toolbar has
+ * said so twice, and stopping them is not this button's business.
+ */
+class Started {
+  private readonly sessions = new Set<string>();
+  /** The moment between asking for a session and being told it began, where nothing is up yet. */
+  private starting = false;
+  /** Whether the refusal has been shown, so a held key is not answered with a wall of them. */
+  private refused = false;
+
+  constructor(private readonly log: vscode.LogOutputChannel) {}
+
+  began(session: vscode.DebugSession): void {
+    if (session.type === LAUNCH_TYPE) {
+      this.sessions.add(session.id);
+    }
+  }
+
+  ended(session: vscode.DebugSession): void {
+    this.sessions.delete(session.id);
+    if (this.sessions.size === 0) {
+      this.refused = false;
+    }
+  }
+
+  async start(): Promise<void> {
+    if (this.starting || this.sessions.size > 0) {
+      this.log.warn('the game is already up; this launch was not started');
+      await this.sayBusy();
+      return;
+    }
+
+    this.starting = true;
+
+    try {
+      await vscode.debug.startDebugging(vscode.workspace.workspaceFolders?.[0], {
+        type: LAUNCH_TYPE,
+        request: 'launch',
+        name: 'Enfusion',
+      });
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private async sayBusy(): Promise<void> {
+    if (this.refused) {
+      return;
+    }
+
+    this.refused = true;
+    await vscode.window.showWarningMessage(
+      'The game is already up. Stop it before starting it again.',
+    );
+  }
 }
 
 function targetOf(configuration: vscode.DebugConfiguration): string {
@@ -294,7 +370,7 @@ class Launcher {
   constructor(private readonly log: vscode.LogOutputChannel) {}
 
   async targets(): Promise<LaunchTarget[]> {
-    return targetsOf(sourcesOf(await findMods()));
+    return targetsOf(targetSourcesOf(await findMods()));
   }
 
   /** The processes of the launch, running — or the sentence saying why none of them is. */
@@ -309,7 +385,7 @@ class Launcher {
     }
 
     const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
-    const target = targetById(targetsOf(sourcesOf(discovery)), id);
+    const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
     if (target === undefined) {
       return `No launch target is called "${id}" any more.`;
     }
@@ -359,17 +435,6 @@ class Launcher {
       return startGame(process_);
     });
   }
-}
-
-/** The launch block of every mod, with the file that owns it — which is what targets come from. */
-function sourcesOf(found: Discovery): TargetSource[] {
-  return ownedOf(found).map((owned) => ({
-    mod: owned.mod.name,
-    owner: owned.owner,
-    configuredBy: owned.configuredBy,
-    configuredIn: owned.configuredIn,
-    launch: owned.launch,
-  }));
 }
 
 /** One request of the debug protocol, which is all of it this adapter reads. */
