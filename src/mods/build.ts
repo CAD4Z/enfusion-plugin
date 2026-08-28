@@ -44,7 +44,7 @@ import type { Link } from './workDrive';
 export interface BuildJob {
   /** Where the mod sits on the work drive, and whether it sits there at all. */
   readonly link: Link;
-  /** The addon's folder name, which is also the name of the pbo it packs into. */
+  /** The addon's folder name, which is what it is known and asked for by. See `packedNameOf`. */
   readonly addon: string;
   /** Its path under the prefix root — `Scripts`, or empty in a single-addon mod. */
   readonly within: string;
@@ -196,8 +196,12 @@ export interface CopyStep extends Step {
  * carrying and the leavings of the tools. This is the list DayZ modding has settled on, and it is
  * a default rather than a floor — a manifest that names its own replaces it whole.
  *
- * `*.txt` is deliberately not here: pboProject packs a `.txt` whatever the exclude list says, and
- * a mask that is known to do nothing is worse than no mask at all.
+ * Two things are deliberately not on it, and for the same reason: pboProject packs them whatever
+ * the list says, and a mask that is known to do nothing is worse than no mask at all. `*.txt` is
+ * one. `*.enf` is the other — a mod laid out as one addon keeps its manifest beside its
+ * `config.cpp`, so the manifest is packed, and neither the mask nor the file's own name excludes
+ * it (measured on pboProject 429, both ways). The old Workbench project excluded `*.enf` and
+ * believed it worked. The file is a few hundred bytes the game never reads.
  */
 export const DEFAULT_EXCLUDE: readonly string[] = [
   '*.h',
@@ -283,9 +287,23 @@ function builtModOf(job: BuildJob): string {
   );
 }
 
+/**
+ * What the pbo is called, which is not always what the addon's folder is.
+ *
+ * Both builders name the pbo after the last folder of the path they were pointed at, and that path
+ * runs through the work drive: `P:\<Mod>\<Addon>` in a multi-addon mod, and `P:\<Mod>` in a
+ * single-addon one, where the addon *is* the prefix root. The prefix root goes onto the drive under
+ * the mod's name rather than its own — so a mod in a folder called `client` that calls itself
+ * `CADNavigationClient` packs into `CADNavigationClient.pbo`, and looking for `client.pbo`
+ * afterwards would report a build that worked as a build that failed.
+ */
+function packedNameOf(job: BuildJob): string {
+  return windowsName(prefixOf(job));
+}
+
 /** The pbo this addon packs into: the one file the whole build is judged by. */
 function pboOf(job: BuildJob): string {
-  return windowsPath(builtModOf(job), ADDONS_FOLDER, `${job.addon}.pbo`);
+  return windowsPath(builtModOf(job), ADDONS_FOLDER, `${packedNameOf(job)}.pbo`);
 }
 
 /** `hurfy.bikey` next to `hurfy.biprivatekey`; empty when no key is set to sign with. */
@@ -428,13 +446,23 @@ function packOf(job: BuildJob, settings: MachineSettings): PackStep {
  * The command line, and the `start` that wraps it. The title is given so that a quoted path to the
  * builder is not taken for one — `start` reads a leading quoted word as the window's title — and
  * `/wait` is what makes the shell hand back only once the builder is done.
+ *
+ * `/MIN` is what keeps pboProject in the console rather than in its own window, and it is not a
+ * matter of taste. pboProject is a GUI program that *attaches* a console — `AttachConsole`,
+ * `CONOUT$`, and a `Cannot Attach_Console` to say when it could not — and it falls back to its
+ * panel when the console it was given has no window. An extension host has no console of its own
+ * and hands its children a hidden window state, which every console below it inherits: without
+ * `/MIN` the builder comes up as a dialog nobody asked for. Naming the show state explicitly is
+ * what breaks that inheritance, and minimised is the one state that does it without taking the
+ * screen — which matters twice over, because a window that steals focus is a window that gives it
+ * back to whatever was under the pointer.
  */
 function commandOf(job: BuildJob, settings: MachineSettings): string {
   const builder = settings.builder;
   const program = builderExecutableOf(settings);
   const arguments_ = PACKING[builder].arguments(job).join(' ');
 
-  return `start "${builder}" /wait ${quote(program)} ${arguments_}`;
+  return `start "${builder}" /wait /MIN ${quote(program)} ${arguments_}`;
 }
 
 /**
@@ -457,7 +485,10 @@ const PACKING: Readonly<
     arguments: pboProjectArguments,
     // One log per addon, named after the folder it packed, in the `temp` of the work drive, and
     // rewritten every run.
-    log: (job) => ({ path: windowsPath(tempOf(job), `${job.addon}.packing.log`), appends: false }),
+    log: (job) => ({
+      path: windowsPath(tempOf(job), `${packedNameOf(job)}.packing.log`),
+      appends: false,
+    }),
     excludes: true,
   },
   AddonBuilder: {
@@ -472,16 +503,23 @@ const PACKING: Readonly<
 };
 
 /**
- * `-P` batch mode, so it does not wait for a key press. `-R` leaves the settings of its own
- * window alone. `-W` keeps a warning from being an error. `-Key` tells it not to sign, because
- * signing is a step of its own. `-Mod=` is the built mod, and the pbo lands in `Addons` under it.
+ * Every switch as pboProject's own syntax names it: `-P` do not pause, so it does not wait for a
+ * key press; `-R` restore the original settings after this session, which is what leaves the
+ * developer's own panel as they left it; `-W` warnings are not errors; `-K` disable signing,
+ * because signing is a step of its own; `-Mod=` the built mod, with the pbo landing in `Addons`
+ * under it.
+ *
+ * `-K` rather than `-Key`, which is what this asked for before and is not a switch pboProject
+ * documents. It happened to work, and a spelling that happens to work is one run of the parser
+ * away from meaning nothing — and this one means "do not sign", so the run after that would be
+ * signing every pbo with whatever key the panel remembers.
  */
 function pboProjectArguments(job: BuildJob): string[] {
   const arguments_ = [
     '-P',
     '-R',
     '-W',
-    '-Key',
+    '-K',
     `-Mod=${quote(builtModOf(job))}`,
     quote(sourceOf(job)),
   ];
@@ -520,7 +558,7 @@ function signOf(job: BuildJob, settings: MachineSettings): SignStep {
   return {
     kind: 'sign',
     subject: subjectOf(job),
-    what: `Signing ${job.addon}.pbo`,
+    what: `Signing ${packedNameOf(job)}.pbo`,
     program: signToolOf(settings),
     arguments: [settings.privateKey, pboOf(job)],
   };

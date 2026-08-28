@@ -42,7 +42,7 @@ test('a single-addon mod comes out as pack, sign and the root files, in that ord
           'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo.*.bisign',
         ],
         command:
-          'start "pboProject" /wait "C:\\Mikero\\bin\\pboProject.exe" -P -R -W -Key ' +
+          'start "pboProject" /wait /MIN "C:\\Mikero\\bin\\pboProject.exe" -P -R -W -K ' +
           '-Mod="P:\\Mods\\@CADCore" "P:\\CADCore" ' +
           `+X="${DEFAULT_EXCLUDE.join(',')}"`,
         pbo: 'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
@@ -84,10 +84,10 @@ test('a single-addon mod comes out as pack, sign and the root files, in that ord
 
 /** The one thing the console is for, and the one reason there is a shell in this at all. */
 test('the builder is started in a console of its own, under a title of its own', () => {
-  assert.ok(packOf(buildPlanOf([job()], settings())).command.startsWith('start "pboProject" /wait '));
+  assert.ok(packOf(buildPlanOf([job()], settings())).command.startsWith('start "pboProject" /wait /MIN '));
   assert.ok(
     packOf(buildPlanOf([job()], settings({ builder: 'AddonBuilder' }))).command.startsWith(
-      'start "AddonBuilder" /wait ',
+      'start "AddonBuilder" /wait /MIN ',
     ),
   );
 });
@@ -97,7 +97,7 @@ test('AddonBuilder is handed the addons folder, the prefix and the drive to coun
 
   assert.equal(
     pack.command,
-    'start "AddonBuilder" /wait "F:\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe" ' +
+    'start "AddonBuilder" /wait /MIN "F:\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe" ' +
       '"P:\\CADCore\\Scripts" "P:\\Mods\\@CADCore\\Addons" -prefix="CADCore\\Scripts" ' +
       '-project=P:\\ -temp="P:\\temp"',
   );
@@ -407,6 +407,35 @@ test('a single-addon mod is packed from the prefix root and a multi-addon one fr
   );
 });
 
+/**
+ * The one place the addon's folder name and the pbo's part company. A single-addon mod is packed
+ * by pointing the builder at the prefix root itself, and the prefix root sits on the drive under
+ * the mod's name — so the pbo, the log and the signature all go by that name, whatever the folder
+ * on disk is called. Looking for the folder's name afterwards would call a build that worked a
+ * build that failed.
+ */
+test('a mod whose folder is not its name packs into a pbo named after the mod', () => {
+  const client = link('CADNavigationClient', 'F:\\Code\\CADNavigation\\client');
+  const plan = buildPlanOf([job({ link: client, addon: 'client', within: '' })], settings());
+  const pack = plan.steps[0];
+
+  assert.equal(pack?.kind, 'pack');
+  assert.equal(pack.pbo, 'P:\\Mods\\@CADNavigationClient\\Addons\\CADNavigationClient.pbo');
+  assert.equal(pack.log.path, 'P:\\temp\\CADNavigationClient.packing.log');
+  assert.ok(pack.command.includes('"P:\\CADNavigationClient"'));
+  assert.equal(plan.steps[1]?.what, 'Signing CADNavigationClient.pbo');
+});
+
+/** A multi-addon mod is pointed at the addon, so there the pbo is the addon's folder after all. */
+test('an addon inside the prefix root packs into a pbo named after its own folder', () => {
+  const plan = buildPlanOf([job({ addon: 'Scripts', within: 'Scripts' })], settings());
+  const pack = plan.steps[0];
+
+  assert.equal(pack?.kind, 'pack');
+  assert.equal(pack.pbo, 'P:\\Mods\\@CADCore\\Addons\\Scripts.pbo');
+  assert.equal(pack.log.path, 'P:\\temp\\Scripts.packing.log');
+});
+
 function job(over: Partial<BuildJob> = {}): BuildJob {
   return {
     link: CORE,
@@ -430,6 +459,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
     workDrive: 'F:\\Workdrive',
     workDriveLetter: 'P:',
     filePatchingRoot: '',
+    profiles: '',
     builder: 'pboProject',
     ...over,
   };

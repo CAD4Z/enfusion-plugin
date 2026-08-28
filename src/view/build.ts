@@ -63,6 +63,23 @@ class BuildCommands {
   /** What was last put in Problems for each addon, so a rebuild replaces its own and no more. */
   private readonly reported = new Map<string, vscode.Uri[]>();
 
+  /**
+   * Whether a build is running, which is the one thing that stops a second one.
+   *
+   * Two builds of the same workspace do not share the work — they race for the same pbo, one
+   * taking the file off while the other writes it — and every one of them puts a builder process
+   * per addon on the machine. Which is not a theoretical objection: a button that keeps the
+   * keyboard focus is a button a held key presses again and again, and the machine that ran into
+   * that ended up with five hundred builders on it and stopped responding.
+   *
+   * So a second request is refused rather than queued. A queue is the same pile of processes,
+   * only later, and nobody asking twice wants the same build twice.
+   */
+  private running = false;
+
+  /** Whether the refusal has been shown, so a held key is not answered with a wall of them. */
+  private refused = false;
+
   constructor(
     private readonly log: vscode.LogOutputChannel,
     private readonly problems: vscode.DiagnosticCollection,
@@ -70,35 +87,72 @@ class BuildCommands {
 
   /** One addon: the panel names it, and the palette asks which. */
   async addon(target: BuildTarget | undefined): Promise<void> {
-    const input = await readBuildInput();
-    const jobs = jobsOf(input.sources);
-    const wanted = target === undefined ? await choose(jobs) : named(jobs, target);
+    await this.once(async () => {
+      const input = await readBuildInput();
+      const jobs = jobsOf(input.sources);
+      const wanted = target === undefined ? await choose(jobs) : named(jobs, target);
 
-    if (wanted === undefined) {
-      // Nothing to say when the palette's list was dismissed; something to say when the panel
-      // named an addon that has since stopped being one.
-      if (target !== undefined) {
-        await vscode.window.showWarningMessage(
-          `${target.mod}\\${target.addon} is no longer an addon of this workspace.`,
-        );
+      if (wanted === undefined) {
+        // Nothing to say when the palette's list was dismissed; something to say when the panel
+        // named an addon that has since stopped being one.
+        if (target !== undefined) {
+          await vscode.window.showWarningMessage(
+            `${target.mod}\\${target.addon} is no longer an addon of this workspace.`,
+          );
+        }
+        return;
       }
-      return;
-    }
 
-    await this.build([wanted], input);
+      await this.build([wanted], input);
+    });
   }
 
   /** And the lot, which is what a first run of a fresh clone needs. */
   async all(): Promise<void> {
-    const input = await readBuildInput();
-    const jobs = jobsOf(input.sources);
+    await this.once(async () => {
+      const input = await readBuildInput();
+      const jobs = jobsOf(input.sources);
 
-    if (jobs.length === 0) {
-      await vscode.window.showWarningMessage('No addon of this workspace can be built.');
+      if (jobs.length === 0) {
+        await vscode.window.showWarningMessage('No addon of this workspace can be built.');
+        return;
+      }
+
+      await this.build(jobs, input);
+    });
+  }
+
+  /**
+   * One build at a time, whichever button or command asked for it. The guard is here rather than
+   * on each entry point so that building one addon and building the lot cannot overlap either.
+   */
+  private async once(work: () => Promise<void>): Promise<void> {
+    if (this.running) {
+      this.log.warn('a build is already running; this one was not started');
+      await this.sayBusy();
       return;
     }
 
-    await this.build(jobs, input);
+    this.running = true;
+    this.refused = false;
+
+    try {
+      await work();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  /** Said once per build, however many times it was asked for while that build was running. */
+  private async sayBusy(): Promise<void> {
+    if (this.refused) {
+      return;
+    }
+
+    this.refused = true;
+    await vscode.window.showWarningMessage(
+      'A build is already running. Wait for it to finish, or stop it from the progress notification.',
+    );
   }
 
   private async build(jobs: readonly BuildJob[], input: BuildInput): Promise<void> {

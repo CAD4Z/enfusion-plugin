@@ -10,11 +10,11 @@
  *
  * In the ordinary case none of it is typed at all: the paths to DayZ and DayZ Tools are what the
  * installers wrote to the registry, and a missing entry is an empty value rather than a failure.
- * What the settings and the registry between them could not answer is what the panel shows, so
- * that a refusal is visible before the first build rather than during it.
+ * What the settings and the registry between them could not answer goes to the log at every scan,
+ * and is what the button that needs it refuses over.
  */
 
-import { resolveWindows, samePath, windowsPath } from './paths';
+import { resolveWindows, samePath, windowsName, windowsPath } from './paths';
 
 /** The program that packs an addon into a pbo. */
 export type Builder = 'pboProject' | 'AddonBuilder';
@@ -28,7 +28,7 @@ export interface MachineSettings {
   /** The executable a launch starts, as a name in that folder or as a path of its own. */
   readonly executable: string;
   readonly dayzTools: string;
-  /** `pboProject.exe` itself, which is what its installer records rather than a folder. */
+  /** `pboProject.exe`, or the folder holding it; see `pboProjectExecutableOf`. */
   readonly pboProject: string;
   /** The `.biprivatekey` to sign with; empty means the pbo goes unsigned. */
   readonly privateKey: string;
@@ -38,6 +38,8 @@ export interface MachineSettings {
   readonly workDriveLetter: string;
   /** Where the file patching root is built; empty leaves the extension to pick the place. */
   readonly filePatchingRoot: string;
+  /** Where the profiles are built; empty puts them in the run folder. See `profilesRootOf`. */
+  readonly profiles: string;
   readonly builder: Builder;
 }
 
@@ -50,6 +52,7 @@ export const SETTING = {
   workDrive: 'enfusion.workDrive.source',
   workDriveLetter: 'enfusion.workDrive.letter',
   filePatchingRoot: 'enfusion.filePatching.root',
+  profiles: 'enfusion.launch.profiles',
   builder: 'enfusion.builder',
   pboProject: 'enfusion.pboProject.path',
 } as const;
@@ -74,9 +77,10 @@ const BUILDER: Readonly<
     }
   >
 > = {
-  // pboProject's installer records the executable itself, so the setting names a file.
+  // pboProject's installer records the executable itself, so the setting names a file — and takes
+  // the folder holding it too, which is what a developer asked "where is pboProject" reaches for.
   pboProject: {
-    executable: (settings) => settings.pboProject,
+    executable: (settings) => pboProjectExecutableOf(settings.pboProject),
     setting: SETTING.pboProject,
     missing: 'pboProject was not found: install Mikero’s tools, or set enfusion.pboProject.path.',
   },
@@ -90,6 +94,30 @@ const BUILDER: Readonly<
     missing: 'AddonBuilder was not found: it comes with DayZ Tools, and no path to those is set.',
   },
 };
+
+/** What Mikero's installer calls its own program, and what the setting is completed to. */
+const PBOPROJECT_EXE = 'pboProject.exe';
+
+/**
+ * `pboProject.exe` out of whatever the setting holds.
+ *
+ * The setting asks for the executable, because that is what Mikero's installer records. The same
+ * registry key records the folder holding it as well, and the folder is what a developer reaches
+ * for when asked where a program is — so a path that does not name an executable is taken as the
+ * folder it sits in, and completed.
+ *
+ * Worth the trouble because of how the mistake fails. The builder is run through `start`, and
+ * `start` hands anything it cannot execute to the shell: a folder there opens in Explorer, nothing
+ * is packed, and the build fails pointing at a packing log that some earlier run wrote.
+ */
+export function pboProjectExecutableOf(path: string): string {
+  if (path === '') {
+    return '';
+  }
+
+  // Any executable is taken as the program: a copy under another name is still the program.
+  return /\.exe$/i.test(windowsName(path)) ? path : windowsPath(path, PBOPROJECT_EXE);
+}
 
 /**
  * The program that will do the packing: whichever of the two the settings chose, at wherever the

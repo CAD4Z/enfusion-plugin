@@ -112,10 +112,16 @@ async function pack(step: PackStep): Promise<StepOutcome> {
       await pause(step.pauseMs);
     }
 
-    // Only what the builder appends this run is this addon's, where it appends at all.
+    // Only what the builder appends this run is this addon's, where it appends at all — and where
+    // it rewrites the file instead, only a file it has actually rewritten is this run's at all.
+    // A builder that never started leaves the log some earlier run wrote, and reading that would
+    // report a build that never happened by the words of one that did.
     const from = step.log.appends ? await sizeOf(step.log.path) : 0;
+    const before = await writtenAt(step.log.path);
+
     await runBuilder(step.command);
-    log = await readFrom(step.log.path, from);
+
+    log = (await writtenAt(step.log.path)) === before ? '' : await readFrom(step.log.path, from);
 
     if (await exists(step.pbo)) {
       return { step, state: 'done', log, failure: undefined };
@@ -126,7 +132,13 @@ async function pack(step: PackStep): Promise<StepOutcome> {
     step,
     state: 'failed',
     log,
-    failure: `${step.subject} was not built. See ${step.log.path}`,
+    // A builder that wrote nothing did not run, and sending a developer to a log it never touched
+    // is sending them to somebody else's answer.
+    failure:
+      log === ''
+        ? `${step.subject} was not built, and the builder wrote nothing to ${step.log.path}. ` +
+          'Check that the builder setting names the program and not the folder holding it.'
+        : `${step.subject} was not built. See ${step.log.path}`,
   };
 }
 
@@ -233,6 +245,15 @@ async function readFrom(path: string, from: number): Promise<string> {
     return '';
   } finally {
     await file?.close();
+  }
+}
+
+/** When the file was last written, or 0 where there is none: what tells this run's log from a past one. */
+async function writtenAt(path: string): Promise<number> {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return 0;
   }
 }
 

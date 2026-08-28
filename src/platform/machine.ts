@@ -6,6 +6,12 @@
  * the paths in the first place — the ordinary machine needs nothing typed at all. A key that is
  * not there is an empty value: `reg` exits non-zero for a missing key just as it does for a
  * missing registry, and neither is worth failing a scan over.
+ *
+ * DayZ and DayZ Tools have a second place to be found: Steam, which is where both of them are
+ * installed and which knows where it put them. It is asked when the registry answered with a path
+ * nothing is at — a library folder the app was moved out of, a key another user wrote — because a
+ * stale answer and no answer are worth the same to a build. What the developer typed is never
+ * second-guessed this way: a setting that is filled in is the last word on where the thing is.
  */
 
 import { execFile } from 'node:child_process';
@@ -21,6 +27,14 @@ import {
   environmentPaths,
 } from '../mods/machine';
 import { registryValue } from '../mods/registry';
+import {
+  STEAM_APP,
+  appManifestPath,
+  appPath,
+  installDirOf,
+  libraryFoldersPath,
+  libraryOf,
+} from '../mods/steam';
 
 const run = promisify(execFile);
 
@@ -32,6 +46,7 @@ const run = promisify(execFile);
 export async function readMachineSettings(reread = false): Promise<MachineSettings> {
   if (reread) {
     answered.clear();
+    steamed.clear();
   }
 
   const settings = vscode.workspace.getConfiguration();
@@ -41,14 +56,15 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
   };
 
   return {
-    dayz: text(SETTING.dayz) || (await fromRegistry(DAYZ)),
+    dayz: text(SETTING.dayz) || (await installed(DAYZ, STEAM_APP.dayz)),
     executable: text(SETTING.executable),
-    dayzTools: text(SETTING.dayzTools) || (await fromRegistry(DAYZ_TOOLS)),
+    dayzTools: text(SETTING.dayzTools) || (await installed(DAYZ_TOOLS, STEAM_APP.dayzTools)),
     pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
     privateKey: text(SETTING.privateKey),
     workDrive: text(SETTING.workDrive),
     workDriveLetter: text(SETTING.workDriveLetter),
     filePatchingRoot: text(SETTING.filePatchingRoot),
+    profiles: text(SETTING.profiles),
     builder: builderOf(text(SETTING.builder)),
   };
 }
@@ -100,11 +116,90 @@ const PBOPROJECT: readonly RegistryValue[] = [
 ];
 
 /**
+ * Where Steam is, which is the way to everything Steam installed. The per-user key holds it in
+ * forward slashes and lower case, the machine-wide one the way Windows writes a path; both are
+ * the same folder, and neither is a folder anything here cares about beyond reading one file in.
+ */
+const STEAM: readonly RegistryValue[] = [
+  { key: 'HKCU\\SOFTWARE\\Valve\\Steam', name: 'SteamPath' },
+  { key: 'HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam', name: 'InstallPath' },
+  { key: 'HKLM\\SOFTWARE\\Valve\\Steam', name: 'InstallPath' },
+];
+
+/**
+ * Where an app is, out of the registry first and Steam behind it. The registry's answer wins while
+ * it points at something; a path nothing is at is worth no more than no path, so Steam is asked
+ * before it is settled for — and it is settled for in the end, because a wrong path a developer
+ * can see in the log beats an empty one that says nothing at all.
+ */
+async function installed(candidates: readonly RegistryValue[], appId: string): Promise<string> {
+  const recorded = await fromRegistry(candidates);
+  if (recorded !== '' && (await exists(recorded))) {
+    return recorded;
+  }
+
+  const found = await fromSteam(appId);
+
+  return found === '' ? recorded : found;
+}
+
+/**
+ * The app's folder as Steam has it: the library its own list says holds the app, and the folder
+ * name the app's manifest says it was installed under — `installdir` is not always the app's name.
+ * Every step is a file that may not be there, and any of them missing means simply "not through
+ * Steam, then".
+ */
+async function fromSteam(appId: string): Promise<string> {
+  const remembered = steamed.get(appId);
+  if (remembered !== undefined) {
+    return remembered;
+  }
+
+  const found = await lookUpSteam(appId);
+  steamed.set(appId, found);
+
+  return found;
+}
+
+async function lookUpSteam(appId: string): Promise<string> {
+  const steam = windowsish(await fromRegistry(STEAM));
+  if (steam === '') {
+    return '';
+  }
+
+  const library = libraryOf(await readText(libraryFoldersPath(steam)), appId);
+  if (library === undefined) {
+    return '';
+  }
+
+  const installDir = installDirOf(await readText(appManifestPath(library, appId)));
+
+  return installDir === undefined ? '' : appPath(library, installDir);
+}
+
+/** Steam writes its own path in forward slashes; everything downstream of here is a Windows path. */
+function windowsish(path: string): string {
+  return path.replace(/\//g, '\\');
+}
+
+/** A file that is not there reads as empty, which every reader here treats as "nothing said". */
+async function readText(path: string): Promise<string> {
+  try {
+    return new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(path)));
+  } catch {
+    return '';
+  }
+}
+
+/**
  * An answer, once given, holds until a refresh asks again: an installation does not move under the
  * editor, and a key that is not there stays not there — spawning `reg` for it on every file event
  * would be the same answer at a price.
  */
 const answered = new Map<string, string>();
+
+/** The same, for what Steam answered: three file reads per app, and the same answer every time. */
+const steamed = new Map<string, string>();
 
 async function fromRegistry(candidates: readonly RegistryValue[]): Promise<string> {
   if (process.platform !== 'win32') {

@@ -39,11 +39,20 @@ export function platformRefusal(): string | undefined {
     : 'A work drive is a Windows drive letter, and this machine is not Windows.';
 }
 
-/** Where the letter points now, against where the settings say it should. */
+/**
+ * Where the letter points now, against where the settings say it should.
+ *
+ * With no folder set, the one the drive is already up from is taken as the setting: a work drive
+ * that DayZ Tools or a `subst` in somebody's startup script put up is the work drive of this
+ * machine, and asking a developer to type its path back in so that the extension will admit it
+ * exists is asking for nothing. Only a machine with neither — no setting and no drive — has
+ * nothing to mount, and that is the one case the buttons refuse over.
+ */
 export async function readWorkDrive(settings: MachineSettings): Promise<WorkDrive> {
   const letter = driveLetterOf(settings.workDriveLetter);
+  const at = mountedAt(await mounts(), letter);
 
-  return workDriveOf(letter, settings.workDrive, mountedAt(await mounts(), letter));
+  return workDriveOf(letter, settings.workDrive === '' ? at : settings.workDrive, at);
 }
 
 /**

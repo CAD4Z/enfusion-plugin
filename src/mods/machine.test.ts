@@ -8,6 +8,7 @@ import {
   environmentPaths,
   gameExecutableOf,
   isWanting,
+  pboProjectExecutableOf,
 } from './machine';
 
 const SETTINGS: MachineSettings = {
@@ -19,6 +20,7 @@ const SETTINGS: MachineSettings = {
   workDrive: 'F:\\DayZ\\Workdrive',
   workDriveLetter: 'P:',
   filePatchingRoot: '',
+  profiles: '',
   builder: 'pboProject',
 };
 
@@ -155,6 +157,31 @@ test('a path is the same path however it was typed, which on Windows is any way 
   );
 
   assert.equal(environment[0]?.state, 'ok');
+});
+
+/**
+ * The mistake this exists for is the folder. The same registry key Mikero's installer writes the
+ * executable to holds the folder as well, and the folder is what a person reaches for when asked
+ * where a program is. Left as it was typed it does not fail as a program that is not there:
+ * `start` hands a folder to the shell, which opens it in Explorer and packs nothing.
+ */
+test('a builder path that names no executable is taken as the folder holding one', () => {
+  const folder = 'C:\\Program Files (x86)\\Mikero\\DePboTools\\bin';
+  const exe = folder + '\\pboProject.exe';
+
+  assert.equal(pboProjectExecutableOf(folder), exe);
+  assert.equal(pboProjectExecutableOf(folder + '\\'), exe);
+  assert.equal(builderExecutableOf({ ...SETTINGS, pboProject: folder }), exe);
+});
+
+test('a builder path that names an executable is left exactly as it was typed', () => {
+  assert.equal(pboProjectExecutableOf(SETTINGS.pboProject), SETTINGS.pboProject);
+  // A copy under another name is still the program, and not a folder to look inside.
+  assert.equal(pboProjectExecutableOf('C:\\tools\\pbo.EXE'), 'C:\\tools\\pbo.EXE');
+});
+
+test('a builder nobody named stays unnamed rather than becoming a bare file name', () => {
+  assert.equal(pboProjectExecutableOf(''), '');
 });
 
 test('a builder the settings do not name is the one most machines have', () => {
