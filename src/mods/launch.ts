@@ -30,6 +30,7 @@ import { sameName } from './config';
 import type { Launch, Run, Target } from './enf';
 import type { MachineSettings } from './machine';
 import { resolveWindows, samePath, windowsPath } from './paths';
+import { FORCED_SCRIPT_DEBUG_PORT, SCRIPT_DEBUG_HOST } from './scriptDebug';
 import type { LinkFact, WorkDrive } from './workDrive';
 
 /** Where the run folders go when the settings name no place of their own. */
@@ -348,9 +349,27 @@ export interface LaunchInput {
    * rather than looked up — the same way the environment is built in `machine.ts`.
    */
   readonly found: readonly string[];
+  /**
+   * The port each role's process is told to open its script debugger connection on, which is the
+   * port a listener of ours is already bound to. Handed in for the same reason the rest of this
+   * is: which port was free is a fact about the machine, and a plan does not go and find out.
+   */
+  readonly debugPorts: Readonly<Record<LaunchRole, number>>;
 }
 
-export type LaunchRole = 'client' | 'server';
+/**
+ * Which of a launch's processes this is.
+ *
+ * `client2` is a second client on the same machine, and it is a role of its own rather than a
+ * second `client` because the engine treats it as one: told `-client2`, it dials the debugger on
+ * a port of its own, so the two are told apart by the socket their log arrives on. It keeps its
+ * own profile for the same reason a server does — two processes writing one profile write over
+ * each other's settings and logs.
+ *
+ * It is never part of what a target puts up. A second client is asked for while the first is
+ * already playing, which is a button rather than a plan.
+ */
+export type LaunchRole = 'client' | 'server' | 'client2';
 
 /** One process to start, and the working directory that makes file patching find the sources. */
 export interface LaunchProcess {
@@ -439,6 +458,9 @@ const SERVER_CONFIG = 'server.cfg';
 const PROFILE_LAYERS: Readonly<Record<LaunchRole, readonly string[]>> = {
   client: ['Global', 'Dev', 'Client'],
   server: ['Global', 'Dev', 'Server'],
+  // The same layers as the first client, in a folder of its own: what differs between the two is
+  // which machine they are signed in from, not what the mod wants a client to be configured like.
+  client2: ['Global', 'Dev', 'Client'],
 };
 
 /** The server's profile takes one more: what belongs to the world this target is about. */
@@ -477,10 +499,7 @@ export function launchPathsOf(target: LaunchTarget, mods: readonly LaunchMod[]):
   const built =
     modsDirectoryOf(target) === ''
       ? []
-      : [
-          ...mods.flatMap((mod) => pbosOf(target, mod)),
-          ...thirdPartyOf(target, roles).map((name) => builtModOf(target, name)),
-        ];
+      : loadedNamesOf(target, roles).flatMap((name) => builtPathsOf(target, mods, name));
 
   const server = roles.includes('server')
     ? [...serverConfigsOf(target, mods), missionTemplateOf(target, mods)]
@@ -496,8 +515,16 @@ export function launchPathsOf(target: LaunchTarget, mods: readonly LaunchMod[]):
  * A refusal leaves no steps at all — half a launch is a game that comes up without the mod it was
  * launched for, which is the failure this exists to prevent rather than to cause.
  */
-export function launchPlanOf(input: LaunchInput): LaunchPlan {
-  const roles = rolesOf(input.target.run);
+export function launchPlanOf(
+  input: LaunchInput,
+  /**
+   * Which of the target's processes to plan, where that is not all of them. The second client is
+   * the one caller that asks: it is added to a launch that is already up, so it wants the profile
+   * and the command line of one role and none of the rest.
+   */
+  only?: readonly LaunchRole[],
+): LaunchPlan {
+  const roles = only ?? rolesOf(input.target.run);
   const patched = filePatchingRootOf(input.runRoot);
   const refusals = refusalsOf(input, roles);
   if (refusals.length > 0) {
@@ -522,12 +549,16 @@ export function launchPlanOf(input: LaunchInput): LaunchPlan {
   const profile = (role: LaunchRole): string => profileOf(input, role);
   const mission = missionOf(input);
   const server = roles.includes('server');
+  // An addition to a launch that is already up makes nothing the launch already made. The run
+  // folder is there, its links are made, and the game is holding the files that were copied into
+  // it — copying them again is refused by Windows, which is exactly how this was found.
+  const addition = only !== undefined;
 
   return {
     refusals: [],
-    warnings: warningsOf(input, filePatching, roles),
-    filePatching,
-    folders: [patched, ...roles.map(profile), ...(server ? [mission] : [])],
+    warnings: addition ? [] : warningsOf(input, filePatching, roles),
+    filePatching: addition ? nothing(patched) : filePatching,
+    folders: [...(addition ? [] : [patched]), ...roles.map(profile), ...(server ? [mission] : [])],
     copies: [
       ...roles.flatMap((role) => profileCopiesOf(input, role, profile(role))),
       ...(server ? missionCopiesOf(input, mission) : []),
@@ -535,7 +566,7 @@ export function launchPlanOf(input: LaunchInput): LaunchPlan {
     processes: roles.map((role) =>
       role === 'server'
         ? serverProcessOf(input, profile('server'), mission)
-        : clientProcessOf(input, profile('client')),
+        : clientProcessOf(input, profile(role), role),
     ),
   };
 }
@@ -623,19 +654,24 @@ function unbuiltOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
   const found = foundOf(input);
   const said: string[] = [];
 
-  for (const mod of input.mods) {
-    const missing = pbosOf(input.target, mod).filter((pbo) => !found.has(samePath(pbo)));
-    if (missing.length > 0) {
-      said.push(`${mod.name} is not built: nothing is at ${missing[0]}. Build it and launch again.`);
-    }
-  }
+  for (const name of loadedNamesOf(input.target, roles)) {
+    const ours = ourModOf(input.mods, name);
 
-  // A third-party mod is known by the name of its folder and nothing else — no sources, no addon
-  // names — so the folder being there is the whole of what can be asked about it.
-  for (const name of thirdPartyOf(input.target, roles)) {
-    const built = builtModOf(input.target, name);
-    if (!found.has(samePath(built))) {
-      said.push(`${atOf(name)} is not in the mods directory: nothing is at ${built}.`);
+    // A third-party mod is known by the name of its folder and nothing else — no sources, no addon
+    // names — so the folder being there is the whole of what can be asked about it.
+    if (ours === undefined) {
+      const built = builtModOf(input.target, name);
+      if (!found.has(samePath(built))) {
+        said.push(`${atOf(name)} is not in the mods directory: nothing is at ${built}.`);
+      }
+      continue;
+    }
+
+    const missing = pbosOf(input.target, ours).filter((pbo) => !found.has(samePath(pbo)));
+    if (missing.length > 0) {
+      said.push(
+        `${ours.name} is not built: nothing is at ${missing[0]}. Build it and launch again.`,
+      );
     }
   }
 
@@ -714,17 +750,33 @@ function warningsOf(
   return said;
 }
 
-function clientProcessOf(input: LaunchInput, profile: string): LaunchProcess {
+/**
+ * A client, and — where the role says so — the second one.
+ *
+ * The second differs in three things and nothing else: `-client2`, which is what makes the engine
+ * meet it on a debugger port of its own; a profile of its own, because two clients writing one
+ * profile write over each other; and it always joins rather than falling back to an offline
+ * mission, since it is only ever started to sit beside a game that is already up.
+ */
+function clientProcessOf(
+  input: LaunchInput,
+  profile: string,
+  role: 'client' | 'client2',
+): LaunchProcess {
+  const second = role === 'client2';
+
   return {
-    role: 'client',
-    what: `Starting the client for ${input.target.name}`,
+    role,
+    what: `Starting the ${second ? 'second client' : 'client'} for ${input.target.name}`,
     program: input.game.executable,
     arguments: [
       ...CLIENT_ARGUMENTS,
+      ...(second ? ['-client2'] : []),
+      ...scriptDebugOf(input, role),
       `-profiles=${profile}`,
       ...listArgumentOf('-mod', loadedOf(input)),
-      ...joinOf(input),
-      ...offlineMissionOf(input),
+      ...(second ? joiningOf() : joinOf(input)),
+      ...(second ? [] : offlineMissionOf(input)),
     ],
     cwd: filePatchingRootOf(input.runRoot),
   };
@@ -741,6 +793,7 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
     program: input.game.executable,
     arguments: [
       ...SERVER_ARGUMENTS,
+      ...scriptDebugOf(input, 'server'),
       `-port=${DEFAULT_PORT}`,
       `-config=${serverConfigOf(input) ?? ''}`,
       `-profiles=${profile}`,
@@ -750,6 +803,30 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
     ],
     cwd: filePatchingRootOf(input.runRoot),
   };
+}
+
+/**
+ * Where the process is to dial its script debugger, which is a listener of ours on this machine.
+ *
+ * The host is given as a number rather than left to the default `localhost`, because the default
+ * goes through a resolver and the engine's connect is IPv4 only — a machine whose `localhost`
+ * answers `::1` first would spend the whole launch failing to connect to us.
+ *
+ * The port is only said to a role that is listened to. A server writes over whatever
+ * `-debuggerPort` gave it the moment it knows it is a server, so telling it a port would be a line
+ * on the command line that means nothing and reads as though it does. See
+ * `FORCED_SCRIPT_DEBUG_PORT`.
+ *
+ * Each role is met on its own port either way, so which process is talking is a fact about which
+ * socket it came in on rather than something to work out. The connection does say its process id,
+ * which is worth having as a check, but it is not what the two are told apart by.
+ */
+function scriptDebugOf(input: LaunchInput, role: LaunchRole): string[] {
+  const host = `-debugger=${SCRIPT_DEBUG_HOST}`;
+
+  return FORCED_SCRIPT_DEBUG_PORT[role] === undefined
+    ? [host, `-debuggerPort=${input.debugPorts[role]}`]
+    : [host];
 }
 
 /**
@@ -763,9 +840,12 @@ function listArgumentOf(name: string, paths: readonly string[]): string[] {
 
 /** The client joins the server this same launch put up, which is what makes `both` one launch. */
 function joinOf(input: LaunchInput): string[] {
-  return input.target.run === 'both'
-    ? [`-connect=${LOCAL_ADDRESS}`, `-port=${DEFAULT_PORT}`]
-    : [];
+  return input.target.run === 'both' ? joiningOf() : [];
+}
+
+/** Where to find the server: on this machine, on the port a dev server has always answered on. */
+function joiningOf(): string[] {
+  return [`-connect=${LOCAL_ADDRESS}`, `-port=${DEFAULT_PORT}`];
 }
 
 /**
@@ -779,23 +859,47 @@ function offlineMissionOf(input: LaunchInput): string[] {
 }
 
 /**
- * The mods every process of this launch loads: the third-party ones first and the workspace's own
- * after them, which is load order — a mod is loaded after what it is built on. The workspace's own
- * are already in that order, because the model read it off the `requiredAddons` graph.
+ * The mods every process of this launch loads: the list the manifest wrote, in the order it wrote
+ * it, and nothing else.
+ *
+ * Nothing of the workspace is added to it. A mod of ours reaches the command line because it was
+ * named in `clientMods` or `serverMods`, exactly the way a third-party one does. It was once the
+ * other way round — every mod of the workspace was appended to whatever the manifest said — and
+ * that had the two faults a developer meets in the same afternoon: naming one of ours to move it
+ * earlier loaded it twice instead of moving it, and a workspace that held a mod no launch wanted
+ * had no way of leaving it out.
  */
 function loadedOf(input: LaunchInput): string[] {
-  return pathsOf(input.target, [
-    ...input.target.launch.clientMods,
-    ...input.mods.map((mod) => mod.name),
-  ]);
+  return pathsOf(input.target, input.target.launch.clientMods);
 }
 
-/** The third-party mods this launch loads, which is a longer list where a server is put up. */
-function thirdPartyOf(target: LaunchTarget, roles: readonly LaunchRole[]): string[] {
+/** Every mod this launch names, which is a longer list where a server is put up. */
+function loadedNamesOf(target: LaunchTarget, roles: readonly LaunchRole[]): string[] {
   return [
     ...target.launch.clientMods,
     ...(roles.includes('server') ? target.launch.serverMods : []),
   ];
+}
+
+/**
+ * What says a named mod is there to load: its pbos where the workspace holds its sources, and the
+ * folder itself where it does not.
+ *
+ * One of ours is worth the stricter question. The workspace knows what it packs into, so a mod
+ * that was never built can be told from one that was, and named by the pbo that is missing rather
+ * than by a folder — which is the difference between a developer building it and a developer
+ * wondering what the launch wants. A mod that is only a folder name in the mods directory can be
+ * asked nothing else.
+ */
+function builtPathsOf(target: LaunchTarget, mods: readonly LaunchMod[], name: string): string[] {
+  const ours = ourModOf(mods, name);
+
+  return ours === undefined ? [builtModOf(target, name)] : pbosOf(target, ours);
+}
+
+/** The workspace's own mod a name refers to, whether or not it was written with its `@`. */
+function ourModOf(mods: readonly LaunchMod[], name: string): LaunchMod | undefined {
+  return mods.find((mod) => sameName(atOf(mod.name), atOf(name)));
 }
 
 /** Every one of them as the folder the game is pointed at. */

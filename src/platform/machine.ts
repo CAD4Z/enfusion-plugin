@@ -65,6 +65,11 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
     workDriveLetter: text(SETTING.workDriveLetter),
     filePatchingRoot: text(SETTING.filePatchingRoot),
     profiles: text(SETTING.profiles),
+    secondClient: {
+      account: text(SETTING.secondAccount),
+      sandboxie: text(SETTING.sandboxie) || (await fromRegistry(SANDBOXIE)),
+      steam: text(SETTING.steam) || windowsish(await fromRegistry(STEAM)),
+    },
     builder: builderOf(text(SETTING.builder)),
   };
 }
@@ -124,6 +129,30 @@ const STEAM: readonly RegistryValue[] = [
   { key: 'HKCU\\SOFTWARE\\Valve\\Steam', name: 'SteamPath' },
   { key: 'HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam', name: 'InstallPath' },
   { key: 'HKLM\\SOFTWARE\\Valve\\Steam', name: 'InstallPath' },
+];
+
+/**
+ * Where Sandboxie is, which the second client is run inside of.
+ *
+ * It records nothing of its own — no `HKLM\SOFTWARE\Sandboxie`, per user or otherwise — so what is
+ * read is what its installer wrote for the Programs and Features list, and that is the folder.
+ * Sandboxie-Plus first, since that is the one still being released; the key the classic Sandboxie
+ * wrote is behind it, and a machine with neither answers with nothing, which is a second client
+ * that says what to install rather than one that fails at a path.
+ */
+const SANDBOXIE: readonly RegistryValue[] = [
+  {
+    key: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Sandboxie-Plus_is1',
+    name: 'InstallLocation',
+  },
+  {
+    key: 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Sandboxie-Plus_is1',
+    name: 'InstallLocation',
+  },
+  {
+    key: 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Sandboxie',
+    name: 'InstallLocation',
+  },
 ];
 
 /**
@@ -242,3 +271,4 @@ async function exists(path: string): Promise<boolean> {
     return false;
   }
 }
+

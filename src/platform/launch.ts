@@ -91,11 +91,30 @@ export async function prepareLaunch(plan: LaunchPlan): Promise<void> {
 
   for (const copy of plan.filePatching.copies) {
     await mkdir(windowsFolder(copy.to), { recursive: true });
-    await copyFile(copy.from, copy.to);
+    await carry(copy.from, copy.to);
   }
 
   for (const copy of plan.copies) {
     await layer(copy.from, copy.to);
+  }
+}
+
+/**
+ * One file of the game root carried into the run folder — and left alone where a game already
+ * running has it locked and a copy of it is already there.
+ *
+ * Windows refuses to overwrite a file another process holds open, and a launch started while the
+ * last one is still up is exactly when that happens: what is being copied is the same bytes as the
+ * copy that is already there, so refusing to launch over it would be refusing over nothing. A
+ * missing destination is a different matter and is left to fail.
+ */
+async function carry(from: string, to: string): Promise<void> {
+  try {
+    await copyFile(from, to);
+  } catch (error) {
+    if (!(await exists(to))) {
+      throw error;
+    }
   }
 }
 
@@ -127,8 +146,15 @@ export interface GameProcess {
  * writes what it has to say to its `.RPT` in the profile, and a pipe nobody reads is a pipe that
  * fills up and stops the process it belongs to.
  */
-export function startGame(process_: LaunchProcess): GameProcess {
-  const child: ChildProcess = spawn(process_.program, [...process_.arguments], {
+export function startGame(process_: LaunchProcess, prefix: readonly string[] = []): GameProcess {
+  // A prefix is another program that starts ours: Sandboxie's `Start.exe`, which is what gives the
+  // second client a Steam of its own. It goes in front whole, so the thing that is actually spawned
+  // is that program and the game is its argument — and it is told to wait, so that the process
+  // handle kept here is one that lives as long as the game does. See `src/mods/sandbox.ts`.
+  const [program = process_.program, ...before] = prefix;
+  const argued = prefix.length === 0 ? [] : [...before, process_.program];
+
+  const child: ChildProcess = spawn(program, [...argued, ...process_.arguments], {
     cwd: process_.cwd,
     detached: true,
     stdio: 'ignore',
@@ -153,6 +179,7 @@ export function startGame(process_: LaunchProcess): GameProcess {
     kill: () => kill(child),
   };
 }
+
 
 /**
  * `taskkill /T` rather than `ChildProcess.kill`: the game spawns a crash reporter and a BattlEye

@@ -128,6 +128,9 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'launch':
         this.report(runCommand(LAUNCH_COMMAND.start));
         return;
+      case 'launchSecondClient':
+        this.report(runCommand(LAUNCH_COMMAND.secondClient));
+        return;
       case 'workDrive':
         this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
         return;
@@ -277,6 +280,15 @@ function toolsOf(drive: WorkDrive, found: Discovery): ToolsView {
   return {
     start: {
       title: 'Put the game up: the launch target chosen on the status bar',
+      refusal:
+        targets.length === 0
+          ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
+          : undefined,
+    },
+    secondClient: {
+      title:
+        'Add a second client to the launch that is up: its own profile, its own debugger port, ' +
+        'and whatever the machine settings put in front of it',
       refusal:
         targets.length === 0
           ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`

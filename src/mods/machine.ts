@@ -40,7 +40,33 @@ export interface MachineSettings {
   readonly filePatchingRoot: string;
   /** Where the profiles are built; empty puts them in the run folder. See `profilesRootOf`. */
   readonly profiles: string;
+  /**
+   * What the second client needs to be a second client: which Steam account it signs in as, and
+   * the two installations that let it.
+   *
+   * On one machine two clients are two Steam accounts, and one signed-in account per Windows
+   * session is all Steam allows — so the second is run inside a Sandboxie box with a Steam of its
+   * own. See `src/mods/sandbox.ts`, which is where all of that is worked out.
+   */
+  readonly secondClient: SecondClient;
   readonly builder: Builder;
+}
+
+/**
+ * Who the second client signs in as, and where the programs that let it are.
+ *
+ * An empty `account` is the ordinary case on a machine not set up for two: the second client is
+ * then simply another client, which is worth having for offline work and cannot join a server the
+ * first one is already signed in to. It is also the only one of the three a developer types —
+ * Sandboxie and Steam both record where they are, and are read from there.
+ */
+export interface SecondClient {
+  /** The Steam account the second client signs in as; empty is a machine with only one. */
+  readonly account: string;
+  /** Sandboxie-Plus's folder — the one holding `Start.exe` and `SbieIni.exe`. */
+  readonly sandboxie: string;
+  /** Steam's folder — the one holding `steam.exe`. */
+  readonly steam: string;
 }
 
 /** The settings, by the ids the editor knows them under, so the panel can open the right one. */
@@ -53,6 +79,9 @@ export const SETTING = {
   workDriveLetter: 'enfusion.workDrive.letter',
   filePatchingRoot: 'enfusion.filePatching.root',
   profiles: 'enfusion.launch.profiles',
+  secondAccount: 'enfusion.launch.secondAccount',
+  sandboxie: 'enfusion.sandboxie.path',
+  steam: 'enfusion.steam.path',
   builder: 'enfusion.builder',
   pboProject: 'enfusion.pboProject.path',
 } as const;

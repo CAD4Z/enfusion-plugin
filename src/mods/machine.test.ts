@@ -21,6 +21,7 @@ const SETTINGS: MachineSettings = {
   workDriveLetter: 'P:',
   filePatchingRoot: '',
   profiles: '',
+  secondClient: { account: '', sandboxie: '', steam: '' },
   builder: 'pboProject',
 };
 

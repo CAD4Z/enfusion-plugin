@@ -102,6 +102,7 @@ function toolsOf(tools: ToolsView): HTMLElement {
 
   row.append(
     tool('start', tools.start, 'Start', { type: 'launch' }),
+    tool('secondClient', tools.secondClient, undefined, { type: 'launchSecondClient' }),
     tool('build', tools.build, undefined, { type: 'buildAll' }),
     div('spacer'),
     ...tools.workDrive.map((action) =>

@@ -2,7 +2,7 @@
   "name": "enfusion-plugin",
   "displayName": "Enfusion",
   "description": "Enfusion mod tooling for VS Code: the mods of the open workspace, without the Workbench",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "publisher": "hurfy",
   "license": "MIT",
   "private": true,
@@ -116,6 +116,12 @@
         "title": "Start the Game",
         "category": "Enfusion",
         "icon": "$(debug-start)"
+      },
+      {
+        "command": "enfusion.launchSecondClient",
+        "title": "Add a Second Client",
+        "category": "Enfusion",
+        "icon": "$(multiple-windows)"
       }
     ],
     "menus": {
@@ -255,6 +261,27 @@
           "scope": "machine",
           "order": 10,
           "markdownDescription": "`pboProject.exe`, or the folder holding it — a path that names no executable is taken as the folder and completed. Left empty, it is read from the registry, which is where its installer put it."
+        },
+        "enfusion.launch.secondAccount": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 11,
+          "markdownDescription": "The Steam account the second client signs in as.\n\nTwo clients on one machine are two Steam accounts, and Steam signs one account in per Windows session — so the second client is run inside the Sandboxie box `steam2`, which has a Steam of its own. All that is needed for that is Sandboxie-Plus installed: the box is made the first time the second client is asked for, with Sandboxie's own defaults plus `NeverRemove` and `AutoDelete=n`, so that the sign-in inside it survives and is asked for once rather than once a launch. The first press shows that Steam's login window; every press after it goes straight to the game.\n\nLeft empty, the second client is simply another client: useful for offline missions, and unable to join a server the first one is already signed in to."
+        },
+        "enfusion.sandboxie.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 12,
+          "markdownDescription": "Where Sandboxie-Plus is installed — the folder holding `Start.exe` and `SbieIni.exe`. Left empty, it is read from the registry, which is where its installer put it. Only the second client uses it, and only when `enfusion.launch.secondAccount` names an account."
+        },
+        "enfusion.steam.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 13,
+          "markdownDescription": "Where Steam is installed — the folder holding `steam.exe`. Left empty, it is read from the registry. Only the second client uses it: it is the same installation, run sandboxed and signed in as another account."
         }
       }
     },

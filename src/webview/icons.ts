@@ -8,7 +8,7 @@
  * button it is everywhere else in the editor.
  */
 
-export type IconName = 'start' | 'build' | 'mount' | 'unmount' | 'link';
+export type IconName = 'start' | 'secondClient' | 'build' | 'mount' | 'unmount' | 'link';
 
 /** One path of an icon; `evenOdd` is the fill rule the shape with a hole in it needs. */
 export interface IconPath {
@@ -17,6 +17,13 @@ export interface IconPath {
 }
 
 export const ICON: Readonly<Record<IconName, readonly IconPath[]>> = {
+  // Two overlapping windows: a second of the thing that is already running. Codicon multiple-windows.
+  secondClient: [
+    {
+      d: 'M5 2h9.5l.5.5v7l-.5.5H13V9h1V3H5.5L5 2.5V2zM2.5 4H12l.5.5v9l-.5.5H2.5l-.5-.5v-9l.5-.5zM3 13h9V5H3v8z',
+      evenOdd: true,
+    },
+  ],
   // debug-start
   start: [
     {

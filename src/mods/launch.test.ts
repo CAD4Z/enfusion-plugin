@@ -34,6 +34,8 @@ const CLIENT_ARGUMENTS: readonly string[] = [
   '-nopause',
   '-nosplash',
   '-window',
+  '-debugger=127.0.0.1',
+  '-debuggerPort=41000',
 ];
 
 /** And the server's. */
@@ -47,6 +49,8 @@ const SERVER_ARGUMENTS: readonly string[] = [
   '-nopause',
   '-nosplash',
   '-world=none',
+  // No `-debuggerPort`: a server writes over whatever it is given and dials 1001 regardless.
+  '-debugger=127.0.0.1',
 ];
 
 /**
@@ -410,40 +414,65 @@ test('a client target with no map comes up at the main menu rather than in a mis
 });
 
 /**
- * Load order, which is why the third-party mods come first: a mod is loaded after whatever it is
- * built on, and the workspace's own are already in the order the `requiredAddons` graph put them.
+ * Load order is the order that was written, ours and other people's alike. Nothing is appended to
+ * the list — which is what makes naming one of the workspace's own early a way of loading it
+ * early, rather than a way of loading it twice.
  */
-test('the third-party mods are handed to the client first, the workspace’s own after them', () => {
+test('the mods reach the command line in the order the list wrote them, ours among them', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
-      target: target({ launch: launch({ clientMods: ['@CF', 'Community-Online-Tools'] }) }),
+      target: target({
+        launch: launch({ clientMods: ['@CF', 'CADMap', 'Community-Online-Tools', 'CADCore'] }),
+      }),
     }),
   );
 
   assert.ok(
     plan.processes[0]?.arguments.includes(
-      '-mod=P:\\Mods\\@CF;P:\\Mods\\@Community-Online-Tools;P:\\Mods\\@CADCore;P:\\Mods\\@CADMap',
+      '-mod=P:\\Mods\\@CF;P:\\Mods\\@CADMap;P:\\Mods\\@Community-Online-Tools;P:\\Mods\\@CADCore',
     ),
     plan.processes[0]?.arguments.join(' '),
   );
 });
 
-/** The server runs the same mods the client does, plus the ones only a server ever loads. */
-test('the server mods reach -serverMod= and the workspace’s own stay out of it', () => {
+/**
+ * The thing the old behaviour made impossible. A workspace holds mods that not every launch wants
+ * — a navigation mod split into a client half and a server half is two of them — and a list that
+ * has everything added to it has no way of saying so.
+ */
+test('a mod of the workspace that no list names is not loaded at all', () => {
+  const plan = launchPlanOf(
+    input({
+      mods: [CORE, MAP],
+      target: target({ launch: launch({ clientMods: ['CADCore'] }) }),
+    }),
+  );
+  const said = plan.processes.flatMap((process_) => process_.arguments).join(' ');
+
+  assert.deepEqual(plan.refusals, []);
+  assert.ok(said.includes('-mod=P:\\Mods\\@CADCore'), said);
+  assert.ok(!said.includes('CADMap'), said);
+});
+
+/** The server runs the list the client does, plus the one only a server ever loads. */
+test('the server mods reach -serverMod= and the client’s list stays in -mod=', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
       target: target({
         run: 'both',
-        launch: launch({ clientMods: ['@CF'], serverMods: ['DayZ-Expansion-Licensed', '@VPPAdminTools'] }),
+        launch: launch({
+          clientMods: ['@CF', 'CADCore'],
+          serverMods: ['DayZ-Expansion-Licensed', '@VPPAdminTools'],
+        }),
       }),
     }),
   );
   const server = plan.processes.find((process_) => process_.role === 'server');
 
   assert.ok(
-    server?.arguments.includes('-mod=P:\\Mods\\@CF;P:\\Mods\\@CADCore;P:\\Mods\\@CADMap'),
+    server?.arguments.includes('-mod=P:\\Mods\\@CF;P:\\Mods\\@CADCore'),
     server?.arguments.join(' '),
   );
   assert.ok(
@@ -454,12 +483,78 @@ test('the server mods reach -serverMod= and the workspace’s own stay out of it
   );
 });
 
-/** An empty `-serverMod=` is not the same thing as no `-serverMod=`: the game takes it badly. */
-test('a mod list nobody filled in is left off the command line rather than passed empty', () => {
+/**
+ * The engine only half honours `-debuggerPort`: it reads the argument, then writes over it once it
+ * knows which process it is, and a server ends up on 1001 whatever it was told. So the client is
+ * given a port and the server is not given one at all — a command line that said otherwise would
+ * be a line that means nothing and reads as though it does.
+ */
+test('the client is told which debugger port to dial and the server is told none', () => {
   const plan = launchPlanOf(input({ target: target({ run: 'both' }) }));
+  const client = plan.processes.find((process_) => process_.role === 'client');
+  const server = plan.processes.find((process_) => process_.role === 'server');
+
+  assert.ok(client?.arguments.includes('-debuggerPort=41000'), client?.arguments.join(' '));
+  assert.ok(client?.arguments.includes('-debugger=127.0.0.1'), client?.arguments.join(' '));
+  assert.ok(
+    !server?.arguments.some((argument) => argument.startsWith('-debuggerPort=')),
+    server?.arguments.join(' '),
+  );
+  assert.ok(server?.arguments.includes('-debugger=127.0.0.1'), server?.arguments.join(' '));
+});
+
+/**
+ * The second client is not part of what a target puts up — it is asked for while the first is
+ * already playing — so it is planned on its own. What makes it a second rather than a repeat is
+ * `-client2`, which the engine reads to meet it on a debugger port of its own, and a profile it
+ * does not share with the first.
+ */
+test('a second client is planned alone, with -client2, its own profile and a server to join', () => {
+  const plan = launchPlanOf(input({ target: target({ run: 'both' }) }), ['client2']);
+
+  assert.deepEqual(plan.refusals, []);
+  // Nothing of the run folder is remade: it is there, its links are made, and the game that is
+  // already up holds the files that were copied into it.
+  assert.deepEqual(plan.filePatching.junctions, []);
+  assert.deepEqual(plan.filePatching.copies, []);
+  assert.deepEqual(plan.filePatching.remove, []);
+  assert.deepEqual(plan.folders, [`${RUN}\\profiles\\CADCore\\client2`]);
+  assert.deepEqual(plan.copies, [
+    { from: `${CORE.root}\\Profiles\\Global`, to: `${RUN}\\profiles\\CADCore\\client2` },
+    { from: `${CORE.root}\\Profiles\\Dev`, to: `${RUN}\\profiles\\CADCore\\client2` },
+    { from: `${CORE.root}\\Profiles\\Client`, to: `${RUN}\\profiles\\CADCore\\client2` },
+  ]);
+  assert.deepEqual(plan.processes, [
+    {
+      role: 'client2',
+      what: 'Starting the second client for Chernarus',
+      program: DIAG,
+      arguments: [
+        // No port of its own is said: the engine forces a `-client2` to 1002 whatever it is told.
+        ...CLIENT_ARGUMENTS.filter((argument) => !argument.startsWith('-debugger')),
+        '-client2',
+        '-debugger=127.0.0.1',
+        `-profiles=${RUN}\\profiles\\CADCore\\client2`,
+        '-mod=P:\\Mods\\@CADCore',
+        '-connect=127.0.0.1',
+        '-port=2302',
+      ],
+      cwd: `${RUN}\\game`,
+    },
+  ]);
+});
+/** An empty `-mod=` is not the same thing as no `-mod=`: the game takes it badly. */
+test('a mod list nobody filled in is left off the command line rather than passed empty', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'both', launch: launch({ clientMods: [], serverMods: [] }) }),
+      found: [`${CORE.root}\\server.cfg`, `${CORE.root}\\Missions\\CADCore.chernarusplus`],
+    }),
+  );
   const said = plan.processes.flatMap((process_) => process_.arguments);
 
   assert.deepEqual(plan.refusals, []);
+  assert.ok(!said.some((argument) => argument.startsWith('-mod=')), said.join(' '));
   assert.ok(!said.some((argument) => argument.startsWith('-serverMod=')), said.join(' '));
   assert.ok(!said.some((argument) => argument.endsWith('=')), said.join(' '));
 });
@@ -573,7 +668,13 @@ test('a server target with no world to load a mission of is refused', () => {
  * fails in a script error, and it reads as a bug in the mod rather than as a mod never built.
  */
 test('a mod that is not built stops the launch and is named', () => {
-  const plan = launchPlanOf(input({ mods: [CORE, MAP], found: [] }));
+  const plan = launchPlanOf(
+    input({
+      mods: [CORE, MAP],
+      target: target({ launch: launch({ clientMods: ['CADCore', 'CADMap'] }) }),
+      found: [],
+    }),
+  );
 
   assert.deepEqual(plan.refusals, [
     'CADCore is not built: nothing is at P:\\Mods\\@CADCore\\Addons\\CADCore.pbo. Build it and ' +
@@ -647,19 +748,28 @@ test('a world the target’s mod keeps no mission for is a warning, not a refusa
  * it: the pbo of everything it would load, and the server's two files where a server is put up.
  */
 test('the paths a launch asks the disk about are the built mods and the server’s own files', () => {
-  assert.deepEqual(launchPathsOf(target({ run: 'client' }), [CORE, MAP]), [
-    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
-    'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo',
-  ]);
-
   assert.deepEqual(
     launchPathsOf(
-      target({ run: 'both', configuredIn: 'F:\\Code\\cad4z', launch: launch({ clientMods: ['@CF'] }) }),
+      target({ run: 'client', launch: launch({ clientMods: ['CADCore', 'CADMap'] }) }),
+      [CORE, MAP],
+    ),
+    ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo', 'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo'],
+  );
+
+  // A mod of ours is asked about by its pbo and a third-party one by its folder, in the order the
+  // list named them rather than ours-first.
+  assert.deepEqual(
+    launchPathsOf(
+      target({
+        run: 'both',
+        configuredIn: 'F:\\Code\\cad4z',
+        launch: launch({ clientMods: ['@CF', 'CADCore'] }),
+      }),
       [CORE],
     ),
     [
-      'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
       'P:\\Mods\\@CF',
+      'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
       `${CORE.root}\\server.cfg`,
       'F:\\Code\\cad4z\\server.cfg',
       `${CORE.root}\\Missions\\CADCore.chernarusplus`,
@@ -861,6 +971,7 @@ function input(
     runRoot: RUN,
     present: new Map(),
     found: launchPathsOf(chosen, mods),
+    debugPorts: { client: 41000, server: 41001, client2: 41002 },
     ...over,
     game: {
       path: GAME,
@@ -887,10 +998,14 @@ function target(over: Partial<LaunchTarget> = {}): LaunchTarget {
   };
 }
 
+/**
+ * A launch loads what its lists name and nothing else, so the mod of the workspace every test is
+ * about is named here rather than arriving on its own.
+ */
 function launch(over: Partial<Launch> = {}): Launch {
   return {
     modsDirectory: 'P:\\Mods',
-    clientMods: [],
+    clientMods: ['CADCore'],
     serverMods: [],
     targets: [],
     ...over,
@@ -923,6 +1038,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
     workDriveLetter: 'P:',
     filePatchingRoot: '',
     profiles: '',
+    secondClient: { account: '', sandboxie: '', steam: '' },
     builder: 'pboProject',
     ...over,
   };

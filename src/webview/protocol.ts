@@ -32,6 +32,8 @@ export interface ActionView {
 /** The row of buttons above everything: start the game, build it, and put the work drive up. */
 export interface ToolsView {
   readonly start: ActionView;
+  /** The second client, which joins the launch that is already up rather than starting one. */
+  readonly secondClient: ActionView;
   readonly build: ActionView;
   readonly workDrive: readonly WorkDriveActionView[];
 }
@@ -96,6 +98,8 @@ export type PanelRequest =
     }
   /** Puts the game up: the target chosen on the status bar, the way F5 does. */
   | { readonly type: 'launch' }
+  /** Adds a second client to the launch that is up, with the Steam the machine settings name. */
+  | { readonly type: 'launchSecondClient' }
   /** Runs the work drive command of that action, which the palette runs the same way. */
   | { readonly type: 'workDrive'; readonly action: WorkDriveAction }
   /** Builds one addon, named the way the panel was given it. */

@@ -56,14 +56,14 @@
         },
         "clientMods": {
           "type": "array",
-          "description": "Third-party mods to hand the client, by the name of their folder in modsDirectory, with or without the leading @.",
+          "description": "Every mod the launch loads, in load order, by the name of its folder in modsDirectory, with or without the leading @. Both the client and the server are given this list as -mod=. Mods of this workspace are not added on their own: one is loaded because it is named here, the same as any other, so a mod the workspace holds and no launch wants is left out.",
           "items": {
             "type": "string"
           }
         },
         "serverMods": {
           "type": "array",
-          "description": "Third-party mods to hand the server, by the name of their folder in modsDirectory, with or without the leading @.",
+          "description": "The mods only the server loads, handed to it as -serverMod= on top of clientMods. Named the same way, and mods of this workspace are not added on their own here either.",
           "items": {
             "type": "string"
           }

@@ -16,6 +16,7 @@
 
 import * as vscode from 'vscode';
 import {
+  type LaunchRole,
   type LaunchTarget,
   filePatchingRootOf,
   launchPathsOf,
@@ -25,6 +26,9 @@ import {
   targetsOf,
 } from '../mods/launch';
 import { MANIFEST_FILE } from '../mods/model';
+import { windowsName } from '../mods/paths';
+import { scriptDebugNoteOf, scriptDebugSaidOf } from '../mods/scriptDebug';
+import { gamePrefixOf, sandboxPlanOf } from '../mods/sandbox';
 import {
   type GameProcess,
   localAppData,
@@ -35,6 +39,12 @@ import {
   startGame,
 } from '../platform/launch';
 import { readMachineSettings } from '../platform/machine';
+import { openSandbox, sandboxedGame } from '../platform/sandbox';
+import {
+  type ScriptDebugHandler,
+  type ScriptDebugPort,
+  openScriptDebugPort,
+} from '../platform/scriptDebug';
 import { readWorkDrive } from '../platform/workDrive';
 import { findMods, launchModsOf, targetSourcesOf } from '../platform/workspace';
 
@@ -44,7 +54,17 @@ export const LAUNCH_TYPE = 'enfusion';
 export const LAUNCH_COMMAND = {
   select: 'enfusion.selectTarget',
   start: 'enfusion.launch',
+  secondClient: 'enfusion.launchSecondClient',
 } as const;
+
+/**
+ * The request the second-client button turns into.
+ *
+ * It is asked of the session that is already running rather than done beside it, because the one
+ * thing a second client is for — its log, beside the first one's — belongs in the console that
+ * session owns, and nothing outside an adapter can write there.
+ */
+const SECOND_CLIENT_REQUEST = 'enfusionSecondClient';
 
 /** The fields a configuration of ours takes. Anything else is the manifest's business. */
 const CONFIGURATION_FIELDS: readonly string[] = ['type', 'request', 'name', 'target', 'noDebug'];
@@ -86,6 +106,7 @@ export function registerLaunch(
     }),
     vscode.commands.registerCommand(LAUNCH_COMMAND.select, () => bar.choose()),
     vscode.commands.registerCommand(LAUNCH_COMMAND.start, () => started.start()),
+    vscode.commands.registerCommand(LAUNCH_COMMAND.secondClient, () => addSecondClient()),
   );
 
   bar.refresh();
@@ -168,6 +189,27 @@ class Started {
       'The game is already up. Stop it before starting it again.',
     );
   }
+}
+
+/**
+ * The second client, asked of the launch that is up.
+ *
+ * There has to be one for the asking to mean anything: a second client is started to sit beside a
+ * game that is already playing, and it joins the server that launch put up. So a press with
+ * nothing running is a sentence rather than a second launch of its own.
+ */
+async function addSecondClient(): Promise<void> {
+  const session = vscode.debug.activeDebugSession;
+
+  if (session?.type !== LAUNCH_TYPE) {
+    await vscode.window.showWarningMessage(
+      'A second client joins the launch that is already up, so there has to be one: press Start ' +
+        'first, then this.',
+    );
+    return;
+  }
+
+  await session.customRequest(SECOND_CLIENT_REQUEST);
 }
 
 function targetOf(configuration: vscode.DebugConfiguration): string {
@@ -374,7 +416,7 @@ class Launcher {
   }
 
   /** The processes of the launch, running — or the sentence saying why none of them is. */
-  async start(id: string, say: (text: string) => void): Promise<GameProcess[] | string> {
+  async start(id: string, say: (text: string) => void): Promise<Launched | string> {
     // A launch is one of the two things that puts a path out of a `mod.enf` on a command line, so
     // like a build it waits until the developer has said the folder is theirs.
     if (!vscode.workspace.isTrusted) {
@@ -405,9 +447,23 @@ class Launcher {
       readFound(launchPathsOf(target, mods)),
     ]);
 
-    const plan = launchPlanOf({ target, mods, settings, drive, runRoot, game, present, found });
+    // Opened before the plan rather than after it, because the plan puts their numbers on the
+    // command lines it writes. A launch that is then refused closes them again.
+    const listening = await this.listen(say);
+    const plan = launchPlanOf({
+      target,
+      mods,
+      settings,
+      drive,
+      runRoot,
+      game,
+      present,
+      found,
+      debugPorts: portsOf(listening),
+    });
 
     if (plan.refusals.length > 0) {
+      close(listening);
       return plan.refusals.join(' ');
     }
 
@@ -424,16 +480,183 @@ class Launcher {
     );
 
     if (plan.processes.length === 0) {
+      close(listening);
       return `${target.id} puts nothing up.`;
     }
 
-    return plan.processes.map((process_) => {
+    const games = plan.processes.map((process_) => {
       const command = `${process_.program} ${process_.arguments.join(' ')}`;
       this.log.info(command);
       say(command);
 
       return startGame(process_);
     });
+
+    return { games, listening };
+  }
+
+  /**
+   * A second client for a launch that is already up: the same target, its own profile, its own
+   * debugger port, and the sandbox that gives it a Steam of its own.
+   *
+   * Everything it needs is read afresh rather than remembered from the launch it joins — the
+   * settings can have been edited since, and the run folder it is started in is the one on disk
+   * rather than the one the plan described an hour ago.
+   *
+   * The sandbox is brought up before anything else is made ready, and that order is the point.
+   * Making the box and waiting for a Steam to sign in takes as long as a developer takes to type a
+   * password, and neither the debugger ports nor the links in the run folder should be held open
+   * across that: what is opened here is opened for a client that is about to start.
+   */
+  async startSecond(id: string, say: (text: string) => void): Promise<Launched | string> {
+    if (!vscode.workspace.isTrusted) {
+      return `Starting a second client puts paths out of this workspace’s ${MANIFEST_FILE} on a
+        command line, so it needs the workspace to be trusted.`.replace(/\s+/g, ' ');
+    }
+
+    const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
+    const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
+    if (target === undefined) {
+      return `No launch target is called "${id}" any more.`;
+    }
+
+    // Where a machine is set up for two accounts, the box has to exist and its Steam has to be
+    // signed in before there is anywhere to start a client; where it is not, a second client is
+    // simply another client and there is nothing to put in front of it.
+    const sandbox = sandboxPlanOf(settings.secondClient);
+    if (sandbox.kind === 'wanting') {
+      return sandbox.said;
+    }
+
+    if (sandbox.kind === 'box') {
+      const failed = await openSandbox(sandbox.sandbox, say);
+      if (failed !== undefined) {
+        return failed;
+      }
+    }
+
+    const prefix = sandbox.kind === 'box' ? gamePrefixOf(sandbox.sandbox) : [];
+    const mods = launchModsOf(discovery);
+    const runRoot = runRootOf(settings.filePatchingRoot, localAppData(), vscode.workspace.name ?? '');
+    const [drive, game, present, found] = await Promise.all([
+      readWorkDrive(settings),
+      readGameRoot(settings),
+      readLinkFacts(filePatchingRootOf(runRoot)),
+      readFound(launchPathsOf(target, mods)),
+    ]);
+
+    const listening = await this.listen(say, ['client2']);
+    const plan = launchPlanOf(
+      { target, mods, settings, drive, runRoot, game, present, found, debugPorts: portsOf(listening) },
+      ['client2'],
+    );
+
+    if (plan.refusals.length > 0) {
+      close(listening);
+      return plan.refusals.join(' ');
+    }
+
+    const process_ = plan.processes[0];
+    if (process_ === undefined) {
+      close(listening);
+      return `${target.id} puts no second client up.`;
+    }
+
+    await prepareLaunch(plan);
+
+    const command = [...prefix, process_.program, ...process_.arguments].join(' ');
+    this.log.info(command);
+    say(command);
+
+    const started = startGame(process_, prefix);
+
+    return {
+      games: [
+        sandbox.kind === 'box'
+          ? sandboxedGame(started, sandbox.sandbox, windowsName(process_.program))
+          : started,
+      ],
+      listening,
+    };
+  }
+
+  /**
+   * A listener for each role, whatever this launch turns out to put up.
+   *
+   * Both, rather than only the ones the target runs: a bound loopback socket nobody dials costs
+   * nothing, and the alternative is the plan having to be built before the ports are open and the
+   * ports having to be open before the plan is built.
+   *
+   * A role whose listener could not be opened is given no port at all, which the game reads as a
+   * port to fail at connecting to — every few seconds, quietly, for as long as it runs. That is
+   * the whole of the damage, so it is said once and the launch goes ahead.
+   */
+  private async listen(
+    say: (text: string) => void,
+    roles: readonly LaunchRole[] = ROLES,
+  ): Promise<ScriptDebugPort[]> {
+    const handler = handlerFor(say);
+    const opened = await Promise.all(
+      roles.map(async (role) => openScriptDebugPort(role, handler)),
+    );
+    const up: ScriptDebugPort[] = [];
+
+    for (const outcome of opened) {
+      if (typeof outcome === 'string') {
+        this.log.warn(outcome);
+        say(outcome);
+      } else {
+        up.push(outcome);
+      }
+    }
+
+    return up;
+  }
+}
+
+/** Everything one launch put up: the games, and the listeners their script logs come in on. */
+interface Launched {
+  readonly games: readonly GameProcess[];
+  readonly listening: readonly ScriptDebugPort[];
+}
+
+const ROLES: readonly LaunchRole[] = ['client', 'server'];
+
+/**
+ * The console, as the script debugger's reader wants it: lines with the role in front of them, in
+ * the role's colour. The colour is the whole point — a launch that puts up both interleaves two
+ * games in the one console, and telling them apart is what a developer reading it is doing.
+ */
+function handlerFor(say: (text: string) => void): ScriptDebugHandler {
+  return {
+    said: (role, text) => {
+      for (const line of scriptDebugSaidOf(role, text)) {
+        say(line);
+      }
+    },
+    note: (role, note) => {
+      say(scriptDebugNoteOf(role, note));
+    },
+  };
+}
+
+/** A role with no listener is given no port, and the game spends the launch failing to dial it. */
+function portsOf(listening: readonly ScriptDebugPort[]): Record<LaunchRole, number> {
+  const ports: Record<LaunchRole, number> = { client: NO_PORT, server: NO_PORT, client2: NO_PORT };
+
+  for (const port of listening) {
+    ports[port.role] = port.port;
+  }
+
+  return ports;
+}
+
+/** Not a port anything listens on, which is what a game is told when nothing is listening. */
+const NO_PORT = 0;
+
+function close(listening: readonly ScriptDebugPort[]): void {
+  for (const port of listening) {
+    port.close();
   }
 }
 
@@ -460,6 +683,7 @@ class GameSession implements vscode.DebugAdapter {
 
   private sequence = 1;
   private games: readonly GameProcess[] = [];
+  private listening: readonly ScriptDebugPort[] = [];
   private over = false;
 
   constructor(
@@ -492,11 +716,17 @@ class GameSession implements vscode.DebugAdapter {
         this.respond(request, {
           supportsConfigurationDoneRequest: true,
           supportsTerminateRequest: true,
+          // The script log arrives with the role in front of it in the role's colour, and this is
+          // what makes the editor read those escapes rather than print them.
+          supportsANSIStyling: true,
         });
         this.event('initialized');
         return;
       case 'launch':
         await this.launch(request);
+        return;
+      case SECOND_CLIENT_REQUEST:
+        await this.second(request);
         return;
       // Answered as empty rather than left to the default: a breakpoint set in some other file
       // is still handed to whichever session is running, and a response with no body at all is
@@ -532,7 +762,8 @@ class GameSession implements vscode.DebugAdapter {
       return;
     }
 
-    this.games = outcome;
+    this.games = outcome.games;
+    this.listening = outcome.listening;
     this.respond(request);
 
     // Stop, pressed while the run folder was still being made: the session is already over, and
@@ -545,12 +776,69 @@ class GameSession implements vscode.DebugAdapter {
 
     // The session lasts as long as the launch does, so that Stop stays a way of ending it and the
     // toolbar stops showing one after the game has been closed from inside.
-    for (const game of outcome) {
+    for (const game of outcome.games) {
       void game.exited.then((code) => {
         void this.finish(
           code === undefined
             ? `The ${game.role} is gone.`
             : `The ${game.role} exited with ${code}.`,
+        );
+      });
+    }
+  }
+
+  /**
+   * A second client, added to this launch.
+   *
+   * It joins the session rather than starting one of its own: Stop takes it down with everything
+   * else, its log arrives in the same console under its own prefix, and — like every other process
+   * of the launch — the first one to go ends them all.
+   */
+  private async second(request: DapRequest): Promise<void> {
+    if (this.over) {
+      this.respond(request);
+      return;
+    }
+
+    // Nothing about a second client is worth ending the launch over, and an error thrown out of a
+    // request is: the adapter would say the session is over, the editor would disconnect, and Stop
+    // would take the server and the first client with it. So it is caught here rather than there.
+    const outcome = await this.launcher
+      .startSecond(this.target, (text) => {
+        this.output(text);
+      })
+      .catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+
+    if (typeof outcome === 'string') {
+      this.log.warn(outcome);
+      this.output(outcome);
+      await vscode.window.showWarningMessage(outcome);
+      this.respond(request);
+      return;
+    }
+
+    this.games = [...this.games, ...outcome.games];
+    this.listening = [...this.listening, ...outcome.listening];
+    this.respond(request);
+
+    // Stop, pressed while the box was being brought up: bringing it up waits for a person to sign
+    // in, which is as long as a person takes, and the launch this was joining can be over by the
+    // time there is a client to join it with. A detached game with nothing left to stop it is
+    // exactly the task manager this exists to save a developer from.
+    if (this.over) {
+      await this.stop();
+      return;
+    }
+
+    // Said rather than acted on. A second client is an addition to a launch, so its going is not
+    // the launch ending — least of all when it went because it could not start, which is exactly
+    // when taking the server and the first client down with it does the most damage.
+    for (const game of outcome.games) {
+      void game.exited.then((code) => {
+        this.output(
+          code === undefined
+            ? 'The second client is gone. The launch it joined is still up.'
+            : `The second client exited with ${code}. The launch it joined is still up.`,
         );
       });
     }
@@ -569,6 +857,8 @@ class GameSession implements vscode.DebugAdapter {
   }
 
   private async stop(): Promise<void> {
+    close(this.listening);
+    this.listening = [];
     await Promise.all(this.games.map((game) => game.kill()));
   }
 

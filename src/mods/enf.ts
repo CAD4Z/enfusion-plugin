@@ -66,9 +66,13 @@ export interface WorkspaceManifest {
 export interface Launch {
   /** Where `@<Mod>` folders live: the builder writes here and `-mod=` reads from here. */
   readonly modsDirectory: string | undefined;
-  /** Third-party mods to hand the client, by folder name. */
+  /**
+   * Every mod the launch loads, by folder name and in load order. Both processes are given it as
+   * `-mod=`. Mods of the workspace are not added to it on their own: one is loaded because it is
+   * named here, exactly as a third-party one is.
+   */
   readonly clientMods: readonly string[];
-  /** Third-party mods to hand the server, by folder name. */
+  /** The mods only the server loads, handed to it as `-serverMod=` on top of `clientMods`. */
   readonly serverMods: readonly string[];
   readonly targets: readonly Target[];
 }

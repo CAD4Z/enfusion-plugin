@@ -460,6 +460,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
     workDriveLetter: 'P:',
     filePatchingRoot: '',
     profiles: '',
+    secondClient: { account: '', sandboxie: '', steam: '' },
     builder: 'pboProject',
     ...over,
   };
