@@ -88,6 +88,7 @@ test('a client target comes out as the run folder, its links and one command lin
         program: DIAG,
         arguments: [
           ...CLIENT_ARGUMENTS,
+          '-name=SurvivorA',
           `-profiles=${RUN}\\profiles\\CADCore\\client`,
           '-mod=P:\\Mods\\@CADCore',
           '-mission=dayzOffline.chernarusplus',
@@ -150,6 +151,7 @@ test('a target that puts up both starts the server and a client that joins it', 
       program: DIAG,
       arguments: [
         ...CLIENT_ARGUMENTS,
+        '-name=SurvivorA',
         `-profiles=${RUN}\\profiles\\CADCore\\client`,
         '-mod=P:\\Mods\\@CADCore',
         '-connect=127.0.0.1',
@@ -534,6 +536,7 @@ test('a second client is planned alone, with -client2, its own profile and a ser
         ...CLIENT_ARGUMENTS.filter((argument) => !argument.startsWith('-debugger')),
         '-client2',
         '-debugger=127.0.0.1',
+        '-name=SurvivorB',
         `-profiles=${RUN}\\profiles\\CADCore\\client2`,
         '-mod=P:\\Mods\\@CADCore',
         '-connect=127.0.0.1',

@@ -430,6 +430,28 @@ const SERVER_ARGUMENTS: readonly string[] = [
   '-world=none',
 ];
 
+/**
+ * The name each client plays under, and the profile it plays out of.
+ *
+ * `-name` is the engine's profile name, and the profile name is the player: with nothing said, the
+ * engine falls back to `Survivor` for both, and a second one on the same server comes up as
+ * `Survivor (2)` — two players nobody watching a log or a screen can tell apart. Which is exactly
+ * what a second client is for: two of them in the same world, doing different halves of the thing
+ * being tested.
+ *
+ * `A` and `B` rather than anything cleverer because the name has to survive being read at a
+ * glance, in an `.ADM` line and over a character's head, and because it belongs to the role rather
+ * than to the developer: the same launch on another machine names the same two players.
+ *
+ * Found by measurement rather than from documentation, which lists no such parameter for DayZ:
+ * a server started with `-name=X` writes its profile into `Users\X` where it otherwise writes
+ * `Users\Survivor`. `-gamertag`, which the engine does list, does nothing here.
+ */
+const PLAYER_NAME: Readonly<Record<'client' | 'client2', string>> = {
+  client: 'SurvivorA',
+  client2: 'SurvivorB',
+};
+
 /** The machine the client joins, which for a server this launch put up is the one it is on. */
 const LOCAL_ADDRESS = '127.0.0.1';
 
@@ -753,10 +775,11 @@ function warningsOf(
 /**
  * A client, and — where the role says so — the second one.
  *
- * The second differs in three things and nothing else: `-client2`, which is what makes the engine
+ * The second differs in four things and nothing else: `-client2`, which is what makes the engine
  * meet it on a debugger port of its own; a profile of its own, because two clients writing one
- * profile write over each other; and it always joins rather than falling back to an offline
- * mission, since it is only ever started to sit beside a game that is already up.
+ * profile write over each other; a name of its own, so that the two are told apart in the world
+ * and in the server's log; and it always joins rather than falling back to an offline mission,
+ * since it is only ever started to sit beside a game that is already up.
  */
 function clientProcessOf(
   input: LaunchInput,
@@ -773,6 +796,7 @@ function clientProcessOf(
       ...CLIENT_ARGUMENTS,
       ...(second ? ['-client2'] : []),
       ...scriptDebugOf(input, role),
+      `-name=${PLAYER_NAME[role]}`,
       `-profiles=${profile}`,
       ...listArgumentOf('-mod', loadedOf(input)),
       ...(second ? joiningOf() : joinOf(input)),
