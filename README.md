@@ -178,12 +178,23 @@ configurations are handed out dynamically from the targets of the `launch` block
 is not needed and is never created. One written by hand is useless for configuring, too: a debug
 configuration takes exactly `type`, `request` and `target`, and any other field is an error pointing
 at `mod.enf`. The selected target is shown in the status bar and changed there; `target` in a
-configuration is a target’s name, and targets of the same name in different mods are told apart as
-`<Mod>: <Name>`. The debugger does exactly two things, start and stop: there are no breakpoints, no
-stacks and no variables, but **Stop** puts down every process of the launch along with its children
-(`taskkill /T`). The session ends when any one of them goes on its own: a client with no server left
-has nobody to talk to, and a server nobody connects to any more would otherwise hang about without a
-single line in the editor to say it is there.
+configuration is a target's name, and targets of the same name in different mods are told apart as
+`<Mod>: <Name>`. There are no breakpoints, no stacks and no variables, but **Stop** puts down every
+process of the launch along with its children (`taskkill /T`). The session ends when any one of them
+goes on its own: a client with no server left has nobody to talk to, and a server nobody connects to
+any more would otherwise hang about without a single line in the editor to say it is there.
+
+The **Debug Console** carries the script log of both processes — prefixed `[CLIENT]` in green and
+`[SERVER]` in red, so it is clear who said what in the one stream. It does not come out of a file:
+the diag build reaches out over TCP itself, usually to the Workbench, and hands the `SCRIPT` channel
+down that connection — exactly what `script_<stamp>.log` is written from. The extension puts up one
+listener per role. The client is told its port by us; the server does not listen to `-debuggerPort`
+at all — it writes over it once it knows it is a server, and always goes to **1001** (`-client2`
+goes to 1002). That is why the Workbench switches sides with a button rather than with a port. The
+start of the log does not reach the console: the game connects on the first tick of the script VM,
+and `Module: GameLib; loaded 18x files` and everything a mod prints from a static constructor are
+written by then — they are in the profile. The protocol is documented nowhere and was read off
+`DayZDiag_x64.exe`.
 
 Before a launch the run folder is put together — by default
 `%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it is `game\`, the **file patching root**: the
@@ -208,11 +219,20 @@ no game executable — by default `DayZDiag_x64.exe`, because only the diagnosti
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
 connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
-directory and a `-mod=` with the list of the mods that were built — the third-party ones out of
-`clientMods` first, then ours in dependency order; a client with nothing to connect to loads
-`-mission=dayzOffline.<map>` instead. The server gets the same `-mod=`, plus `-serverMod=` out of
-`serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`. An empty list does not become
-an empty argument but is not passed at all: the game takes an empty `-mod=` badly.
+directory, `-mod=` out of `clientMods` and `-name=SurvivorA`; a client with nothing to connect to
+loads `-mission=dayzOffline.<map>` instead. The server gets the same `-mod=` the client does, plus
+`-serverMod=` out of `serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`. An empty
+list does not become an empty argument but is not passed at all: the game takes an empty `-mod=`
+badly.
+
+The lists are the whole answer to what gets loaded: nothing is appended to them along the way. Mods
+of the workspace are named there alongside third-party ones, so the order is the one that is
+written, and a mod this launch does not want is simply not named. It was once the other way round —
+our own mods were appended to the list on their own — and that cost two things at once: naming one
+of ours to move it earlier loaded it twice instead of moving it, and there was no way of not loading
+a mod the workspace happens to hold. A mod of the workspace is checked more strictly than a
+third-party one: what one of ours packs into is known, so "not built" names the missing pbo, while
+of a third-party one only the folder can be asked about.
 
 The profile and the mission come from the mod the target belongs to rather than from its neighbours
 in the workspace — otherwise a launch would mean different things on different machines. The profile
@@ -242,6 +262,53 @@ itself. A mod that is not built is named and the launch does not begin — rathe
 up quietly without it while everything that depended on it falls into a script error. A server
 target with no `map`, and a missing `server.cfg`, are refused the same way. Like a build, a launch
 puts paths out of a `mod.enf` on a command line, so it wants the folder trusted too.
+
+The "second client" button adds one more client to a launch that is already up: the same target, a
+profile of its own, a debugger port of its own, `-client2`, a name of its own and a connection to
+the same server. Two clients on one machine are two Steam accounts, and Steam holds one signed-in
+account per Windows session. So the second one runs inside a Sandboxie box with a Steam of its own.
+
+The name is `-name`, which is also the engine's profile name. Say nothing and both clients are
+called `Survivor`, and the second one on the server becomes `Survivor (2)`: two players nobody can
+tell apart in an `.ADM` line or over a character's head, when two at once is exactly what the second
+client is for. So the first is `SurvivorA` and the second `SurvivorB`; the name belongs to the role
+rather than to the developer, so the same target names the same two players on anybody's machine.
+`-name` is documented nowhere in DayZ and was found by measurement: a server started with `-name=X`
+writes its profile into `Users\X` instead of `Users\Survivor`. The documented `-gamertag`, tried the
+same way, does nothing at all.
+
+One thing is wanted from the developer: install Sandboxie-Plus and write the second account's name
+into `enfusion.launch.secondAccount`. The extension does the rest. Sandboxie and Steam are looked
+for in the registry — as DayZ and DayZ Tools are — and are overridden by `enfusion.sandboxie.path`
+and `enfusion.steam.path`. The box is called `steam2` and is not configurable: it is not something
+to choose between, it is where the second Steam lives.
+
+On a press: no box, and one is made (`SbieIni set steam2 Enabled y`, after which Sandboxie fills in
+its own defaults — templates, recovery folders, the border); `NeverRemove=y` and `AutoDelete=n` are
+added to those, and only at creation. That is the protection from deletion, and it is about the
+sign-in: what is inside the box is a signed-in Steam, and a box that gets removed is a password and
+a Steam Guard code on the next launch. Then: the Steam in the box is not up, and it is started
+(`Start.exe /box:steam2 steam.exe -login <account> -silent`), and the launch **waits for the
+sign-in** rather than asking for the button to be pressed again. The first time, the wait is as long
+as a human takes to type a password; after that Steam signs itself in within ten seconds or so. Once
+the account is in, the game starts.
+
+Three things here are not obvious and cost some debugging. First: "is there anything in the box" is
+the wrong question — `Start.exe /box:<box> /listpids` counts Sandboxie's own service processes,
+which live in a box after anything at all has run in it; so the list of pids is crossed with
+`tasklist` by program name. Second: the sign-in is visible from outside the box — Steam writes
+`config\loginusers.vdf`, the sandbox keeps it in its own copy of the disk (`<box>\drive\C\...`), and
+it is rewritten exactly on a successful sign-in; hence "signed in" means the file names the account
+and is newer than the moment the Steam was started — or simply names the account, where enough time
+has passed since that start not to doubt it. Third: `Start.exe` without `/wait` hands the program to
+Sandboxie's service and exits at once, so the game is started with `/wait` — otherwise the session
+reports the second client "gone" a second after it started. And even with `/wait`, `taskkill /T`
+does not reach the game: a boxed process is a child of the service rather than of `Start.exe`, so
+Stop additionally puts down the game's processes by their pids inside the box. The first client is
+not touched by that: it is the same executable, but not in a box.
+
+With no account set, the second client is just one more client: fine for offline, and unable to join
+a server the first one is already on.
 
 One more thing about AddonBuilder, nothing to do with this extension but worth knowing in advance:
 it binarises through `binarize.exe -addon="P:"`, which is to say it reads **every** config on the
