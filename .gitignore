@@ -8,3 +8,7 @@ out/
 .vscode/*
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# Documents of the workspace this plugin lives in, kept out of the plugin's own repository
+CONTEXT.md
+docs/

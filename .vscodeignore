@@ -11,3 +11,5 @@ eslint.config.mjs
 tsconfig.json
 package-lock.json
 **/*.map
+CONTEXT.md
+docs/**
