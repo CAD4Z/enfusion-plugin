@@ -17,6 +17,7 @@ import type { Problem } from '../mods/model';
 import type { LinkState } from '../mods/workDrive';
 import { badge, div, icon, paragraph, problemRow as problemOf, span } from './dom';
 import type { IconName } from './icons';
+import { isStolenPress } from './press';
 import type {
   ActionView,
   AddonView,
@@ -33,6 +34,41 @@ declare function acquireVsCodeApi(): { postMessage(message: PanelRequest): void 
 
 const host = acquireVsCodeApi();
 const root = document.body.appendChild(div('mods'));
+
+/**
+ * When this page last got the focus back, and how long after that a press is not believed.
+ *
+ * A build starts the builder in a console of its own, once per addon, and that console takes the
+ * focus off the editor for as long as it is up. What comes back with the focus is a press on the
+ * button that still holds it: three addons packed, three presses nobody made, each landing about
+ * a sixth of a second after a console appeared. With a queue behind the button that is a build
+ * feeding itself for as long as the developer lets it run.
+ *
+ * So a synthetic press within a moment of the focus returning is not one, while a pointer press is
+ * always believed. A button clicked with the mouse also lets go of the focus rather than sitting
+ * there waiting to be pressed by the next console. A click made with the keyboard keeps it: that
+ * focus is the one being navigated with.
+ */
+let focusedAt = 0;
+
+window.addEventListener('focus', () => {
+  focusedAt = Date.now();
+});
+
+/** A button that does something, rather than one that opens a file: pressed once per press. */
+function acts(button: HTMLElement, request: PanelRequest): void {
+  button.addEventListener('click', (event) => {
+    if (event instanceof MouseEvent && isStolenPress(event.detail, Date.now() - focusedAt)) {
+      return;
+    }
+
+    if (event instanceof MouseEvent && event.detail > 0) {
+      button.blur();
+    }
+
+    host.postMessage(request);
+  });
+}
 
 /**
  * What actually arrives, which is whatever the extension behind this page sent. The two are
@@ -98,50 +134,61 @@ function stale(): HTMLElement {
  * — the three that the work drive is made of.
  */
 function toolsOf(tools: ToolsView): HTMLElement {
-  const row = div('tools');
+  const primary = div('tool-group');
+  const primaryActions = div('tool-row primary-actions');
+  primary.append(span('tool-heading', 'Run & build'), primaryActions);
+  primaryActions.append(
+    tool('start', tools.start, 'Start', { type: 'launch' }, true),
+    tool('secondClient', tools.secondClient, 'Add client', { type: 'launchSecondClient' }),
+    tool('build', tools.build, 'Build', { type: 'buildAll' }),
+  );
 
-  row.append(
-    tool('start', tools.start, 'Start', { type: 'launch' }),
-    tool('secondClient', tools.secondClient, undefined, { type: 'launchSecondClient' }),
-    tool('build', tools.build, undefined, { type: 'buildAll' }),
-    div('spacer'),
+  const workDrive = div('tool-group');
+  const driveActions = div('tool-row drive-actions');
+  workDrive.append(span('tool-heading', 'Work drive'), driveActions);
+  driveActions.append(
     ...tools.workDrive.map((action) =>
-      tool(action.action, action, undefined, { type: 'workDrive', action: action.action }),
+      tool(
+        action.action,
+        action,
+        action.action === 'link' ? 'Link mods' : titleCase(action.action),
+        { type: 'workDrive', action: action.action },
+      ),
     ),
   );
 
-  return row;
+  const toolsRoot = div('tools');
+  toolsRoot.append(primary, workDrive);
+  return toolsRoot;
 }
 
 /**
- * One button of that row. A label makes it the wide one — there is a single action a panel is
- * mostly opened for, and it should not be a square the same size as the rest.
- *
  * The reason it would refuse rides on the wrapper rather than on the button: a disabled button
  * takes no pointer events, and a tooltip nobody can hover is no way to say why it is disabled.
  */
 function tool(
   name: IconName,
   action: ActionView,
-  label: string | undefined,
+  label: string,
   request: PanelRequest,
+  primary = false,
 ): HTMLElement {
   const button = document.createElement('button');
-  button.className = label === undefined ? 'tool' : 'tool wide';
+  button.className = primary ? 'tool primary' : 'tool';
   button.disabled = action.refusal !== undefined;
-  button.addEventListener('click', () => {
-    host.postMessage(request);
-  });
+  button.title = action.refusal ?? action.title;
+  acts(button, request);
 
-  button.append(icon(name));
-  if (label !== undefined) {
-    button.append(span('label', label));
-  }
+  button.append(icon(name), span('label', label));
 
   const holder = span('holds', '', action.refusal ?? action.title);
   holder.append(button);
 
   return holder;
+}
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /**
@@ -341,9 +388,7 @@ function addonOf(addon: AddonView, mod: string): HTMLElement {
   build.className = 'action';
   build.textContent = 'Build';
   build.title = `Pack ${addon.name} into its pbo`;
-  build.addEventListener('click', () => {
-    host.postMessage({ type: 'build', mod, addon: addon.name });
-  });
+  acts(build, { type: 'build', mod, addon: addon.name });
 
   row.append(open, build);
   return row;

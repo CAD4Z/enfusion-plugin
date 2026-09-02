@@ -141,7 +141,6 @@ test('a target that puts up both starts the server and a client that joins it', 
         `-config=${CORE.root}\\server.cfg`,
         `-profiles=${RUN}\\profiles\\CADCore\\server`,
         `-mission=${RUN}\\missions\\CADCore.chernarusplus`,
-        '-mod=P:\\Mods\\@CADCore',
       ],
       cwd: `${RUN}\\game`,
     },
@@ -457,8 +456,8 @@ test('a mod of the workspace that no list names is not loaded at all', () => {
   assert.ok(!said.includes('CADMap'), said);
 });
 
-/** The server runs the list the client does, plus the one only a server ever loads. */
-test('the server mods reach -serverMod= and the client’s list stays in -mod=', () => {
+/** The server reads its own list, `serverMods`, and nothing the client's `clientMods` names. */
+test('the server gets -serverMod= from serverMods and none of the client’s -mod=', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
@@ -474,7 +473,7 @@ test('the server mods reach -serverMod= and the client’s list stays in -mod=',
   const server = plan.processes.find((process_) => process_.role === 'server');
 
   assert.ok(
-    server?.arguments.includes('-mod=P:\\Mods\\@CF;P:\\Mods\\@CADCore'),
+    !server?.arguments.some((argument) => argument.startsWith('-mod=')),
     server?.arguments.join(' '),
   );
   assert.ok(
@@ -782,11 +781,17 @@ test('the paths a launch asks the disk about are the built mods and the server�
 
 /** A mod whose manifest sits in its own root asks about one `server.cfg`, not the same one twice. */
 test('the same server.cfg looked for twice is asked about once', () => {
-  assert.deepEqual(launchPathsOf(target({ run: 'server' }), [CORE]), [
-    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
-    `${CORE.root}\\server.cfg`,
-    `${CORE.root}\\Missions\\CADCore.chernarusplus`,
-  ]);
+  assert.deepEqual(
+    launchPathsOf(
+      target({ run: 'server', launch: launch({ clientMods: [], serverMods: ['CADCore'] }) }),
+      [CORE],
+    ),
+    [
+      'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+      `${CORE.root}\\server.cfg`,
+      `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+    ],
+  );
 });
 
 test('a target naming a mod the workspace has not got starts nothing', () => {

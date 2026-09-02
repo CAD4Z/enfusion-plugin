@@ -2,7 +2,7 @@
   "name": "enfusion-plugin",
   "displayName": "Enfusion",
   "description": "Enfusion mod tooling for VS Code: the mods of the open workspace, without the Workbench",
-  "version": "0.0.13",
+  "version": "0.0.15",
   "publisher": "hurfy",
   "license": "MIT",
   "private": true,

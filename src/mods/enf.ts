@@ -67,12 +67,16 @@ export interface Launch {
   /** Where `@<Mod>` folders live: the builder writes here and `-mod=` reads from here. */
   readonly modsDirectory: string | undefined;
   /**
-   * Every mod the launch loads, by folder name and in load order. Both processes are given it as
-   * `-mod=`. Mods of the workspace are not added to it on their own: one is loaded because it is
-   * named here, exactly as a third-party one is.
+   * Every mod the client loads, by folder name and in load order. Handed to the client alone as
+   * `-mod=`; the server reads none of it. Mods of the workspace are not added to it on their own:
+   * one is loaded because it is named here, exactly as a third-party one is.
    */
   readonly clientMods: readonly string[];
-  /** The mods only the server loads, handed to it as `-serverMod=` on top of `clientMods`. */
+  /**
+   * Every mod the server loads, by folder name and in load order. Handed to the server alone as
+   * `-serverMod=`; the client reads none of it. The two lists are independent on purpose — a mod
+   * both sides need has to be named in both.
+   */
   readonly serverMods: readonly string[];
   readonly targets: readonly Target[];
 }

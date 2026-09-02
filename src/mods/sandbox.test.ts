@@ -12,6 +12,7 @@ import {
   imagePidsOf,
   loginUsersPathOf,
   SIGN_IN_GRACE,
+  SIGN_IN_PATIENCE,
   sandboxPlanOf,
   signedInNowOf,
   signedInOf,
@@ -24,6 +25,10 @@ const SECOND: SecondClient = {
   sandboxie: 'C:\\Program Files\\Sandboxie-Plus',
   steam: 'C:\\Program Files (x86)\\Steam',
 };
+
+test('a first Steam sign-in is given five minutes', () => {
+  assert.equal(SIGN_IN_PATIENCE, 5 * 60 * 1000);
+});
 
 test('an account with Sandboxie and Steam behind it is a box', () => {
   const plan = sandboxPlanOf(SECOND);

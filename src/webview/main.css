@@ -13,57 +13,86 @@
  * this panel is opened to press should not be somewhere off the top of it.
  */
 .tools {
-  display: flex;
+  display: grid;
   position: sticky;
   top: 0;
-  z-index: 1;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 10px;
+  z-index: 2;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, transparent);
   background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--vscode-widget-shadow, transparent) 18%, transparent);
 }
 
-/* What holds the two on the left apart from the three on the right. */
-.tools .spacer {
-  flex: 1;
+.tool-group {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tool-heading {
+  color: var(--vscode-sideBarTitle-foreground, var(--vscode-descriptionForeground));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tool-row {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
 }
 
 /* Carries the tooltip for the button inside it, which when disabled takes no pointer events. */
 .tools .holds {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .tool {
   display: inline-flex;
-  flex: none;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
+  gap: 5px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
-  background-color: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .tool:hover:not(:disabled) {
-  background-color: var(--vscode-button-secondaryHoverBackground);
+  background-color: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
 }
 
-/* The one action a panel is mostly opened for, so it is the one that is not a square. */
-.tool.wide {
-  gap: 6px;
-  width: auto;
-  padding: 0 10px;
+/* The action that opens a run is the one visual anchor; the rest stay quiet until pointed at. */
+.tool.primary {
   background-color: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
 }
 
-.tool.wide:hover:not(:disabled) {
+.tool.primary:hover:not(:disabled) {
   background-color: var(--vscode-button-hoverBackground);
+}
+
+.tool:active:not(:disabled) {
+  background-color: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-list-activeSelectionBackground)
+  );
+}
+
+.tool.primary:active:not(:disabled) {
+  filter: brightness(0.92);
 }
 
 .tool:disabled {
@@ -73,11 +102,18 @@
 
 .tool:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
 .tool .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tool svg {
+  flex: none;
+  pointer-events: none;
 }
 
 .empty {
@@ -101,16 +137,20 @@
 .mod {
   display: flex;
   flex-direction: column;
-  padding-bottom: 4px;
+  margin: 0 6px;
+  padding: 3px 0;
 }
 
 .row {
-  padding: 2px 12px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 4px;
 }
 
 /* The bar of a file: the workspace's, and each mod's — one click, one manifest. */
 .row.bar {
-  padding: 3px 12px;
+  min-height: 28px;
+  padding: 4px 8px;
   gap: 6px;
 }
 
@@ -120,17 +160,17 @@
 
 /* A mod belongs to the workspace above it, and its addons to the mod. */
 .mod > .row.bar {
-  padding-left: 22px;
+  padding-left: 16px;
 }
 
 .mod > .row.addon,
 .mod > .row.add,
 .mod > .row.problem {
-  padding-left: 34px;
+  padding-left: 28px;
 }
 
 .workspace > .row.problem {
-  padding-left: 24px;
+  padding-left: 20px;
 }
 
 .row .name {
@@ -138,8 +178,8 @@
 }
 
 .row .tag {
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 1px 5px;
+  border-radius: 999px;
   background-color: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);
   font-size: 10px;
@@ -203,9 +243,10 @@
 /* Quiet until the row is pointed at: one Build per addon would otherwise shout down the names. */
 .row .action {
   flex: none;
-  padding: 0 6px;
+  min-height: 22px;
+  padding: 0 7px;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: 4px;
   background: none;
   color: var(--vscode-descriptionForeground);
   font: inherit;

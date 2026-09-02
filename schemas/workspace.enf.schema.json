@@ -26,14 +26,14 @@
         },
         "clientMods": {
           "type": "array",
-          "description": "Every mod the launch loads, in load order, by the name of its folder in modsDirectory, with or without the leading @. Both the client and the server are given this list as -mod=. Mods of this workspace are not added on their own: one is loaded because it is named here, the same as any other, so a mod the workspace holds and no launch wants is left out.",
+          "description": "Every mod the client loads, in load order, by the name of its folder in modsDirectory, with or without the leading @. Handed to the client alone as -mod=; the server reads none of it. Mods of this workspace are not added on their own: one is loaded because it is named here, the same as any other, so a mod the workspace holds and no launch wants is left out.",
           "items": {
             "type": "string"
           }
         },
         "serverMods": {
           "type": "array",
-          "description": "The mods only the server loads, handed to it as -serverMod= on top of clientMods. Named the same way, and mods of this workspace are not added on their own here either.",
+          "description": "Every mod the server loads, in load order, named the same way. Handed to the server alone as -serverMod=; the client reads none of it. The two lists are independent — a mod both sides need has to be named in both — and mods of this workspace are not added on their own here either.",
           "items": {
             "type": "string"
           }

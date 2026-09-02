@@ -807,8 +807,9 @@ function clientProcessOf(
 }
 
 /**
- * The server. It is handed the same `-mod=` the client is — a mod both sides run is a mod both
- * sides load — and `-serverMod=` on top of it, which is the list only a server ever sees.
+ * The server. It gets `-serverMod=` out of `serverMods` and nothing out of `clientMods` — the two
+ * lists are read independently, so nothing reaches the server for having been named to the client.
+ * A mod both sides need is a mod named in both lists.
  */
 function serverProcessOf(input: LaunchInput, profile: string, mission: string): LaunchProcess {
   return {
@@ -822,7 +823,6 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
       `-config=${serverConfigOf(input) ?? ''}`,
       `-profiles=${profile}`,
       `-mission=${mission}`,
-      ...listArgumentOf('-mod', loadedOf(input)),
       ...listArgumentOf('-serverMod', pathsOf(input.target, input.target.launch.serverMods)),
     ],
     cwd: filePatchingRootOf(input.runRoot),
@@ -883,25 +883,32 @@ function offlineMissionOf(input: LaunchInput): string[] {
 }
 
 /**
- * The mods every process of this launch loads: the list the manifest wrote, in the order it wrote
- * it, and nothing else.
+ * The mods every client process loads: `clientMods`, the list the manifest wrote, in the order it
+ * wrote it, and nothing else. The server never sees this list — see `serverProcessOf`.
  *
  * Nothing of the workspace is added to it. A mod of ours reaches the command line because it was
- * named in `clientMods` or `serverMods`, exactly the way a third-party one does. It was once the
- * other way round — every mod of the workspace was appended to whatever the manifest said — and
- * that had the two faults a developer meets in the same afternoon: naming one of ours to move it
- * earlier loaded it twice instead of moving it, and a workspace that held a mod no launch wanted
- * had no way of leaving it out.
+ * named in `clientMods`, exactly the way a third-party one does. It was once the other way round —
+ * every mod of the workspace was appended to whatever the manifest said — and that had the two
+ * faults a developer meets in the same afternoon: naming one of ours to move it earlier loaded it
+ * twice instead of moving it, and a workspace that held a mod no launch wanted had no way of
+ * leaving it out.
  */
 function loadedOf(input: LaunchInput): string[] {
   return pathsOf(input.target, input.target.launch.clientMods);
 }
 
-/** Every mod this launch names, which is a longer list where a server is put up. */
+/**
+ * Every mod this launch names, so a plan can ask the disk whether it was built: `clientMods` where
+ * a client-type process is going up, `serverMods` where the server is, the union where both are —
+ * never one list standing in for the other, because the two no longer share a command line.
+ */
 function loadedNamesOf(target: LaunchTarget, roles: readonly LaunchRole[]): string[] {
+  const client = roles.some((role) => role !== 'server');
+  const server = roles.includes('server');
+
   return [
-    ...target.launch.clientMods,
-    ...(roles.includes('server') ? target.launch.serverMods : []),
+    ...(client ? target.launch.clientMods : []),
+    ...(server ? target.launch.serverMods : []),
   ];
 }
 

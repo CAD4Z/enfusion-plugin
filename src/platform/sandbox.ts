@@ -15,6 +15,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import {
   BOX_SETTINGS,
+  SIGN_IN_PATIENCE,
   type Sandbox,
   boxExistsOf,
   boxPidsOf,
@@ -44,8 +45,6 @@ const POLL = 2000;
  * because the button is held by the wait: giving up says what is missing and leaves the box up, so
  * the press after it finds a Steam that is already there and goes straight to the game.
  */
-const PATIENCE = 3 * 60 * 1000;
-
 /** How often the waiting says so, so that a wait for a human does not look like a hang. */
 const SAY_EVERY = 15 * 1000;
 
@@ -143,7 +142,7 @@ async function waitForSignIn(
   since: number,
   say: (text: string) => void,
 ): Promise<string | undefined> {
-  const until = Date.now() + PATIENCE;
+  const until = Date.now() + SIGN_IN_PATIENCE;
   let said = Date.now();
 
   while (Date.now() < until) {

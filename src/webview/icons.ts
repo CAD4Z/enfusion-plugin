@@ -1,8 +1,8 @@
 /**
- * The five icons the panel's buttons are drawn with.
+ * The six icons the panel's buttons are drawn with.
  *
  * Inline SVG rather than the codicon font: a webview cannot reach a font it has not been shipped
- * and pointed at through its content security policy, and five glyphs are not worth a font file in
+ * and pointed at through its content security policy, and six glyphs are not worth a font file in
  * the `.vsix` for. The path data is copied out of the very icons VS Code draws these actions with
  * — `@vscode/codicons`, CC-BY-4.0, see `THIRD-PARTY.md` — so a button here reads as the same
  * button it is everywhere else in the editor.
@@ -17,17 +17,21 @@ export interface IconPath {
 }
 
 export const ICON: Readonly<Record<IconName, readonly IconPath[]>> = {
-  // Two overlapping windows: a second of the thing that is already running. Codicon multiple-windows.
+  // A person with a plus: add another client/player to the running game. Codicon person-add.
   secondClient: [
     {
-      d: 'M5 2h9.5l.5.5v7l-.5.5H13V9h1V3H5.5L5 2.5V2zM2.5 4H12l.5.5v9l-.5.5H2.5l-.5-.5v-9l.5-.5zM3 13h9V5H3v8z',
+      d: 'M11.5 7C13.9853 7 16 9.01472 16 11.5C16 13.9853 13.9853 16 11.5 16C9.01472 16 7 13.9853 7 11.5C7 9.01472 9.01472 7 11.5 7ZM11.5 8.5C11.2239 8.5 11 8.72386 11 9V11H9C8.72386 11 8.5 11.2239 8.5 11.5C8.5 11.7761 8.72386 12 9 12H11V14C11 14.2761 11.2239 14.5 11.5 14.5C11.7761 14.5 12 14.2761 12 14V12H14C14.2761 12 14.5 11.7761 14.5 11.5C14.5 11.2239 14.2761 11 14 11H12V9C12 8.72386 11.7761 8.5 11.5 8.5Z',
+      evenOdd: true,
+    },
+    {
+      d: 'M7.5 1C8.74 1 9.75 2.009 9.75 3.25C9.75 3.728 9.5968 4.17016 9.3418 4.53516C10.1263 4.6712 10.7545 5.26239 10.9414 6.02734C10.6039 6.06138 10.2757 6.12745 9.95898 6.21973C9.8375 5.80465 9.45448 5.5 9 5.5H6C5.448 5.5 5 5.949 5 6.5V9.5H6V13.5C6 13.776 6.225 14 6.5 14H6.60156C6.78445 14.3576 7.00425 14.693 7.25781 15H6.5C5.673 15 5 14.327 5 13.5V10.5C4.448 10.5 4 10.051 4 9.5V6.5C4 5.515 4.7192 4.69916 5.6582 4.53516C5.4022 4.17016 5.25 3.728 5.25 3.25C5.25 2.009 6.26 1 7.5 1ZM7.5 2C6.811 2 6.25 2.561 6.25 3.25C6.25 3.939 6.811 4.5 7.5 4.5C8.189 4.5 8.75 3.939 8.75 3.25C8.75 2.561 8.189 2 7.5 2Z',
       evenOdd: true,
     },
   ],
-  // debug-start
+  // A game-like play control rather than the debugger's outlined launch glyph. Codicon play-circle.
   start: [
     {
-      d: 'M4.506 3.50305L12.501 8.00005L4.501 12.5L4.506 3.50305ZM4.502 1.99805C3.718 1.99805 3 2.62605 3 3.50005V12.5C3 13.374 3.718 14.002 4.502 14.002C4.747 14.002 4.998 13.941 5.235 13.807L13.235 9.30705C14.254 8.73405 14.254 7.26605 13.235 6.69205L5.235 2.19305C4.997 2.05905 4.746 1.99805 4.502 1.99805Z',
+      d: 'M8 1C4.14 1 1 4.14 1 8C1 11.86 4.14 15 8 15C11.86 15 15 11.86 15 8C15 4.14 11.86 1 8 1ZM8 14C4.691 14 2 11.309 2 8C2 4.691 4.691 2 8 2C11.309 2 14 4.691 14 8C14 11.309 11.309 14 8 14ZM10.712 8C10.712 8.153 10.63 8.294 10.498 8.371L6.964 10.413C6.536 10.66 6 10.351 6 9.857V6.144C6 5.649 6.536 5.34 6.964 5.588L10.498 7.63C10.631 7.707 10.712 7.847 10.712 8Z',
     },
   ],
   // package

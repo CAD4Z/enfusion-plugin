@@ -136,16 +136,44 @@ the dependency order out of `requiredAddons`, the same order the addons are list
 unconditional: staleness is not tracked, and the extension will not argue about whether a rebuild is
 needed.
 
-Builds run one at a time, and a second one is refused rather than queued. Two builds of one
-workspace do not share the work, they fight over one pbo — one taking the file while the other
-writes it — and each of them puts a builder process per addon on the machine. The objection is not
-theoretical: a button that stays focused is a button a held key presses over and over, and the
-machine that met that got five hundred builders and stopped answering. A queue would have been the
-same heap of processes, only later. **Start** is one at a time for the same reason: two launches put
-up two servers on one port and lay two sets of junctions into one run folder. What comes out is a
-`<modsDirectory>\@<Mod>` folder with the pbos, the signatures, `mod.cpp` and the public key;
-`modsDirectory` comes out of the `launch` block of whichever `.enf` owns that mod, and a relative
-path is taken from the folder of that file, so that it means the same thing on any machine.
+Builds still run one at a time, but a press is not refused: it either starts a build or lines up
+behind the one that is running. Two builds of one workspace together are not allowed — they do not
+share the work, they fight over one pbo, one taking the file while the other writes it — but a
+second press has something to say: a minute of building is long enough for the sources to change,
+and whoever pressed again is asking for what they have become. The queue collapses as it goes. A
+press on something already in it adds nothing — that build has not started and will read the sources
+for itself — and **Build** at the top swallows the addons queued on their own, because it will build
+all of them anyway. So the held key that once put five hundred builders on the machine now costs
+exactly none: the collapsing sits at the head of the queue rather than at the process. What is
+already running is never swallowed. Cancelling the notification takes the queue with it: whoever
+stopped a build did not ask for the next one. **Start**, unlike a build, stayed one at a time with a
+refusal: two launches put up two servers on one port and lay two sets of junctions into one run
+folder, and a second copy of the same game is not something anybody asked for.
+
+There is one notification for all of it — one per run of the queue, not one per build in it and not
+one per mod in a build. It goes up from the press rather than from the builder's first step (reading
+the workspace, the machine and the work drive is a wait in itself), names the current step and the
+number of presses standing behind it while it runs, and ends in one sentence saying what came out:
+`Built CoreMod, NavigationClient and NavigationServer.` A failure names what failed and offers to
+open the packing log; cancelling in it cancels the whole run.
+
+There is a story about focus here, and it is also the reason there is only one notification. The
+builder runs in a console of its own, one console per addon; each of them takes the focus off the
+editor for an instant and hands it straight back. Along with the returning focus, the button that
+had been holding it got a press nobody made — one per addon, some fifteen hundredths of a second
+after the console appeared. Under the refusal this was invisible (the press was simply turned away),
+but with a queue the build began to feed itself and went round and round until it was stopped. So
+the panel's button drops the focus as soon as it is clicked with the mouse (a keyboard press keeps
+it — that is how the panel is walked), and a press arriving in the first fractions of a second after
+the window got its focus back does not count as a press. On the extension's side there is a settling
+window on top of that: a press on something that started less than a second ago collapses into it —
+the sources do not change in a second, while a press a human makes a second later or more queues up
+as usual.
+
+What comes out of a build is a `<modsDirectory>\@<Mod>` folder with the pbos, the signatures,
+`mod.cpp` and the public key; `modsDirectory` comes out of the `launch` block of whichever `.enf`
+owns that mod, and a relative path is taken from the folder of that file, so that it means the same
+thing on any machine.
 
 Three things the Enforce Script plugins suffered for are kept literally, and re-checked against the
 live tools. The builder is started through `start`, in a console of its own — without one pboProject
@@ -220,10 +248,11 @@ A target says what to put up: a client, the server alone, or both at once. Both 
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
 connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
 directory, `-mod=` out of `clientMods` and `-name=SurvivorA`; a client with nothing to connect to
-loads `-mission=dayzOffline.<map>` instead. The server gets the same `-mod=` the client does, plus
-`-serverMod=` out of `serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`. An empty
-list does not become an empty argument but is not passed at all: the game takes an empty `-mod=`
-badly.
+loads `-mission=dayzOffline.<map>` instead. The server gets `-serverMod=` out of `serverMods`,
+`-config=`, `-profiles=`, `-mission=` and `-world=none` — and nothing out of `clientMods`: the
+server's list is read apart from the client's rather than on top of it, so a mod both sides need has
+to be named in both. An empty list does not become an empty argument but is not passed at all: the
+game takes an empty `-mod=` badly.
 
 The lists are the whole answer to what gets loaded: nothing is appended to them along the way. Mods
 of the workspace are named there alongside third-party ones, so the order is the one that is

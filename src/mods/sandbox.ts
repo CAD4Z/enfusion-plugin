@@ -270,11 +270,14 @@ export function signedInOf(vdf: string, account: string): boolean {
  * Which is the hedge, and it is worth being plain about what it hedges. The record is rewritten on
  * every successful sign-in — that is what dates it, and what tells this sign-in from the memory of
  * the last one. If some build of Steam ever signs in without touching it, the alternative to a
- * grace period is a launch that waits the full three minutes every single time and then says the
+ * grace period is a launch that waits the full five minutes every single time and then says the
  * account is not signed in while it plainly is. Long enough that a login window is still being
  * typed into when it passes, short enough that nobody sits through it.
  */
 export const SIGN_IN_GRACE = 45 * 1000;
+
+/** A first sign-in includes a password and often Steam Guard, so it gets five full minutes. */
+export const SIGN_IN_PATIENCE = 5 * 60 * 1000;
 
 /**
  * Whether the account counts as signed in: named in what Steam wrote, and either written since the
