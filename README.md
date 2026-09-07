@@ -33,7 +33,10 @@ prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the s
 stand in `dir` in `CfgMods`. A mod that did not name itself is called after its folder — which is
 why a mod in a folder called `client` that is really `NavigationClient` has to write its name down,
 or it links as `P:\client` and builds into `@client`. What the launcher shows a player is
-`mod.cpp`'s business, and the title there can be anything at all.
+`mod.cpp`'s business, and the title there can be anything at all. A mod name consists of letters,
+digits and underscores and starts with a letter or underscore; Windows device names such as `CON`
+and `LPT1` are excluded. An invalid value is shown as written and underlined in its manifest, but no
+work-drive, build or launch path is made from it.
 
 Both files open as a **form**: `mod.enf` and `workspace.enf` are fields rather than text, so the
 field names need not be remembered, and what each one means is written under it. The form is a
@@ -146,9 +149,10 @@ for itself — and **Build** at the top swallows the addons queued on their own,
 all of them anyway. So the held key that once put five hundred builders on the machine now costs
 exactly none: the collapsing sits at the head of the queue rather than at the process. What is
 already running is never swallowed. Cancelling the notification takes the queue with it: whoever
-stopped a build did not ask for the next one. **Start**, unlike a build, stayed one at a time with a
-refusal: two launches put up two servers on one port and lay two sets of junctions into one run
-folder, and a second copy of the same game is not something anybody asked for.
+stopped a build did not ask for the next one. A launch, unlike a build, stays one at a time with a
+refusal — whether it came from **Start** or **Run and Debug**: two launches put up two servers on one
+port and lay two sets of junctions into one run folder, and a second copy of the same game is not
+something anybody asked for.
 
 There is one notification for all of it — one per run of the queue, not one per build in it and not
 one per mod in a build. It goes up from the press rather than from the builder's first step (reading
@@ -208,9 +212,11 @@ configuration takes exactly `type`, `request` and `target`, and any other field 
 at `mod.enf`. The selected target is shown in the status bar and changed there; `target` in a
 configuration is a target's name, and targets of the same name in different mods are told apart as
 `<Mod>: <Name>`. There are no breakpoints, no stacks and no variables, but **Stop** puts down every
-process of the launch along with its children (`taskkill /T`). The session ends when any one of them
-goes on its own: a client with no server left has nobody to talk to, and a server nobody connects to
-any more would otherwise hang about without a single line in the editor to say it is there.
+process of the launch along with its children (`taskkill /T`). A launch owns its processes and
+debugger listeners as one thing: a failed or cancelled start rolls back everything it acquired,
+and closing the session takes the same cleanup path. The session ends when any primary process goes
+on its own: a client with no server left has nobody to talk to, and a server nobody connects to any
+more would otherwise hang about without a single line in the editor to say it is there.
 
 The **Debug Console** carries the script log of both processes — prefixed `[CLIENT]` in green and
 `[SERVER]` in red, so it is clear who said what in the one stream. It does not come out of a file:
@@ -263,6 +269,10 @@ a mod the workspace happens to hold. A mod of the workspace is checked more stri
 third-party one: what one of ours packs into is known, so "not built" names the missing pbo, while
 of a third-party one only the folder can be asked about.
 
+Each `clientMods` or `serverMods` entry names exactly one folder directly under `modsDirectory`.
+Spaces and hyphens are allowed there because these are folder references rather than class names;
+path separators, Windows path punctuation and semicolons are refused before a path is constructed.
+
 The profile and the mission come from the mod the target belongs to rather than from its neighbours
 in the workspace — otherwise a launch would mean different things on different machines. The profile
 is layered out of the mod's `Profiles`: `Global`, `Dev` and then `Client` or `Server`, and a server
@@ -294,8 +304,10 @@ puts paths out of a `mod.enf` on a command line, so it wants the folder trusted 
 
 The "second client" button adds one more client to a launch that is already up: the same target, a
 profile of its own, a debugger port of its own, `-client2`, a name of its own and a connection to
-the same server. Two clients on one machine are two Steam accounts, and Steam holds one signed-in
-account per Windows session. So the second one runs inside a Sandboxie box with a Steam of its own.
+the same server. Only one may be starting or running at a time. If it leaves, its listener is closed
+and the primary launch stays up, so the button can add a replacement. Two clients on one machine
+are two Steam accounts, and Steam holds one signed-in account per Windows session. So the second
+one runs inside a Sandboxie box with a Steam of its own.
 
 The name is `-name`, which is also the engine's profile name. Say nothing and both clients are
 called `Survivor`, and the second one on the server becomes `Survivor (2)`: two players nobody can
@@ -350,7 +362,7 @@ work drive. One broken `config.cpp` in any third-party mod on `P:` brings down a
 |---|---|
 | `npm install` | dependencies |
 | `npm run watch` | esbuild in watch mode, which is also the `preLaunchTask` for `F5` |
-| `npm run check-types` | `tsc --noEmit` over both projects (esbuild only transpiles, it checks no types) |
+| `npm run check-types` | `tsc --noEmit` over the host, browser and test projects (esbuild only transpiles, it checks no types) |
 | `npm run lint` | ESLint with type checking |
 | `npm test` | builds `*.test.ts` through esbuild and runs `node --test`, with no extension host |
 | `npm run vsix` | build the `.vsix` |
@@ -363,16 +375,21 @@ that the panel has some mods to show straight away.
 ```
 src/
   extension.ts        composition root: everything is made and disposed here
-  mods/               the domain: the model of the mods and the config.cpp parsing, with no vscode — hence tests on bare Node
+  mods/               the domain: the model of the mods and the config.cpp parsing, with no vscode
   platform/           access to the workspace: findFiles, reading files, the watcher, Uri
   view/               the Mods panel and the .enf editor on the extension's side: the webview, the messages, the document edits
   webview/            the Mods panel and the .enf form on the browser's side: a tsconfig of its own, DOM instead of Node
+test/
+  mods/               bare-Node domain tests, mirroring src/mods
+  platform/           host adapters whose resource ownership can be exercised on bare Node
+  webview/            browser-side logic that needs no DOM or extension host
+  schemas.test.ts     the contract shared by the two JSON schemas
 schemas/              the JSON schemas of `mod.enf` and `workspace.enf`, registered through jsonValidation
 ```
 
 The "the domain knows nothing of the host" boundary is held by `no-restricted-imports` in
-`eslint.config.mjs` rather than by convention: `src/mods/**` and `src/webview/**` cannot import
-`vscode` or the `platform`/`view` layers. The panel has a `src/webview/tsconfig.json` of its own on
-top of that — with DOM and without the Node types — so host API does not compile there even by
-accident.
+`eslint.config.mjs` rather than by convention: `src/mods/**`, `src/webview/**` and their mirrored
+tests cannot import `vscode` or the `platform`/`view` layers. The panel and the tests each have a
+tsconfig of their own on top of that: the panel gets DOM without Node, while tests stay plain Node
+programs outside the production tree.
 

@@ -36,6 +36,7 @@ import {
   missingBuilderOf,
   signToolOf,
 } from './machine';
+import { isModNameOf, type ModName, modNameProblemOf, modPathOf } from './modName';
 import { CONFIG_FILE, type Mod } from './model';
 import { resolveWindows, windowsFolder, windowsName, windowsPath } from './paths';
 import type { Link } from './workDrive';
@@ -281,9 +282,10 @@ export function buildPlanOf(jobs: readonly BuildJob[], settings: MachineSettings
 
 /** `<ModsDirectory>\@<Mod>`: the built mod, which is what is loaded rather than the sources. */
 function builtModOf(job: BuildJob): string {
-  return windowsPath(
+  return modPathOf(
     resolveWindows(job.configuredIn, job.modsDirectory),
-    `@${job.link.name}`,
+    checkedNameOf(job),
+    'built',
   );
 }
 
@@ -320,7 +322,7 @@ function publicKeyOf(privateKey: string): string {
 
 /** What the addon is called on the work drive: `CADCore\Scripts`, or `CADCore` on its own. */
 function prefixOf(job: BuildJob): string {
-  return windowsPath(job.link.name, job.within);
+  return windowsPath(checkedNameOf(job), job.within);
 }
 
 /** And where that is: `P:\CADCore\Scripts`, which is the folder the builder is pointed at. */
@@ -388,8 +390,13 @@ function stoppagesOf(settings: MachineSettings): string[] {
  */
 function refusalOf(job: BuildJob): string | undefined {
   const link = job.link;
+  if (!isModNameOf(link.name, link.modName)) {
+    return link.problem ?? modNameProblemOf(link.name) ?? 'The mod name cannot be used.';
+  }
 
   switch (link.state) {
+    case 'invalid':
+      return link.problem ?? 'The mod name cannot be used.';
     case 'unavailable':
       return `The work drive is not mounted, so there is nothing at ${link.path} to build.`;
     case 'unlinked':
@@ -401,6 +408,16 @@ function refusalOf(job: BuildJob): string | undefined {
     case 'linked':
       return unconfiguredOf(job) ?? unquotableOf(job);
   }
+}
+
+/** A build reaches path construction only after its refusal check accepted this capability. */
+function checkedNameOf(job: BuildJob): ModName {
+  const name = job.link.modName;
+  if (!isModNameOf(job.link.name, name)) {
+    throw new Error('An invalid mod name reached build path planning.');
+  }
+
+  return name;
 }
 
 function unconfiguredOf(job: BuildJob): string | undefined {
@@ -615,7 +632,7 @@ function driveRootOf(job: BuildJob): string {
 }
 
 export function subjectOf(job: BuildJob): string {
-  return windowsPath(job.link.name, job.within === '' ? '' : job.addon);
+  return job.within === '' ? job.link.name : `${job.link.name}\\${job.addon}`;
 }
 
 /**

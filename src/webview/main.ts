@@ -269,19 +269,20 @@ function modOf(mod: ModView): HTMLElement {
 }
 
 function modRow(mod: ModView, manifest: string): HTMLElement {
-  const row = rowButton(`Open the mod.enf of ${mod.name}`, 'bar');
+  const label = modLabelOf(mod);
+  const row = rowButton(`Open the mod.enf of ${label}`, 'bar');
   row.addEventListener('click', () => {
     host.postMessage({ type: 'open', path: manifest });
   });
 
-  row.append(span('name', mod.name), ...marksOf(mod));
+  row.append(span('name', label), ...marksOf(mod));
   return row;
 }
 
 /** A mod with no `mod.enf` has no bar to open one: the row says so, and the line below writes it. */
 function unconfiguredRow(mod: ModView): HTMLElement {
   const row = staticRow('bar');
-  row.append(span('name', mod.name), ...marksOf(mod));
+  row.append(span('name', modLabelOf(mod)), ...marksOf(mod));
 
   return row;
 }
@@ -289,6 +290,7 @@ function unconfiguredRow(mod: ModView): HTMLElement {
 /** Everything worth putting next to a mod's name, and nothing that is merely true of it. */
 function marksOf(mod: ModView): HTMLElement[] {
   const marks: HTMLElement[] = [];
+  const nameProblemShown = mod.problems.some((problem) => problem.kind === 'invalid-name');
 
   if (mod.manifest === undefined) {
     marks.push(
@@ -299,7 +301,12 @@ function marksOf(mod: ModView): HTMLElement[] {
     );
   }
   // Only when it is not linked: that is the one that explains a build failing before it runs.
-  if (mod.link !== undefined && mod.link.state !== 'linked' && mod.link.state !== 'unavailable') {
+  if (
+    mod.link !== undefined &&
+    mod.link.state !== 'linked' &&
+    mod.link.state !== 'unavailable' &&
+    !(mod.link.state === 'invalid' && nameProblemShown)
+  ) {
     marks.push(badgeFor(describeLink(mod.link)));
   }
   for (const problem of mod.problems) {
@@ -312,6 +319,11 @@ function marksOf(mod: ModView): HTMLElement[] {
   }
 
   return marks;
+}
+
+/** Keep an explicitly empty invalid name visible without changing the value sent back in commands. */
+function modLabelOf(mod: ModView): string {
+  return mod.name.trim() === '' ? '(unnamed mod)' : mod.name;
 }
 
 function badgeFor({ label, title }: { label: string; title: string }): HTMLElement {
@@ -395,6 +407,10 @@ function addonOf(addon: AddonView, mod: string): HTMLElement {
 }
 
 const LINK_LABELS: Record<LinkState, { label: string; title: string }> = {
+  invalid: {
+    label: 'invalid name',
+    title: 'No work-drive path is read or changed until the mod has a usable name',
+  },
   linked: { label: 'linked', title: 'This mod is on the work drive, where a build reads it from' },
   unlinked: { label: 'not linked', title: 'Nothing is at this path: a build would not find the mod' },
   elsewhere: {
@@ -410,6 +426,10 @@ const LINK_LABELS: Record<LinkState, { label: string; title: string }> = {
 
 function describeLink(link: LinkView): { label: string; title: string } {
   const said = LINK_LABELS[link.state];
+
+  if (link.state === 'invalid') {
+    return { label: said.label, title: link.problem ?? said.title };
+  }
 
   return link.state === 'elsewhere'
     ? { label: said.label, title: `${said.title}: ${link.path} points at ${link.at}` }
@@ -435,6 +455,8 @@ function fileRow(name: string, path: string, title: string): HTMLElement {
 
 function describe(problem: Problem): { label: string; title: string } {
   switch (problem.kind) {
+    case 'invalid-name':
+      return { label: 'invalid name', title: problem.reason };
     case 'no-addons':
       return {
         label: 'no addons',

@@ -17,6 +17,7 @@
  */
 
 import { parseConfig, sameName } from './config';
+import { type ModName, modNameOf, modNameProblemOf } from './modName';
 import { folderOf, isWithin, nameOf } from './paths';
 
 /** What a search of the workspace turned up. */
@@ -29,7 +30,8 @@ export interface Scan {
    * The name each `mod.enf` declares, by the path of that file. It is the one name a mod has —
    * what the panel shows, what `P:\<name>` goes up as, what the built `@<name>` is called — so a
    * mod whose folder is called something else says so there rather than being guessed at. A mod
-   * that declares none is simply not in the map, and falls back to its folder's name.
+   * that omits it is simply not in the map, and falls back to its folder's name. An explicit
+   * invalid value stays in the map so it can be shown and refused instead of silently falling back.
    */
   readonly declared?: ReadonlyMap<string, string>;
 }
@@ -46,9 +48,12 @@ export type Layout = 'single' | 'multi';
 export interface Mod {
   /**
    * The mod's one name: what the panel shows, and what it is linked (`P:\<name>`) and loaded
-   * (`@<name>`) as. Its `mod.enf` declares it; failing that, it is the folder's own name.
+   * (`@<name>`) as. Its `mod.enf` declares it; when the field is omitted, it is the folder's own
+   * name. An invalid declared value remains here unchanged so the panel can point at the problem.
    */
   readonly name: string;
+  /** The same name checked for every path/class use; absent keeps an invalid mod visible but inert. */
+  readonly modName: ModName | undefined;
   /** The mod root: the folder holding `mod.enf`, or the prefix root's parent without one. */
   readonly root: string;
   /** The `mod.enf` itself; undefined leaves the mod unconfigured. */
@@ -79,6 +84,8 @@ export interface Addon {
 
 /** Something worth showing next to the mod rather than hiding or throwing over. */
 export type Problem =
+  /** The written name cannot safely be a class and one direct child folder. */
+  | { readonly kind: 'invalid-name'; readonly reason: string }
   /** Nothing under the mod root packs into a pbo. */
   | { readonly kind: 'no-addons' }
   /** The `CfgPatches` names that require each other in a ring, so no build order can hold. */
@@ -97,7 +104,7 @@ export function modsFromScan(scan: Scan): Mod[] {
       draftAt(root, manifest, scan.declared?.get(manifest), sources),
     ),
     ...unconfigured(sources.filter((source) => !roots.some((root) => isWithin(source.root, root)))),
-  ].sort(byName(modName));
+  ].sort(byName(writtenNameOf));
 
   const addons = drafts.flatMap((draft) => draft.addons).sort(byName((addon) => addon.name));
   const provider = providerOf(addons);
@@ -211,7 +218,7 @@ function byName<T extends { readonly root: string }>(name: (item: T) => string) 
  * root's, and the mod root's only until one is found. A mod whose folder goes by something other
  * than the mod does — `client` holding `CADNavigationClient` — is what declaring one is for.
  */
-function modName(draft: Draft): string {
+function writtenNameOf(draft: Draft): string {
   return draft.declared ?? nameOf(draft.prefixRoot ?? draft.root);
 }
 
@@ -223,8 +230,11 @@ function toMod(
 ): Mod {
   const addons = [...draft.addons].sort((a, b) => rank(a) - rank(b));
 
+  const name = writtenNameOf(draft);
+
   return {
-    name: modName(draft),
+    name,
+    modName: modNameOf(name),
     root: draft.root,
     manifest: draft.manifest,
     prefixRoot: draft.prefixRoot,
@@ -235,13 +245,21 @@ function toMod(
 }
 
 function problemsOf(draft: Draft, cycles: readonly (readonly AddonSource[])[]): Problem[] {
+  const nameProblem = modNameProblemOf(writtenNameOf(draft));
+  const problems: Problem[] =
+    nameProblem === undefined ? [] : [{ kind: 'invalid-name', reason: nameProblem }];
+
   if (draft.addons.length === 0) {
-    return [{ kind: 'no-addons' }];
+    problems.push({ kind: 'no-addons' });
   }
 
-  return cycles
-    .filter((cycle) => cycle.some((member) => draft.addons.includes(member)))
-    .map((cycle) => ({ kind: 'cycle', patches: unique(cycle.map(addonName)).sort() }));
+  problems.push(
+    ...cycles
+      .filter((cycle) => cycle.some((member) => draft.addons.includes(member)))
+      .map((cycle) => ({ kind: 'cycle' as const, patches: unique(cycle.map(addonName)).sort() })),
+  );
+
+  return problems;
 }
 
 /** How an addon appears in someone else's `requiredAddons`; the folder name is the last resort. */
@@ -404,4 +422,3 @@ function unique(values: readonly string[]): string[] {
 function lower(value: string): string {
   return value.toLowerCase();
 }
-

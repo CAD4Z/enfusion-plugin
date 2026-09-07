@@ -12,6 +12,7 @@
 
 import { execFile, spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
+import { setTimeout as wait } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import {
   BOX_SETTINGS,
@@ -54,42 +55,56 @@ const SAY_EVERY = 15 * 1000;
  * In the order the answers are cheapest: a box that is not there is made, a Steam that is not up
  * is started, and a sign-in that has not happened is waited for. Every one of those is skipped
  * where it is already done, so the ordinary second press of an evening does none of them and
- * starts the client at once.
+ * starts the client at once. An aborted signal interrupts the wait and prevents the next step.
  */
 export async function openSandbox(
   sandbox: Sandbox,
   say: (text: string) => void,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
+  signal?.throwIfAborted();
+
   if (!(await boxExists(sandbox))) {
+    signal?.throwIfAborted();
     say(`Making the ${sandbox.box} sandbox.`);
 
-    const failed = await makeBox(sandbox);
+    const failed = await makeBox(sandbox, signal);
+    signal?.throwIfAborted();
     if (failed !== undefined) {
       return failed;
     }
   }
 
+  signal?.throwIfAborted();
   const users = await loginUsersPath(sandbox);
+  signal?.throwIfAborted();
   if (users === undefined) {
     return `Steam is at ${sandbox.steam}, which is not a path this can find inside the ${sandbox.box} sandbox.`;
   }
 
-  if (await steamIsUp(sandbox)) {
+  const steamIsRunning = await steamIsUp(sandbox);
+  signal?.throwIfAborted();
+
+  if (steamIsRunning) {
     // A Steam that is up but has never signed this account in is a Steam somebody is in the middle
     // of signing in to, which is worth waiting for rather than starting a second one on top of.
     // Nothing was started here, so there is no moment for the record to be newer than: a zero.
-    return signedInNowOf(await signInWritten(users, sandbox.account), 0, Date.now())
+    const written = await signInWritten(users, sandbox.account);
+    signal?.throwIfAborted();
+
+    return signedInNowOf(written, 0, Date.now())
       ? undefined
-      : await waitForSignIn(sandbox, users, 0, say);
+      : await waitForSignIn(sandbox, users, 0, say, signal);
   }
 
   // Read before the start rather than after it, so that a file Steam rewrites the moment it signs
   // in cannot be mistaken for the one it left there last time.
   const since = Date.now();
   say(`Starting Steam in the ${sandbox.box} sandbox as ${sandbox.account}.`);
+  signal?.throwIfAborted();
   startSteam(sandbox);
 
-  return waitForSignIn(sandbox, users, since, say);
+  return waitForSignIn(sandbox, users, since, say, signal);
 }
 
 /**
@@ -141,15 +156,22 @@ async function waitForSignIn(
   users: string,
   since: number,
   say: (text: string) => void,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
+  signal?.throwIfAborted();
   const until = Date.now() + SIGN_IN_PATIENCE;
   let said = Date.now();
 
   while (Date.now() < until) {
-    await sleep(POLL);
+    await sleep(POLL, signal);
+    signal?.throwIfAborted();
 
-    if (signedInNowOf(await signInWritten(users, sandbox.account), since, Date.now())) {
+    const written = await signInWritten(users, sandbox.account);
+    signal?.throwIfAborted();
+
+    if (signedInNowOf(written, since, Date.now())) {
       say(`${sandbox.account} is signed in to the ${sandbox.box} sandbox.`);
+      signal?.throwIfAborted();
       return undefined;
     }
 
@@ -159,6 +181,7 @@ async function waitForSignIn(
     }
   }
 
+  signal?.throwIfAborted();
   return (
     `${sandbox.account} has not signed in to the ${sandbox.box} sandbox. Sign in to the Steam ` +
     'that is up in it, then press the second-client button again.'
@@ -182,8 +205,10 @@ async function boxExists(sandbox: Sandbox): Promise<boolean> {
  * Sandboxie's configuration, and Sandboxie fills the rest of a new box in with its own defaults.
  * One at a time because they all write the one file.
  */
-async function makeBox(sandbox: Sandbox): Promise<string | undefined> {
+async function makeBox(sandbox: Sandbox, signal?: AbortSignal): Promise<string | undefined> {
   for (const [setting, value] of BOX_SETTINGS) {
+    signal?.throwIfAborted();
+
     try {
       await run(sandbox.ini, ['set', sandbox.box, setting, value]);
     } catch (error) {
@@ -288,8 +313,8 @@ async function signInWritten(users: string, account: string): Promise<number | u
   }
 }
 
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+
+  return wait(milliseconds, undefined, { signal });
 }

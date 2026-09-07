@@ -18,10 +18,11 @@
  *
  * The same shape is written out three times on purpose: here, for the extension, and once per file
  * in `schemas/`, for the editor. The schema is what the developer sees while typing; this is what
- * the extension trusts. `schemas.test.ts` is what keeps the two schemas from drifting apart.
+ * the extension trusts. `test/schemas.test.ts` is what keeps the two schemas from drifting apart.
  */
 
 import { type Node, type ParseError, parseTree, printParseErrorCode } from 'jsonc-parser';
+import { loadedModNameProblemOf, modNameProblemOf } from './modName';
 import { folderOf, isWithin, nameOf } from './paths';
 
 /** The file a monorepo puts above its mods; a single mod does without one. */
@@ -133,7 +134,7 @@ export function readMod(source: string): Parsed<ModManifest> {
   const root = reading.root;
 
   const value: ModManifest = {
-    name: reading.text(root, 'name'),
+    name: reading.text(root, 'name', modNameProblemOf),
     description: reading.text(root, 'description'),
     author: reading.text(root, 'author'),
     version: reading.text(root, 'version'),
@@ -264,8 +265,8 @@ function launchOf(reading: Reading, root: Node | undefined): Launch | undefined 
 
   const launch: Launch = {
     modsDirectory: reading.text(node, 'modsDirectory'),
-    clientMods: reading.texts(node, 'clientMods'),
-    serverMods: reading.texts(node, 'serverMods'),
+    clientMods: reading.texts(node, 'clientMods', loadedModNameProblemOf),
+    serverMods: reading.texts(node, 'serverMods', loadedModNameProblemOf),
     targets: reading.items(node, 'targets').flatMap((item) => targetOf(reading, item)),
   };
   reading.only(node, LAUNCH_FIELDS);
@@ -308,8 +309,16 @@ interface Reading {
   readonly root: Node | undefined;
   readonly problems: readonly ManifestProblem[];
   report(node: Node, message: string): void;
-  text(object: Node | undefined, field: string): string | undefined;
-  texts(object: Node | undefined, field: string): string[];
+  text(
+    object: Node | undefined,
+    field: string,
+    problemOf?: (value: string) => string | undefined,
+  ): string | undefined;
+  texts(
+    object: Node | undefined,
+    field: string,
+    problemOf?: (value: string) => string | undefined,
+  ): string[];
   choice<T extends string>(
     object: Node | undefined,
     field: string,
@@ -339,7 +348,11 @@ function read(source: string): Reading {
 
   const root = rootOf(tree, report);
 
-  const text = (object: Node | undefined, field: string): string | undefined => {
+  const text = (
+    object: Node | undefined,
+    field: string,
+    problemOf?: (value: string) => string | undefined,
+  ): string | undefined => {
     const node = memberOf(object, field);
     if (node === undefined) {
       return undefined;
@@ -350,7 +363,13 @@ function read(source: string): Reading {
       return undefined;
     }
 
-    return textOf(node);
+    const value = textOf(node);
+    const problem = problemOf?.(value);
+    if (problem !== undefined) {
+      report(node, problem);
+    }
+
+    return value;
   };
 
   const array = (object: Node | undefined, field: string, expected: string): Node[] | undefined => {
@@ -373,14 +392,20 @@ function read(source: string): Reading {
     report,
     text,
 
-    texts: (object, field) =>
+    texts: (object, field, problemOf) =>
       (array(object, field, 'an array of strings') ?? []).flatMap((item) => {
         if (item.type !== 'string') {
           report(item, `Every item of "${field}" must be a string.`);
           return [];
         }
 
-        return [textOf(item)];
+        const value = textOf(item);
+        const problem = problemOf?.(value);
+        if (problem !== undefined) {
+          report(item, problem);
+        }
+
+        return [value];
       }),
 
     choice: (object, field, allowed, fallback) => {

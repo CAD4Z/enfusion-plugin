@@ -66,13 +66,13 @@ function locationsOf(manifests: readonly string[]): ModLocation[] {
   return manifests.map((manifest) => ({ root: folderOf(manifest), manifest }));
 }
 
-/** The name each manifest declares, for the mods to be named by; one that declares none is absent. */
+/** The name each manifest writes, including an explicit invalid empty string; only omission is absent. */
 function declaredOf(configured: ReadonlyMap<string, Configured>): Map<string, string> {
   return new Map(
     [...configured].flatMap(([path, mod]) => {
       const name = mod.configuration.manifest.name;
 
-      return name === undefined || name === '' ? [] : [[path, name] as const];
+      return name === undefined ? [] : [[path, name] as const];
     }),
   );
 }
@@ -93,7 +93,14 @@ export function prefixesOf(found: Discovery): Prefix[] {
       return [];
     }
 
-    return [{ prefixRoot, name: mod.name, target: anchor.with({ path: prefixRoot }).fsPath }];
+    return [
+      {
+        prefixRoot,
+        name: mod.name,
+        modName: mod.modName,
+        target: anchor.with({ path: prefixRoot }).fsPath,
+      },
+    ];
   });
 }
 
@@ -114,6 +121,7 @@ export function launchModsOf(found: Discovery): LaunchMod[] {
     return [
       {
         name: mod.name,
+        modName: mod.modName,
         root: anchor.with({ path: mod.root }).fsPath,
         prefixRoot: anchor.with({ path: prefixRoot }).fsPath,
         // By the name each of them packs into rather than by its folder's, because what this is

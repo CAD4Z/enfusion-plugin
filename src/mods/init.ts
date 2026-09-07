@@ -20,6 +20,12 @@
  */
 
 import { type ConfigCpp, type PatchClass, parseConfig, withRequiredAddon } from './config';
+import {
+  MOD_NAME_PATTERN,
+  type ModName,
+  modNameOf,
+  modNameProblemOf,
+} from './modName';
 import { CONFIG_FILE, type Layout, MANIFEST_FILE, type Mod, mainAddonOf } from './model';
 import { isWithin } from './paths';
 
@@ -53,6 +59,8 @@ export interface AddonPlan extends InitPlan {
 export interface Adoption extends InitPlan {
   /** What the config answered for, which is what the developer is shown before agreeing. */
   readonly fields: ModFields;
+  /** The checked name to link after writing; absent when the inferred name itself is invalid. */
+  readonly modName: ModName | undefined;
   /** Why nothing can be written; the plan is empty when there is one. */
   readonly refusal: string | undefined;
 }
@@ -76,38 +84,24 @@ export interface AddonRequirement {
   readonly required: string;
 }
 
-/**
- * Why the name will not do, or undefined when it will. A mod's name is its folder, the `dir` of
- * its `CfgMods`, the `P:\<Name>` it is linked as, the `@<Name>` it is loaded as and the class its
- * `CfgPatches` goes by — so it has to be a name all five of those take, which is the narrowest of
- * them: a class name.
- */
-export function modNameProblemOf(name: string): string | undefined {
-  if (name.trim() === '') {
-    return 'A mod needs a name: it is the folder it is linked and loaded under.';
-  }
-
-  return NAME.test(name) ? undefined : named('A mod');
-}
-
-/** The same, for the folder an addon is packed out of, which is a class name too. */
+/** Why an addon name will not do; it shares the class-and-folder grammar of an owned mod name. */
 export function addonNameProblemOf(name: string): string | undefined {
   if (name.trim() === '') {
     return 'An addon needs a name: it is the folder it is packed out of, and its pbo.';
   }
 
-  return NAME.test(name) ? undefined : named('An addon');
+  return NAME.test(name) ? modNameProblemOf(name) : named('An addon');
 }
 
 function named(what: string): string {
   return (
     `${what} is named by a class as well as by a folder: letters, digits and underscores, ` +
-    'starting with a letter.'
+    'starting with a letter or underscore.'
   );
 }
 
 /** What a class in a `config.cpp` can be called, which a folder can always be called too. */
-const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const NAME = new RegExp(MOD_NAME_PATTERN);
 
 /**
  * Everything a new mod is made of. The layout is the one thing asked besides the name, because it
@@ -118,7 +112,7 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * single-addon mod the prefix root is the addon, and in a multi-addon one the addon is `Scripts`
  * inside it. Which is what lets a mod be split up later by moving files rather than editing paths.
  */
-export function initPlanOf(name: string, layout: Layout): InitPlan {
+export function initPlanOf(name: ModName, layout: Layout): InitPlan {
   const main = layout === 'single' ? name : `${name}/${SCRIPTS}`;
   // A mod being started has said nothing about itself yet, so every field but its name is left
   // for the developer to answer — which is what an adopted mod's config answers instead.
@@ -175,21 +169,27 @@ export function initPlanOf(name: string, layout: Layout): InitPlan {
  */
 export function adoptionOf(mod: Mod, source: string, folders: readonly string[]): Adoption {
   const fields = modFieldsOf(parseConfig(source), mod.name);
-  const refusal = adoptionRefusalOf(mod, folders);
+  const modName = modNameOf(fields.name);
+  const refusal = adoptionRefusalOf(mod, fields.name, folders);
 
   return {
     fields,
+    modName,
     folders: [],
     files:
       refusal === undefined
-        ? [{ path: MANIFEST_FILE, content: manifestOf(mod.name, fields) }]
+        ? [{ path: MANIFEST_FILE, content: manifestOf(fields.name, fields) }]
         : [],
     refusal,
   };
 }
 
 /** Why this mod is not one to adopt, or undefined when it is. */
-function adoptionRefusalOf(mod: Mod, folders: readonly string[]): string | undefined {
+function adoptionRefusalOf(
+  mod: Mod,
+  adoptedName: string,
+  folders: readonly string[],
+): string | undefined {
   if (mod.manifest !== undefined) {
     return `${mod.name} is configured already: it has a ${MANIFEST_FILE}.`;
   }
@@ -201,6 +201,11 @@ function adoptionRefusalOf(mod: Mod, folders: readonly string[]): string | undef
       `${mod.name} has no main addon: nothing that packs into a pbo here declares the mod in a ` +
       `CfgMods block, so there is nothing to fill a ${MANIFEST_FILE} in from.`
     );
+  }
+
+  const nameProblem = modNameProblemOf(adoptedName);
+  if (nameProblem !== undefined) {
+    return `${mod.name} cannot be configured as ${JSON.stringify(adoptedName)}. ${nameProblem}`;
   }
 
   // The mod root holds the prefix root rather than being it, so a mod whose prefix root is the
@@ -292,6 +297,11 @@ export function requiringAddon(source: string, requirement: AddonRequirement): s
  * have to think of a name for an addon first.
  */
 export function addonsRefusalOf(mod: Mod): string | undefined {
+  const nameProblem = modNameProblemOf(mod.name);
+  if (nameProblem !== undefined) {
+    return `${mod.name || 'This mod'} cannot take an addon. ${nameProblem}`;
+  }
+
   if (mod.prefixRoot === undefined) {
     return `${mod.name} has no prefix root to put an addon in.`;
   }

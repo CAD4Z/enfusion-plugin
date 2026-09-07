@@ -13,6 +13,7 @@ import type { Stats } from 'node:fs';
 import { lstat, readlink, rmdir, symlink, unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { MachineSettings } from '../mods/machine';
+import { isModNameOf } from '../mods/modName';
 import { mountArguments, mountedAt, unmountArguments } from '../mods/subst';
 import {
   type Link,
@@ -68,9 +69,14 @@ export async function readLinks(
   }
 
   const facts = await Promise.all(
-    prefixes.map(async (prefix) => {
-      const path = linkPathOf(drive.letter, prefix.name);
-      return [path, await linkFactAt(path)] as const;
+    prefixes.flatMap((prefix) => {
+      const name = prefix.modName;
+      if (!isModNameOf(prefix.name, name)) {
+        return [];
+      }
+
+      const path = linkPathOf(drive.letter, name);
+      return [linkFactAt(path).then((fact) => [path, fact] as const)];
     }),
   );
 

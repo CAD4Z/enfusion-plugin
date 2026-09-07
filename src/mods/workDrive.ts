@@ -12,6 +12,7 @@
  * plain strings; what any of it means, and what a button would refuse to do, is decided here.
  */
 
+import { isModNameOf, type ModName, modNameProblemOf, modPathOf } from './modName';
 import { samePath } from './paths';
 
 /** The letter the work drive goes up under unless the settings name another. */
@@ -92,6 +93,8 @@ export interface Prefix {
   readonly prefixRoot: string;
   /** The prefix root's name: what the mod is linked and loaded as. */
   readonly name: string;
+  /** Present only when the name is safe to put directly below the drive root. */
+  readonly modName: ModName | undefined;
   /** The prefix root itself, the way Windows takes it. */
   readonly target: string;
 }
@@ -104,6 +107,7 @@ export type LinkFact =
   | { readonly kind: 'occupied' };
 
 export type LinkState =
+  | 'invalid'
   | 'linked'
   | 'unlinked'
   /** A link, but to some other folder — the build would read sources nobody asked for. */
@@ -116,11 +120,14 @@ export type LinkState =
 export interface Link {
   readonly prefixRoot: string;
   readonly name: string;
+  readonly modName: ModName | undefined;
   /** `P:\<Name>`. */
   readonly path: string;
   readonly target: string;
   /** Where the link points now; empty when nothing is there. */
   readonly at: string;
+  /** Why no path exists for this mod; undefined for every usable link. */
+  readonly problem: string | undefined;
   readonly state: LinkState;
 }
 
@@ -128,8 +135,8 @@ export interface Link {
  * Where a mod goes on the drive: the root of it and never below, because the prefix of a pbo is
  * the path of its addon on the work drive, and a mod one folder deeper prefixes everything wrong.
  */
-export function linkPathOf(letter: string, name: string): string {
-  return `${letter}\\${name}`;
+export function linkPathOf(letter: string, name: ModName): string {
+  return modPathOf(letter, name, 'source');
 }
 
 /**
@@ -145,15 +152,33 @@ export function linksOf(
   const down = drive.at === '';
 
   return prefixes.map((prefix) => {
-    const path = linkPathOf(drive.letter, prefix.name);
+    const name = prefix.modName;
+    if (!isModNameOf(prefix.name, name)) {
+      return {
+        prefixRoot: prefix.prefixRoot,
+        name: prefix.name,
+        modName: undefined,
+        path: '',
+        target: prefix.target,
+        at: '',
+        problem:
+          modNameProblemOf(prefix.name) ??
+          'The checked mod name no longer matches the name shown for it.',
+        state: 'invalid',
+      };
+    }
+
+    const path = linkPathOf(drive.letter, name);
     const fact: LinkFact = (down ? undefined : facts.get(path)) ?? { kind: 'none' };
 
     return {
       prefixRoot: prefix.prefixRoot,
       name: prefix.name,
+      modName: name,
       path,
       target: prefix.target,
       at: fact.kind === 'link' ? fact.target : '',
+      problem: undefined,
       state: down ? 'unavailable' : linkStateOf(fact, prefix.target),
     };
   });
@@ -161,7 +186,7 @@ export function linksOf(
 
 /** A mod that is not on the drive where it should be, which is what the command is for. */
 export function isUnlinked(link: Link): boolean {
-  return link.state !== 'linked' && link.state !== 'unavailable';
+  return link.state !== 'invalid' && link.state !== 'linked' && link.state !== 'unavailable';
 }
 
 /**

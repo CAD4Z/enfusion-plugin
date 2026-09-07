@@ -4,14 +4,14 @@
  * goes looking for `file:///./<name>`. Duplication that nothing checks is duplication that drifts,
  * so this is the check: the blocks have to stay byte-for-byte the same idea.
  *
- * It reads the files from the package root rather than importing them, which is what `npm test`
- * runs from.
+ * It reads the files from the package root rather than importing them; `npm test` starts there.
  */
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { MOD_NAME_PATTERN, WINDOWS_RESERVED_NAME_PATTERN } from '../src/mods/modName';
 
 function schema(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(process.cwd(), 'schemas', name), 'utf8')) as Record<
@@ -37,4 +37,12 @@ test('both schemas let a file point an editor at the schema it is written agains
     assert.ok(properties.$schema, `${name} has no $schema property`);
     assert.equal(root.additionalProperties, false, `${name} accepts fields nobody declared`);
   }
+});
+
+test('the mod schema uses the same name grammar as every operation', () => {
+  const properties = mod.properties as Record<string, Record<string, unknown>>;
+  const reserved = properties.name?.not as Record<string, unknown> | undefined;
+
+  assert.equal(properties.name?.pattern, MOD_NAME_PATTERN);
+  assert.equal(reserved?.pattern, WINDOWS_RESERVED_NAME_PATTERN);
 });

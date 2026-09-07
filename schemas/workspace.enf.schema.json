@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Enfusion workspace",
-  "description": "The optional file a monorepo of mods puts above them. It says nothing about any one mod: what it holds is the launch block, and it holds it for every mod under it. A single mod does without this file. The launch block is spelled out here rather than referenced from mod.enf.schema.json, because a relative $ref between two schema files of an extension does not resolve: the editor loses the base URI and goes looking for file:///./<name>. schemas.test.ts keeps the copy in step.",
+  "description": "The optional file a monorepo of mods puts above them. It says nothing about any one mod: what it holds is the launch block, and it holds it for every mod under it. A single mod does without this file. The launch block is spelled out here rather than referenced from mod.enf.schema.json, because a relative $ref between two schema files of an extension does not resolve: the editor loses the base URI and goes looking for file:///./<name>. test/schemas.test.ts keeps the copy in step.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

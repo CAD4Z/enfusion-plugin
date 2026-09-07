@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { modsFromScan, pboNameOf } from './model';
+import { modsFromScan, pboNameOf } from '../../src/mods/model';
 
 test('a mod is a folder with mod.enf, and a config.cpp in its prefix root is one addon', () => {
   const mods = modsFromScan({
@@ -13,6 +13,7 @@ test('a mod is a folder with mod.enf, and a config.cpp in its prefix root is one
   assert.deepEqual(mods, [
     {
       name: 'CADCore',
+      modName: 'CADCore',
       root: '/w/CADCore',
       manifest: '/w/CADCore/mod.enf',
       prefixRoot: '/w/CADCore/CADCore',
@@ -51,6 +52,7 @@ test('the same tree with no config.cpp in the prefix root makes the subfolders t
   assert.deepEqual(mods, [
     {
       name: 'CADCore',
+      modName: 'CADCore',
       root: '/w/CADCore',
       manifest: '/w/CADCore/mod.enf',
       prefixRoot: '/w/CADCore/CADCore',
@@ -167,6 +169,7 @@ test('a mod whose config.cpp declares it but which has no mod.enf is listed unco
   assert.deepEqual(mods, [
     {
       name: 'Foreign',
+      modName: 'Foreign',
       root: '/w/Foreign',
       manifest: undefined,
       prefixRoot: '/w/Foreign/Foreign',
@@ -217,6 +220,7 @@ test('a mod root with nothing that packs into a pbo is listed with the problem, 
   assert.deepEqual(mods, [
     {
       name: 'Fresh',
+      modName: 'Fresh',
       root: '/w/Fresh',
       manifest: '/w/Fresh/mod.enf',
       prefixRoot: undefined,
@@ -273,6 +277,30 @@ test('a manifest that declares no name leaves the mod named after its folder', (
   });
 
   assert.equal(mods[0]?.name, 'CADCore');
+});
+
+test('an invalid declared name stays on the mod and is never replaced with its folder', () => {
+  for (const declared of ['../Victim', '']) {
+    const mod = modsFromScan({
+      manifests: ['/w/SafeFolder/mod.enf'],
+      configs: [],
+      declared: new Map([['/w/SafeFolder/mod.enf', declared]]),
+    })[0];
+
+    assert.ok(mod !== undefined);
+    assert.equal(mod.name, declared);
+    assert.equal(mod.modName, undefined);
+    assert.equal(mod.problems[0]?.kind, 'invalid-name');
+  }
+});
+
+test('a folder fallback is checked by the same rule as a declared name', () => {
+  const mod = modsFromScan({ manifests: ['/w/Bad-Mod/mod.enf'], configs: [] })[0];
+
+  assert.ok(mod !== undefined);
+  assert.equal(mod.name, 'Bad-Mod');
+  assert.equal(mod.modName, undefined);
+  assert.equal(mod.problems[0]?.kind, 'invalid-name');
 });
 
 /** The two name the same folder, so either of them finding it is enough. */

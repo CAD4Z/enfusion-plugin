@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseConfig, withRequiredAddon } from './config';
+import { parseConfig, withRequiredAddon } from '../../src/mods/config';
 
 test('reads every CfgPatches class with what it requires', () => {
   const config = parseConfig(`

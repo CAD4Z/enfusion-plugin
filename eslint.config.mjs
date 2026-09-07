@@ -6,14 +6,15 @@
  * missing returns, fallthrough) is left to `npm run check-types` rather than said twice.
  *
  * The one rule that is this project's own is `no-restricted-imports`: it keeps `vscode` out of
- * `src/mods/` and `src/webview/`, which is what makes `npm test` run without an extension host.
+ * the domain, the browser code and their tests, which is what makes `npm test` run without an
+ * extension host.
  */
 
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 /** The layers that run without an extension host: the domain, and the panel's browser side. */
-const HOST_FREE = ['src/mods/**', 'src/webview/**'];
+const HOST_FREE = ['src/mods/**', 'src/webview/**', 'test/mods/**', 'test/webview/**'];
 
 /** The host modules, named so neither layer can reach the disk behind the port's back. */
 const HOST_MODULES = ['**/platform/*', '**/view/*'];

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { STOLEN_PRESS_MS, isStolenPress } from './webview/press';
+import { STOLEN_PRESS_MS, isStolenPress } from '../../src/webview/press';
 
 test('a real pointer click is accepted immediately after the panel regains focus', () => {
   assert.equal(isStolenPress(1, 50), false);

@@ -80,10 +80,11 @@ const webview = {
 
 /** Tests bundle one file each, so `node --test` can run plain CommonJS against the sources. */
 function testBuild() {
-  const entryPoints = walk('src').filter((file) => file.endsWith('.test.ts'));
+  const entryPoints = walk('test').filter((file) => file.endsWith('.test.ts'));
   return {
     ...shared,
     entryPoints,
+    outbase: 'test',
     outdir: 'out/test',
     format: 'cjs',
     platform: 'node',

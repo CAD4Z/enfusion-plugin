@@ -1,0 +1,6 @@
+{
+  // Tests are plain Node programs type-checked apart from both production targets.
+  "extends": "../tsconfig.json",
+  "include": ["."],
+  "exclude": []
+}

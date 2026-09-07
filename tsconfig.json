@@ -15,7 +15,7 @@
     "sourceMap": true,
     "noEmit": true
   },
-  // The panel has its own project: it is browser code, and must not reach the host API by accident.
+  // The panel and the tests have their own projects; this one is production extension-host code.
   "include": ["src"],
   "exclude": ["src/webview"]
 }

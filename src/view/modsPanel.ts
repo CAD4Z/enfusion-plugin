@@ -314,7 +314,7 @@ function toView(mod: Mod, found: Discovery, links: readonly Link[]): ModView {
     name: mod.name,
     manifest: mod.manifest,
     manifestProblems: configured?.problems ?? [],
-    link: link && { state: link.state, path: link.path, at: link.at },
+    link: link && { state: link.state, path: link.path, at: link.at, problem: link.problem },
     addons: mod.addons.map((addon) => ({
       name: addon.name,
       main: addon.main,

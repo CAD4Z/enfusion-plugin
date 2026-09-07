@@ -8,7 +8,7 @@ import {
   libraryFoldersPath,
   libraryOf,
   parseKeyValues,
-} from './steam';
+} from '../../src/mods/steam';
 
 /** The file as Steam writes it, cut down to the two libraries and the apps that matter here. */
 const LIBRARIES = `"libraryfolders"

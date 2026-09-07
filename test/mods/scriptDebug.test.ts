@@ -5,7 +5,7 @@ import {
   scriptDebugNoteOf,
   scriptDebugRead,
   scriptDebugSaidOf,
-} from './scriptDebug';
+} from '../../src/mods/scriptDebug';
 
 /**
  * The frames a real `DayZDiag_x64.exe` was watched sending, built the way it builds them. The

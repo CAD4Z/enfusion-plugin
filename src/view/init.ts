@@ -27,8 +27,8 @@ import {
   addonsRefusalOf,
   adoptionOf,
   initPlanOf,
-  modNameProblemOf,
 } from '../mods/init';
+import { type ModName, modNameOf, modNameProblemOf } from '../mods/modName';
 import { CONFIG_FILE, MANIFEST_FILE, type Layout, type Mod, mainAddonOf } from '../mods/model';
 import { type WorkDriveState, linkPathOf, linksToMake, refusalOf } from '../mods/workDrive';
 import { createFrom, existingOf, folderAt, holds, requireAddon, textOf } from '../platform/init';
@@ -155,6 +155,11 @@ class InitCommands {
       return;
     }
 
+    const adoptedName = adoption.modName;
+    if (adoptedName === undefined) {
+      return;
+    }
+
     this.log.info(`adopted ${mod.name} as ${adoption.fields.name}`);
     this.changed();
 
@@ -165,7 +170,7 @@ class InitCommands {
 
     // And onto the work drive, the way a new mod goes: an adopted mod that cannot be built until
     // another button is found is not a mod that was configured for the developer.
-    await this.link(root, mod.name, `Configured ${mod.name}`);
+    await this.link(root, adoptedName, `Configured ${adoption.fields.name}`);
   }
 
   /** A new addon of a mod that is laid out as several. */
@@ -282,7 +287,7 @@ class InitCommands {
    * being found first. A drive that is down is not a failure of the initialisation: the mod is
    * made either way, and what is missing is said with the button that settles it.
    */
-  private async link(root: vscode.Uri, name: string, done: string): Promise<void> {
+  private async link(root: vscode.Uri, name: ModName, done: string): Promise<void> {
     const prefixRoot = vscode.Uri.joinPath(root, name);
     const drive = await readWorkDrive(await readMachineSettings());
     const refusal = platformRefusal() ?? refusalOf(drive, 'link');
@@ -294,7 +299,7 @@ class InitCommands {
     }
 
     const links = await readLinks(drive, [
-      { prefixRoot: prefixRoot.path, name, target: prefixRoot.fsPath },
+      { prefixRoot: prefixRoot.path, name, modName: name, target: prefixRoot.fsPath },
     ]);
 
     try {
@@ -331,7 +336,7 @@ class InitCommands {
    * repository cloned for one mod is usually named after it — and the same name is checked
    * against what is already in that folder, since the mod's own folder goes inside it.
    */
-  private async askName(root: vscode.Uri): Promise<string | undefined> {
+  private async askName(root: vscode.Uri): Promise<ModName | undefined> {
     // Off the `Uri` rather than off the workspace: a folder outside the open one has a relative
     // path that is not relative at all, and its last segment is not its name.
     const suggested = root.path.split('/').filter((segment) => segment !== '').at(-1) ?? '';
@@ -345,7 +350,7 @@ class InitCommands {
       validateInput: (typed) => modNameProblemOf(typed),
     });
 
-    return name?.trim();
+    return name === undefined ? undefined : modNameOf(name);
   }
 }
 

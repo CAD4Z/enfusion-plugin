@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Launch, Target } from './enf';
+import type { Launch, Target } from '../../src/mods/enf';
 import {
   type FilePatchingPlan,
   type GameEntry,
@@ -14,9 +14,10 @@ import {
   runRootOf,
   targetById,
   targetsOf,
-} from './launch';
-import type { MachineSettings } from './machine';
-import type { LinkFact } from './workDrive';
+} from '../../src/mods/launch';
+import type { MachineSettings } from '../../src/mods/machine';
+import { modNameOf } from '../../src/mods/modName';
+import type { LinkFact } from '../../src/mods/workDrive';
 
 const GAME = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
 const DIAG = `${GAME}\\DayZDiag_x64.exe`;
@@ -804,6 +805,53 @@ test('a target naming a mod the workspace has not got starts nothing', () => {
   assert.deepEqual(plan.processes, []);
 });
 
+test('an invalid workspace mod name creates no file-patching path and refuses the whole launch', () => {
+  const unsafe = { ...CORE, name: '../Victim', modName: undefined };
+  const plan = launchPlanOf(input({ mods: [unsafe] }));
+
+  assert.ok(plan.refusals.some((refusal) => refusal.includes('cannot be file-patched')));
+  assert.deepEqual(plan.filePatching.junctions, []);
+  assert.deepEqual(plan.folders, []);
+  assert.deepEqual(plan.processes, []);
+  assert.ok(!launchPathsOf(input().target, [unsafe]).some((path) => path.includes('Victim')));
+});
+
+test('a checked name belonging to another raw mod is refused before launch paths are made', () => {
+  const mismatched = { ...CORE, name: 'CADMap' };
+  const plan = launchPlanOf(input({ mods: [mismatched] }));
+
+  assert.ok(plan.refusals.some((refusal) => refusal.includes('no longer matches')));
+  assert.deepEqual(plan.filePatching.junctions, []);
+  assert.deepEqual(plan.processes, []);
+});
+
+test('an invalid but folder-safe workspace name is not probed as a third-party mod', () => {
+  const invalid = { ...CORE, name: 'Bad-Mod', modName: undefined };
+  const target_ = target({ mod: 'Bad-Mod', launch: launch({ clientMods: ['Bad-Mod'] }) });
+
+  assert.deepEqual(launchPathsOf(target_, [invalid]), []);
+  assert.deepEqual(launchPlanOf(input({ target: target_, mods: [invalid] })).processes, []);
+});
+
+test('a loaded-mod traversal is reported and never becomes a path to probe or launch', () => {
+  const target_ = target({ launch: launch({ clientMods: ['../Victim', 'Community-Online-Tools'] }) });
+  const plan = launchPlanOf(input({ target: target_ }));
+  const paths = launchPathsOf(target_, [CORE]);
+
+  assert.ok(plan.refusals.some((refusal) => refusal.includes('one Windows folder name')));
+  assert.ok(!paths.some((path) => path.includes('Victim')));
+  assert.ok(paths.includes('P:\\Mods\\@Community-Online-Tools'));
+  assert.deepEqual(plan.processes, []);
+});
+
+test('an empty loaded-mod reference is refused rather than silently omitted', () => {
+  const target_ = target({ launch: launch({ clientMods: [''] }) });
+  const plan = launchPlanOf(input({ target: target_ }));
+
+  assert.ok(plan.refusals.some((refusal) => refusal.includes('needs one folder name')));
+  assert.deepEqual(plan.processes, []);
+});
+
 test('a launch refuses when the work drive is not mounted, and starts nothing at all', () => {
   const plan = launchPlanOf(
     input({ drive: { letter: 'P:', source: 'F:\\Workdrive', at: '', state: 'unmounted' } }),
@@ -1054,7 +1102,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
 
 /** A mod of one addon named after itself, which is the single-addon layout every test but one is. */
 function mod(name: string, root: string): LaunchMod {
-  return { name, root, prefixRoot: `${root}\\${name}`, addons: [name] };
+  return { name, modName: modNameOf(name), root, prefixRoot: `${root}\\${name}`, addons: [name] };
 }
 
 function folder(name: string): GameEntry {

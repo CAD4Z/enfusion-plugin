@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mountArguments, mountedAt, unmountArguments } from './subst';
+import { mountArguments, mountedAt, unmountArguments } from '../../src/mods/subst';
 
 /** What `subst` prints with no arguments, on a machine with two letters up. */
 const MOUNTED = ['P:\\: => F:\\DayZ\\Workdrive', 'X:\\: => C:\\Temp\\Scratch', ''].join('\r\n');

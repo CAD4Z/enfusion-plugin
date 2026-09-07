@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveWindows, windowsFolder, windowsName, windowsPath } from './paths';
+import { resolveWindows, windowsFolder, windowsName, windowsPath } from '../../src/mods/paths';
 
 test('parts are joined with one separator, however many the parts brought', () => {
   assert.equal(windowsPath('P:', 'temp'), 'P:\\temp');

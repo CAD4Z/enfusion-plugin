@@ -25,12 +25,19 @@ import {
   targetById,
   targetsOf,
 } from '../mods/launch';
+import {
+  type LaunchAttempt,
+  type LaunchExit,
+  type LaunchGame,
+  type LaunchSession,
+  LaunchCoordinator,
+  activeLaunchOf,
+} from '../mods/launchSession';
 import { MANIFEST_FILE } from '../mods/model';
 import { windowsName } from '../mods/paths';
 import { scriptDebugNoteOf, scriptDebugSaidOf } from '../mods/scriptDebug';
 import { gamePrefixOf, sandboxPlanOf } from '../mods/sandbox';
 import {
-  type GameProcess,
   localAppData,
   prepareLaunch,
   readFound,
@@ -43,7 +50,7 @@ import { openSandbox, sandboxedGame } from '../platform/sandbox';
 import {
   type ScriptDebugHandler,
   type ScriptDebugPort,
-  openScriptDebugPort,
+  openScriptDebugPorts,
 } from '../platform/scriptDebug';
 import { readWorkDrive } from '../platform/workDrive';
 import { findMods, launchModsOf, targetSourcesOf } from '../platform/workspace';
@@ -82,13 +89,12 @@ export function registerLaunch(
   log: vscode.LogOutputChannel,
 ): Launching {
   const launcher = new Launcher(log);
+  const coordinator = new LaunchCoordinator();
   const bar = new TargetBar(memento, launcher);
   const configurations = new Configurations(launcher, bar);
-  const started = new Started(log);
+  const started = new Started(log, coordinator);
 
   const disposable = vscode.Disposable.from(
-    vscode.debug.onDidStartDebugSession((session) => started.began(session)),
-    vscode.debug.onDidTerminateDebugSession((session) => started.ended(session)),
     bar,
     // Twice on purpose: the dynamic registration is what fills the Run and Debug list, and the
     // ordinary one is what gets asked to resolve a configuration before it is launched.
@@ -101,7 +107,7 @@ export function registerLaunch(
     vscode.debug.registerDebugAdapterDescriptorFactory(LAUNCH_TYPE, {
       createDebugAdapterDescriptor: (session) =>
         new vscode.DebugAdapterInlineImplementation(
-          new GameSession(targetOf(session.configuration), launcher, log),
+          new GameSession(targetOf(session.configuration), launcher, coordinator, log),
         ),
     }),
     vscode.commands.registerCommand(LAUNCH_COMMAND.select, () => bar.choose()),
@@ -134,38 +140,28 @@ export function registerLaunch(
  * keyboard focus is a button a held key presses again and again — which is how a single press
  * becomes a machine full of processes.
  *
- * Run and Debug is left alone: a developer who starts a second session from the debug toolbar has
- * said so twice, and stopping them is not this button's business.
+ * The coordinator below is the authority for the panel button and Run and Debug alike. This class
+ * only covers the short moment before the adapter exists and can claim that shared launch slot.
  */
 class Started {
-  private readonly sessions = new Set<string>();
   /** The moment between asking for a session and being told it began, where nothing is up yet. */
   private starting = false;
   /** Whether the refusal has been shown, so a held key is not answered with a wall of them. */
   private refused = false;
 
-  constructor(private readonly log: vscode.LogOutputChannel) {}
-
-  began(session: vscode.DebugSession): void {
-    if (session.type === LAUNCH_TYPE) {
-      this.sessions.add(session.id);
-    }
-  }
-
-  ended(session: vscode.DebugSession): void {
-    this.sessions.delete(session.id);
-    if (this.sessions.size === 0) {
-      this.refused = false;
-    }
-  }
+  constructor(
+    private readonly log: vscode.LogOutputChannel,
+    private readonly coordinator: LaunchCoordinator,
+  ) {}
 
   async start(): Promise<void> {
-    if (this.starting || this.sessions.size > 0) {
+    if (this.starting || this.coordinator.busy) {
       this.log.warn('the game is already up; this launch was not started');
       await this.sayBusy();
       return;
     }
 
+    this.refused = false;
     this.starting = true;
 
     try {
@@ -415,84 +411,107 @@ class Launcher {
     return targetsOf(targetSourcesOf(await findMods()));
   }
 
-  /** The processes of the launch, running — or the sentence saying why none of them is. */
-  async start(id: string, say: (text: string) => void): Promise<Launched | string> {
+  /** One atomic running launch, or the refusal that acquired nothing. */
+  async start(
+    id: string,
+    say: (text: string) => void,
+    signal: AbortSignal,
+  ): Promise<LaunchAttempt> {
+    const games: LaunchGame[] = [];
+    let listening: readonly ScriptDebugPort[] = [];
+
+    signal.throwIfAborted();
+
     // A launch is one of the two things that puts a path out of a `mod.enf` on a command line, so
     // like a build it waits until the developer has said the folder is theirs.
     if (!vscode.workspace.isTrusted) {
-      return (
-        `Launching starts the game with paths out of this workspace’s ${MANIFEST_FILE}, so it ` +
-        'needs the workspace to be trusted.'
+      return {
+        kind: 'refused',
+        message:
+          `Launching starts the game with paths out of this workspace’s ${MANIFEST_FILE}, so it ` +
+          'needs the workspace to be trusted.',
+      };
+    }
+
+    try {
+      const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
+      signal.throwIfAborted();
+
+      const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
+      if (target === undefined) {
+        return { kind: 'refused', message: `No launch target is called "${id}" any more.` };
+      }
+
+      const mods = launchModsOf(discovery);
+      const runRoot = runRootOf(
+        settings.filePatchingRoot,
+        localAppData(),
+        vscode.workspace.name ?? '',
       );
+      const [drive, game, present, found] = await Promise.all([
+        readWorkDrive(settings),
+        readGameRoot(settings),
+        readLinkFacts(filePatchingRootOf(runRoot)),
+        // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
+        // for by the plan itself, so that the two can never go looking at different paths.
+        readFound(launchPathsOf(target, mods)),
+      ]);
+      signal.throwIfAborted();
+
+      // Opened before the plan rather than after it, because the plan puts their numbers on the
+      // command lines it writes. A launch that is then refused closes them again.
+      listening = await this.listen(say);
+      signal.throwIfAborted();
+      const plan = launchPlanOf({
+        target,
+        mods,
+        settings,
+        drive,
+        runRoot,
+        game,
+        present,
+        found,
+        debugPorts: portsOf(listening),
+      });
+
+      if (plan.refusals.length > 0) {
+        await this.rollback(games, listening);
+        return { kind: 'refused', message: plan.refusals.join(' ') };
+      }
+
+      for (const warning of plan.warnings) {
+        this.log.warn(warning);
+        say(warning);
+      }
+
+      signal.throwIfAborted();
+      await prepareLaunch(plan);
+      signal.throwIfAborted();
+      this.log.info(
+        `launch: ${plan.filePatching.junctions.length} link(s) made, ` +
+          `${plan.filePatching.remove.length} taken off, ${plan.copies.length} layer(s) laid down, ` +
+          `in ${runRoot}`,
+      );
+
+      if (plan.processes.length === 0) {
+        await this.rollback(games, listening);
+        return { kind: 'refused', message: `${target.id} puts nothing up.` };
+      }
+
+      for (const process_ of plan.processes) {
+        signal.throwIfAborted();
+        const command = `${process_.program} ${process_.arguments.join(' ')}`;
+        this.log.info(command);
+        say(command);
+        games.push(await startGame(process_));
+      }
+
+      signal.throwIfAborted();
+      return { kind: 'started', launch: activeLaunchOf(games, listening) };
+    } catch (error: unknown) {
+      await this.rollback(games, listening);
+      throw error;
     }
-
-    const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
-    const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
-    if (target === undefined) {
-      return `No launch target is called "${id}" any more.`;
-    }
-
-    const mods = launchModsOf(discovery);
-    const runRoot = runRootOf(
-      settings.filePatchingRoot,
-      localAppData(),
-      vscode.workspace.name ?? '',
-    );
-    const [drive, game, present, found] = await Promise.all([
-      readWorkDrive(settings),
-      readGameRoot(settings),
-      readLinkFacts(filePatchingRootOf(runRoot)),
-      // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
-      // for by the plan itself, so that the two can never go looking at different paths.
-      readFound(launchPathsOf(target, mods)),
-    ]);
-
-    // Opened before the plan rather than after it, because the plan puts their numbers on the
-    // command lines it writes. A launch that is then refused closes them again.
-    const listening = await this.listen(say);
-    const plan = launchPlanOf({
-      target,
-      mods,
-      settings,
-      drive,
-      runRoot,
-      game,
-      present,
-      found,
-      debugPorts: portsOf(listening),
-    });
-
-    if (plan.refusals.length > 0) {
-      close(listening);
-      return plan.refusals.join(' ');
-    }
-
-    for (const warning of plan.warnings) {
-      this.log.warn(warning);
-      say(warning);
-    }
-
-    await prepareLaunch(plan);
-    this.log.info(
-      `launch: ${plan.filePatching.junctions.length} link(s) made, ` +
-        `${plan.filePatching.remove.length} taken off, ${plan.copies.length} layer(s) laid down, ` +
-        `in ${runRoot}`,
-    );
-
-    if (plan.processes.length === 0) {
-      close(listening);
-      return `${target.id} puts nothing up.`;
-    }
-
-    const games = plan.processes.map((process_) => {
-      const command = `${process_.program} ${process_.arguments.join(' ')}`;
-      this.log.info(command);
-      say(command);
-
-      return startGame(process_);
-    });
-
-    return { games, listening };
   }
 
   /**
@@ -508,76 +527,123 @@ class Launcher {
    * password, and neither the debugger ports nor the links in the run folder should be held open
    * across that: what is opened here is opened for a client that is about to start.
    */
-  async startSecond(id: string, say: (text: string) => void): Promise<Launched | string> {
+  async startSecond(
+    id: string,
+    say: (text: string) => void,
+    signal: AbortSignal,
+  ): Promise<LaunchAttempt> {
+    const games: LaunchGame[] = [];
+    let listening: readonly ScriptDebugPort[] = [];
+
+    signal.throwIfAborted();
+
     if (!vscode.workspace.isTrusted) {
-      return `Starting a second client puts paths out of this workspace’s ${MANIFEST_FILE} on a
-        command line, so it needs the workspace to be trusted.`.replace(/\s+/g, ' ');
+      return {
+        kind: 'refused',
+        message: `Starting a second client puts paths out of this workspace’s ${MANIFEST_FILE} on a
+          command line, so it needs the workspace to be trusted.`.replace(/\s+/g, ' '),
+      };
     }
 
-    const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
-    const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
-    if (target === undefined) {
-      return `No launch target is called "${id}" any more.`;
-    }
+    try {
+      const [discovery, settings] = await Promise.all([findMods(), readMachineSettings()]);
+      signal.throwIfAborted();
 
-    // Where a machine is set up for two accounts, the box has to exist and its Steam has to be
-    // signed in before there is anywhere to start a client; where it is not, a second client is
-    // simply another client and there is nothing to put in front of it.
-    const sandbox = sandboxPlanOf(settings.secondClient);
-    if (sandbox.kind === 'wanting') {
-      return sandbox.said;
-    }
-
-    if (sandbox.kind === 'box') {
-      const failed = await openSandbox(sandbox.sandbox, say);
-      if (failed !== undefined) {
-        return failed;
+      const target = targetById(targetsOf(targetSourcesOf(discovery)), id);
+      if (target === undefined) {
+        return { kind: 'refused', message: `No launch target is called "${id}" any more.` };
       }
-    }
 
-    const prefix = sandbox.kind === 'box' ? gamePrefixOf(sandbox.sandbox) : [];
-    const mods = launchModsOf(discovery);
-    const runRoot = runRootOf(settings.filePatchingRoot, localAppData(), vscode.workspace.name ?? '');
-    const [drive, game, present, found] = await Promise.all([
-      readWorkDrive(settings),
-      readGameRoot(settings),
-      readLinkFacts(filePatchingRootOf(runRoot)),
-      readFound(launchPathsOf(target, mods)),
-    ]);
+      // Where a machine is set up for two accounts, the box has to exist and its Steam has to be
+      // signed in before there is anywhere to start a client; where it is not, a second client is
+      // simply another client and there is nothing to put in front of it.
+      const sandbox = sandboxPlanOf(settings.secondClient);
+      if (sandbox.kind === 'wanting') {
+        return { kind: 'refused', message: sandbox.said };
+      }
 
-    const listening = await this.listen(say, ['client2']);
-    const plan = launchPlanOf(
-      { target, mods, settings, drive, runRoot, game, present, found, debugPorts: portsOf(listening) },
-      ['client2'],
-    );
+      if (sandbox.kind === 'box') {
+        const failed = await openSandbox(sandbox.sandbox, say, signal);
+        signal.throwIfAborted();
+        if (failed !== undefined) {
+          return { kind: 'refused', message: failed };
+        }
+      }
 
-    if (plan.refusals.length > 0) {
-      close(listening);
-      return plan.refusals.join(' ');
-    }
+      const prefix = sandbox.kind === 'box' ? gamePrefixOf(sandbox.sandbox) : [];
+      const mods = launchModsOf(discovery);
+      const runRoot = runRootOf(
+        settings.filePatchingRoot,
+        localAppData(),
+        vscode.workspace.name ?? '',
+      );
+      const [drive, game, present, found] = await Promise.all([
+        readWorkDrive(settings),
+        readGameRoot(settings),
+        readLinkFacts(filePatchingRootOf(runRoot)),
+        readFound(launchPathsOf(target, mods)),
+      ]);
+      signal.throwIfAborted();
 
-    const process_ = plan.processes[0];
-    if (process_ === undefined) {
-      close(listening);
-      return `${target.id} puts no second client up.`;
-    }
+      listening = await this.listen(say, ['client2']);
+      signal.throwIfAborted();
+      const plan = launchPlanOf(
+        {
+          target,
+          mods,
+          settings,
+          drive,
+          runRoot,
+          game,
+          present,
+          found,
+          debugPorts: portsOf(listening),
+        },
+        ['client2'],
+      );
 
-    await prepareLaunch(plan);
+      if (plan.refusals.length > 0) {
+        await this.rollback(games, listening);
+        return { kind: 'refused', message: plan.refusals.join(' ') };
+      }
 
-    const command = [...prefix, process_.program, ...process_.arguments].join(' ');
-    this.log.info(command);
-    say(command);
+      const process_ = plan.processes[0];
+      if (process_ === undefined) {
+        await this.rollback(games, listening);
+        return { kind: 'refused', message: `${target.id} puts no second client up.` };
+      }
 
-    const started = startGame(process_, prefix);
+      signal.throwIfAborted();
+      await prepareLaunch(plan);
+      signal.throwIfAborted();
 
-    return {
-      games: [
+      const command = [...prefix, process_.program, ...process_.arguments].join(' ');
+      this.log.info(command);
+      say(command);
+
+      const started = await startGame(process_, prefix);
+      games.push(
         sandbox.kind === 'box'
           ? sandboxedGame(started, sandbox.sandbox, windowsName(process_.program))
           : started,
-      ],
-      listening,
-    };
+      );
+      signal.throwIfAborted();
+
+      return { kind: 'started', launch: activeLaunchOf(games, listening) };
+    } catch (error: unknown) {
+      await this.rollback(games, listening);
+      throw error;
+    }
+  }
+
+  /** Rolls back handles that have not yet been transferred to a `LaunchSession`. */
+  private async rollback(
+    games: readonly LaunchGame[],
+    listening: readonly ScriptDebugPort[],
+  ): Promise<void> {
+    for (const failure of await activeLaunchOf(games, listening).stop()) {
+      this.log.error(`launch cleanup failed: ${messageOf(failure)}`);
+    }
   }
 
   /**
@@ -596,28 +662,15 @@ class Launcher {
     roles: readonly LaunchRole[] = ROLES,
   ): Promise<ScriptDebugPort[]> {
     const handler = handlerFor(say);
-    const opened = await Promise.all(
-      roles.map(async (role) => openScriptDebugPort(role, handler)),
-    );
-    const up: ScriptDebugPort[] = [];
+    const opened = await openScriptDebugPorts(roles, handler);
 
-    for (const outcome of opened) {
-      if (typeof outcome === 'string') {
-        this.log.warn(outcome);
-        say(outcome);
-      } else {
-        up.push(outcome);
-      }
+    for (const warning of opened.warnings) {
+      this.log.warn(warning);
+      say(warning);
     }
 
-    return up;
+    return [...opened.listening];
   }
-}
-
-/** Everything one launch put up: the games, and the listeners their script logs come in on. */
-interface Launched {
-  readonly games: readonly GameProcess[];
-  readonly listening: readonly ScriptDebugPort[];
 }
 
 const ROLES: readonly LaunchRole[] = ['client', 'server'];
@@ -654,12 +707,6 @@ function portsOf(listening: readonly ScriptDebugPort[]): Record<LaunchRole, numb
 /** Not a port anything listens on, which is what a game is told when nothing is listening. */
 const NO_PORT = 0;
 
-function close(listening: readonly ScriptDebugPort[]): void {
-  for (const port of listening) {
-    port.close();
-  }
-}
-
 /** One request of the debug protocol, which is all of it this adapter reads. */
 interface DapRequest {
   readonly seq: number;
@@ -672,25 +719,39 @@ interface DapRequest {
  * when the game goes away on its own. Every other request is answered so that the editor is not
  * left waiting, and none of them does anything — there is nothing here to step through.
  *
- * A launch is one session however many processes it put up, so Stop takes down every one of them.
- * And when any one of them goes, so do the rest: a client whose server has gone is a client with
- * nothing to talk to, and a server nobody is joining any more would otherwise be left running with
- * nothing in the editor to show it.
+ * A launch is one session however many primary processes it put up, so Stop takes down every one
+ * of them. And when any primary process goes, so do its siblings: a client whose server has gone
+ * has nobody to talk to, and a server whose client is gone would otherwise be left running with
+ * nothing in the editor to show it. An optional second client may leave without ending the launch.
  */
 class GameSession implements vscode.DebugAdapter {
   private readonly messages = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
   readonly onDidSendMessage = this.messages.event;
 
   private sequence = 1;
-  private games: readonly GameProcess[] = [];
-  private listening: readonly ScriptDebugPort[] = [];
-  private over = false;
+  private readonly lifecycle: LaunchSession;
+  private terminated = false;
+  private disposed = false;
 
   constructor(
     private readonly target: string,
     private readonly launcher: Launcher,
+    coordinator: LaunchCoordinator,
     private readonly log: vscode.LogOutputChannel,
-  ) {}
+  ) {
+    this.lifecycle = coordinator.session({
+      ended: (exit) => {
+        this.output(exitMessageOf(exit));
+        this.terminate();
+      },
+      secondEnded: (exit) => {
+        this.output(`${exitMessageOf(exit)} The launch it joined is still up.`);
+      },
+      cleanupFailed: (error) => {
+        this.log.error(`Launch cleanup failed: ${messageOf(error)}`);
+      },
+    });
+  }
 
   handleMessage(message: vscode.DebugProtocolMessage): void {
     const request = message as DapRequest;
@@ -699,14 +760,13 @@ class GameSession implements vscode.DebugAdapter {
     }
 
     void this.handle(request).catch((error: unknown) => {
-      this.log.error(error instanceof Error ? error : String(error));
-      this.fail(request, error instanceof Error ? error.message : String(error));
-      // Whatever it was, the session has no game to show for it and nothing more to do.
-      this.event('terminated');
+      void this.failed(request, error);
     });
   }
 
   dispose(): void {
+    this.disposed = true;
+    void this.lifecycle.stop();
     this.messages.dispose();
   }
 
@@ -739,10 +799,9 @@ class GameSession implements vscode.DebugAdapter {
         return;
       case 'terminate':
       case 'disconnect':
-        this.over = true;
-        await this.stop();
+        await this.lifecycle.stop();
         this.respond(request);
-        this.event('terminated');
+        this.terminate();
         return;
       default:
         this.respond(request);
@@ -751,39 +810,37 @@ class GameSession implements vscode.DebugAdapter {
   }
 
   private async launch(request: DapRequest): Promise<void> {
-    const outcome = await this.launcher.start(this.target, (text) => {
-      this.output(text);
-    });
+    const outcome = await this.lifecycle.start((signal) =>
+      this.launcher.start(this.target, (text) => this.output(text), signal),
+    );
 
-    if (typeof outcome === 'string') {
-      this.log.warn(outcome);
-      this.fail(request, outcome);
-      this.event('terminated');
-      return;
-    }
-
-    this.games = outcome.games;
-    this.listening = outcome.listening;
-    this.respond(request);
-
-    // Stop, pressed while the run folder was still being made: the session is already over, and
-    // these were started after it ended. Detached processes with nothing left to stop them is
-    // exactly the task manager this exists to save a developer from.
-    if (this.over) {
-      await this.stop();
-      return;
-    }
-
-    // The session lasts as long as the launch does, so that Stop stays a way of ending it and the
-    // toolbar stops showing one after the game has been closed from inside.
-    for (const game of outcome.games) {
-      void game.exited.then((code) => {
-        void this.finish(
-          code === undefined
-            ? `The ${game.role} is gone.`
-            : `The ${game.role} exited with ${code}.`,
+    switch (outcome.kind) {
+      case 'started':
+        this.respond(request);
+        return;
+      case 'refused':
+        this.log.warn(outcome.message);
+        this.fail(request, outcome.message);
+        this.terminate();
+        return;
+      case 'failed':
+        this.log.error(messageOf(outcome.error));
+        this.fail(request, messageOf(outcome.error));
+        this.terminate();
+        return;
+      case 'busy':
+        this.fail(
+          request,
+          'Another Enfusion launch is already starting or running in this workspace.',
         );
-      });
+        this.terminate();
+        return;
+      case 'already-started':
+        this.fail(request, 'This debug session has already started its launch.');
+        return;
+      case 'inactive':
+        this.fail(request, 'The launch was stopped before it finished starting.');
+        return;
     }
   }
 
@@ -791,75 +848,70 @@ class GameSession implements vscode.DebugAdapter {
    * A second client, added to this launch.
    *
    * It joins the session rather than starting one of its own: Stop takes it down with everything
-   * else, its log arrives in the same console under its own prefix, and — like every other process
-   * of the launch — the first one to go ends them all.
+   * else and its log arrives in the same console under its own prefix. Its own exit only frees the
+   * second-client slot; a later press can add a replacement to the launch that is still running.
    */
   private async second(request: DapRequest): Promise<void> {
-    if (this.over) {
-      this.respond(request);
-      return;
+    const outcome = await this.lifecycle.addSecond((signal) =>
+      this.launcher.startSecond(this.target, (text) => this.output(text), signal),
+    );
+
+    switch (outcome.kind) {
+      case 'started':
+      case 'inactive':
+        this.respond(request);
+        return;
+      case 'refused':
+        await this.refuseSecond(request, outcome.message);
+        return;
+      case 'failed':
+        await this.refuseSecond(request, messageOf(outcome.error));
+        return;
+      case 'busy':
+      case 'already-started':
+        await this.refuseSecond(request, 'A second client is already starting or running.');
+        return;
     }
+  }
 
-    // Nothing about a second client is worth ending the launch over, and an error thrown out of a
-    // request is: the adapter would say the session is over, the editor would disconnect, and Stop
-    // would take the server and the first client with it. So it is caught here rather than there.
-    const outcome = await this.launcher
-      .startSecond(this.target, (text) => {
-        this.output(text);
-      })
-      .catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
-
-    if (typeof outcome === 'string') {
-      this.log.warn(outcome);
-      this.output(outcome);
-      await vscode.window.showWarningMessage(outcome);
-      this.respond(request);
-      return;
+  /** A second client is optional, so refusing it must leave the primary launch alone. */
+  private async refuseSecond(request: DapRequest, message: string): Promise<void> {
+    this.log.warn(message);
+    this.output(message);
+    try {
+      await vscode.window.showWarningMessage(message);
+    } catch (error: unknown) {
+      // The notification is optional UI around an optional client. A host failure showing it must
+      // not reach `failed`, whose deliberately terminal cleanup belongs to protocol failures.
+      this.log.error(`Could not show the second-client warning: ${messageOf(error)}`);
     }
-
-    this.games = [...this.games, ...outcome.games];
-    this.listening = [...this.listening, ...outcome.listening];
     this.respond(request);
-
-    // Stop, pressed while the box was being brought up: bringing it up waits for a person to sign
-    // in, which is as long as a person takes, and the launch this was joining can be over by the
-    // time there is a client to join it with. A detached game with nothing left to stop it is
-    // exactly the task manager this exists to save a developer from.
-    if (this.over) {
-      await this.stop();
-      return;
-    }
-
-    // Said rather than acted on. A second client is an addition to a launch, so its going is not
-    // the launch ending — least of all when it went because it could not start, which is exactly
-    // when taking the server and the first client down with it does the most damage.
-    for (const game of outcome.games) {
-      void game.exited.then((code) => {
-        this.output(
-          code === undefined
-            ? 'The second client is gone. The launch it joined is still up.'
-            : `The second client exited with ${code}. The launch it joined is still up.`,
-        );
-      });
-    }
   }
 
-  /** The first process to go ends the launch, and takes whatever else it started with it. */
-  private async finish(said: string): Promise<void> {
-    if (this.over) {
+  /** An unexpected primary protocol failure still travels through the terminal cleanup path. */
+  private async failed(request: DapRequest, error: unknown): Promise<void> {
+    const message = messageOf(error);
+    this.log.error(message);
+
+    if (request.command === SECOND_CLIENT_REQUEST) {
+      // A second client remains optional even when a future integration failure escapes `second`.
+      this.output(message);
+      this.fail(request, message);
       return;
     }
 
-    this.over = true;
-    this.output(said);
-    await this.stop();
+    await this.lifecycle.stop();
+    this.fail(request, message);
+    this.terminate();
+  }
+
+  private terminate(): void {
+    if (this.terminated || this.disposed) {
+      return;
+    }
+
+    this.terminated = true;
     this.event('terminated');
-  }
-
-  private async stop(): Promise<void> {
-    close(this.listening);
-    this.listening = [];
-    await Promise.all(this.games.map((game) => game.kill()));
   }
 
   private respond(request: DapRequest, body?: object): void {
@@ -886,6 +938,27 @@ class GameSession implements vscode.DebugAdapter {
   }
 
   private send(message: object): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.messages.fire({ ...message, seq: this.sequence++ });
+  }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function exitMessageOf(exit: LaunchExit): string {
+  const role = exit.role === 'client2' ? 'second client' : exit.role;
+
+  switch (exit.outcome.kind) {
+    case 'code':
+      return `The ${role} exited with ${exit.outcome.code}.`;
+    case 'signal':
+      return `The ${role} exited after ${exit.outcome.signal}.`;
+    case 'unknown':
+      return `The ${role} is gone.`;
   }
 }

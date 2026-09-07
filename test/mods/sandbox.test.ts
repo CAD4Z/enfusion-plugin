@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { SecondClient } from './machine';
+import type { SecondClient } from '../../src/mods/machine';
 import {
   BOX,
   BOX_SETTINGS,
@@ -18,7 +18,7 @@ import {
   signedInOf,
   steamCommandOf,
   steamExecutableOf,
-} from './sandbox';
+} from '../../src/mods/sandbox';
 
 const SECOND: SecondClient = {
   account: 'estrv05733',

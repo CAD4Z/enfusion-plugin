@@ -9,7 +9,7 @@ import {
   gameExecutableOf,
   isWanting,
   pboProjectExecutableOf,
-} from './machine';
+} from '../../src/mods/machine';
 
 const SETTINGS: MachineSettings = {
   dayz: 'F:\\SteamLibrary\\steamapps\\common\\DayZ',

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type BuildRequest, isSameRequest, nameOf, queued } from './buildQueue';
+import { type BuildRequest, isSameRequest, nameOf, queued } from '../../src/mods/buildQueue';
 
 const CORE: BuildRequest = { kind: 'addon', mod: 'CADCore', addon: 'CADCore' };
 const SCRIPTS: BuildRequest = { kind: 'addon', mod: 'CADCore', addon: 'Scripts' };

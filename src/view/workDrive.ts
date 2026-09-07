@@ -130,7 +130,8 @@ class WorkDriveCommands {
  */
 function summarise(letter: string, links: readonly Link[], made: readonly Link[]): string {
   const occupied = links.filter((link) => link.state === 'occupied');
-  const already = links.length - made.length - occupied.length;
+  const invalid = links.filter((link) => link.state === 'invalid');
+  const already = links.length - made.length - occupied.length - invalid.length;
   const said: string[] = [];
 
   if (made.length > 0) {
@@ -142,6 +143,10 @@ function summarise(letter: string, links: readonly Link[], made: readonly Link[]
   if (occupied.length > 0) {
     const paths = occupied.map((link) => link.path).join(', ');
     said.push(`Left alone, because what is there is not a link: ${paths}.`);
+  }
+  if (invalid.length > 0) {
+    const names = invalid.map((link) => JSON.stringify(link.name)).join(', ');
+    said.push(`Not linked because the mod name is invalid: ${names}.`);
   }
 
   return said.length === 0

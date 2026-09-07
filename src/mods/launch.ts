@@ -29,6 +29,15 @@
 import { sameName } from './config';
 import type { Launch, Run, Target } from './enf';
 import type { MachineSettings } from './machine';
+import {
+  type LoadedModName,
+  type ModName,
+  isModNameOf,
+  loadedModNameOf,
+  loadedModNameProblemOf,
+  modNameProblemOf,
+  modPathOf,
+} from './modName';
 import { resolveWindows, samePath, windowsPath } from './paths';
 import { FORCED_SCRIPT_DEBUG_PORT, SCRIPT_DEBUG_HOST } from './scriptDebug';
 import type { LinkFact, WorkDrive } from './workDrive';
@@ -169,6 +178,8 @@ export interface GameEntry {
 /** A mod as a launch sees it: what it is called, where it is, and what it packs into. */
 export interface LaunchMod {
   readonly name: string;
+  /** The capability required by every name-derived launch path. */
+  readonly modName: ModName | undefined;
   /** The mod root the way Windows takes it: the folder `Missions` and `Profiles` sit in. */
   readonly root: string;
   /** The prefix root the way Windows takes it, which is what the run folder links to. */
@@ -304,8 +315,13 @@ function wantedOf(input: FilePatchingInput): Map<string, Junction> {
   }
 
   for (const mod of input.mods) {
-    wanted.set(mod.name.toLowerCase(), {
-      path: windowsPath(input.root, mod.name),
+    const name = checkedModNameOf(mod);
+    if (name === undefined) {
+      continue;
+    }
+
+    wanted.set(name.toLowerCase(), {
+      path: modPathOf(input.root, name, 'source'),
       target: mod.prefixRoot,
     });
   }
@@ -518,14 +534,16 @@ function rolesOf(run: Run): LaunchRole[] {
  */
 export function launchPathsOf(target: LaunchTarget, mods: readonly LaunchMod[]): string[] {
   const roles = rolesOf(target.run);
+  const targetName = targetModNameOf(target, mods);
   const built =
     modsDirectoryOf(target) === ''
       ? []
       : loadedNamesOf(target, roles).flatMap((name) => builtPathsOf(target, mods, name));
 
-  const server = roles.includes('server')
-    ? [...serverConfigsOf(target, mods), missionTemplateOf(target, mods)]
-    : [];
+  const server =
+    roles.includes('server') && targetName !== undefined
+      ? [...serverConfigsOf(target, mods), missionTemplateOf(target, mods)]
+      : [];
 
   return unique([...built, ...server]);
 }
@@ -603,7 +621,12 @@ function nothing(root: string): FilePatchingPlan {
  * mod — which is the failure that costs an hour, because it looks like a bug in the mod.
  */
 function refusalsOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
-  const said: string[] = [...gameRefusalOf(input), ...driveRefusalOf(input.drive)];
+  const said: string[] = [
+    ...gameRefusalOf(input),
+    ...driveRefusalOf(input.drive),
+    ...modNameRefusalsOf(input.mods),
+    ...loadedModNameRefusalsOf(input.target, roles),
+  ];
 
   if (modOf(input.target, input.mods) === undefined) {
     said.push(
@@ -627,6 +650,29 @@ function refusalsOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] 
   said.push(...unquotableOf(input.target));
 
   return said;
+}
+
+function modNameRefusalsOf(mods: readonly LaunchMod[]): string[] {
+  return mods.flatMap((mod) => {
+    if (checkedModNameOf(mod) !== undefined) {
+      return [];
+    }
+
+    const problem =
+      modNameProblemOf(mod.name) ??
+      'The checked mod name no longer matches the name shown for it.';
+    return [`${JSON.stringify(mod.name)} cannot be file-patched for this launch. ${problem}`];
+  });
+}
+
+function loadedModNameRefusalsOf(
+  target: LaunchTarget,
+  roles: readonly LaunchRole[],
+): string[] {
+  return uniqueValues(loadedNamesOf(target, roles)).flatMap((written) => {
+    const problem = loadedModNameProblemOf(written);
+    return problem === undefined ? [] : [`${target.configuredBy}: ${problem}`];
+  });
 }
 
 function gameRefusalOf(input: LaunchInput): string[] {
@@ -676,7 +722,12 @@ function unbuiltOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
   const found = foundOf(input);
   const said: string[] = [];
 
-  for (const name of loadedNamesOf(input.target, roles)) {
+  for (const written of loadedNamesOf(input.target, roles)) {
+    const name = loadedModNameOf(written);
+    if (name === undefined) {
+      continue;
+    }
+
     const ours = ourModOf(input.mods, name);
 
     // A third-party mod is known by the name of its folder and nothing else — no sources, no addon
@@ -684,7 +735,7 @@ function unbuiltOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
     if (ours === undefined) {
       const built = builtModOf(input.target, name);
       if (!found.has(samePath(built))) {
-        said.push(`${atOf(name)} is not in the mods directory: nothing is at ${built}.`);
+        said.push(`@${name} is not in the mods directory: nothing is at ${built}.`);
       }
       continue;
     }
@@ -923,36 +974,44 @@ function loadedNamesOf(target: LaunchTarget, roles: readonly LaunchRole[]): stri
  * asked nothing else.
  */
 function builtPathsOf(target: LaunchTarget, mods: readonly LaunchMod[], name: string): string[] {
-  const ours = ourModOf(mods, name);
+  const checked = loadedModNameOf(name);
+  if (checked === undefined) {
+    return [];
+  }
 
-  return ours === undefined ? [builtModOf(target, name)] : pbosOf(target, ours);
+  const ours = ourModOf(mods, checked);
+
+  return ours === undefined ? [builtModOf(target, checked)] : pbosOf(target, ours);
 }
 
-/** The workspace's own mod a name refers to, whether or not it was written with its `@`. */
-function ourModOf(mods: readonly LaunchMod[], name: string): LaunchMod | undefined {
-  return mods.find((mod) => sameName(atOf(mod.name), atOf(name)));
+/** The workspace mod a reference names; whether that mod has a usable path is decided afterwards. */
+function ourModOf(mods: readonly LaunchMod[], name: LoadedModName): LaunchMod | undefined {
+  return mods.find((mod) => sameName(mod.name, name));
 }
 
 /** Every one of them as the folder the game is pointed at. */
 function pathsOf(target: LaunchTarget, names: readonly string[]): string[] {
-  return names.map((name) => builtModOf(target, name));
+  return names.flatMap((written) => {
+    const name = loadedModNameOf(written);
+    return name === undefined ? [] : [builtModOf(target, name)];
+  });
 }
 
 /** `<ModsDirectory>\@<Name>`: the built mod, which is what is loaded rather than the sources. */
-function builtModOf(target: LaunchTarget, name: string): string {
-  return windowsPath(modsDirectoryOf(target), atOf(name));
+function builtModOf(target: LaunchTarget, name: ModName | LoadedModName): string {
+  return modPathOf(modsDirectoryOf(target), name, 'built');
 }
 
 /** The pbo a mod is built into, one per addon: the files that say whether it was built at all. */
 function pbosOf(target: LaunchTarget, mod: LaunchMod): string[] {
-  return mod.addons.map((addon) =>
-    windowsPath(builtModOf(target, mod.name), ADDONS_FOLDER, `${addon}.pbo`),
-  );
-}
+  const name = checkedModNameOf(mod);
+  if (name === undefined) {
+    return [];
+  }
 
-/** A built mod's folder is `@` and the name; a list may or may not have been written with the `@`. */
-function atOf(name: string): string {
-  return name.startsWith('@') ? name : `@${name}`;
+  return mod.addons.map((addon) =>
+    windowsPath(builtModOf(target, name), ADDONS_FOLDER, `${addon}.pbo`),
+  );
 }
 
 /** `modsDirectory` as the file that set it means it: a relative path counted from that file. */
@@ -965,9 +1024,13 @@ function modsDirectoryOf(target: LaunchTarget): string {
  * keep their own logs and their own settings rather than writing over each other's.
  */
 function profileOf(input: LaunchInput, role: LaunchRole): string {
+  const name = targetModNameOf(input.target, input.mods);
+  if (name === undefined) {
+    return '';
+  }
+
   return windowsPath(
-    profilesRootOf(input.settings.profiles, input.runRoot),
-    modNameOf(input.target, input.mods),
+    modPathOf(profilesRootOf(input.settings.profiles, input.runRoot), name, 'source'),
     role,
   );
 }
@@ -1003,7 +1066,8 @@ function missionOf(input: LaunchInput): string {
 
 /** `CADCore.chernarusplus`: the mod, and the world it is being launched on. */
 function missionNameOf(target: LaunchTarget, mods: readonly LaunchMod[]): string {
-  return `${modNameOf(target, mods)}.${mapOf(target)}`;
+  const name = targetModNameOf(target, mods);
+  return name === undefined ? '' : `${name}.${mapOf(target)}`;
 }
 
 /** The mission the target's mod keeps for that world, which the run's is laid down from. */
@@ -1071,9 +1135,16 @@ function modOf(target: LaunchTarget, mods: readonly LaunchMod[]): LaunchMod | un
   return mods.find((mod) => sameName(mod.name, target.mod));
 }
 
-/** Its name as the workspace spells it, falling back to the way the target wrote it. */
-function modNameOf(target: LaunchTarget, mods: readonly LaunchMod[]): string {
-  return modOf(target, mods)?.name ?? target.mod;
+/** Its checked name as the workspace spells it; an unknown or invalid target has no path name. */
+function targetModNameOf(target: LaunchTarget, mods: readonly LaunchMod[]): ModName | undefined {
+  const mod = modOf(target, mods);
+  return mod === undefined ? undefined : checkedModNameOf(mod);
+}
+
+/** A prepared launch name is usable only while it still belongs to the raw model value. */
+function checkedModNameOf(mod: LaunchMod): ModName | undefined {
+  const name = mod.modName;
+  return isModNameOf(mod.name, name) ? name : undefined;
 }
 
 /** And its root, which is the folder the profile and the mission are taken out of. */
@@ -1096,6 +1167,20 @@ function unique(paths: readonly string[]): string[] {
       return false;
     }
 
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Text values deduplicated without dropping an empty invalid value as path deduplication does. */
+function uniqueValues(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+
+  return values.filter((value) => {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
     seen.add(key);
     return true;
   });

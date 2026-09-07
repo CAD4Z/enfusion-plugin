@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { modNameOf } from '../../src/mods/modName';
 import {
   type LinkFact,
   type Prefix,
@@ -10,7 +11,7 @@ import {
   linksToMake,
   refusalOf,
   workDriveOf,
-} from './workDrive';
+} from '../../src/mods/workDrive';
 
 const SOURCE = 'F:\\DayZ\\Workdrive';
 const ELSEWHERE = 'C:\\Someone\\Else';
@@ -23,11 +24,13 @@ const UNSET = workDriveOf('P:', '', '');
 const CORE: Prefix = {
   prefixRoot: '/f:/Code/cad4z/CADCore/CADCore',
   name: 'CADCore',
+  modName: modNameOf('CADCore'),
   target: 'f:\\Code\\cad4z\\CADCore\\CADCore',
 };
 const MAP: Prefix = {
   prefixRoot: '/f:/Code/cad4z/CADMap/CADMap',
   name: 'CADMap',
+  modName: modNameOf('CADMap'),
   target: 'f:\\Code\\cad4z\\CADMap\\CADMap',
 };
 const PREFIXES: readonly Prefix[] = [CORE, MAP];
@@ -88,7 +91,34 @@ test('a letter that is up comes down whatever the settings say about it', () => 
 });
 
 test('a mod is linked under its prefix root name, in the root of the drive', () => {
-  assert.equal(linkPathOf('P:', 'CADCore'), 'P:\\CADCore');
+  const name = modNameOf('CADCore');
+  assert.ok(name !== undefined);
+  assert.equal(linkPathOf('P:', name), 'P:\\CADCore');
+});
+
+test('an invalid name has no work-drive path and can never become link work', () => {
+  const unsafe: Prefix = {
+    prefixRoot: '/f:/Code/cad4z/Safe/Victim',
+    name: '../Victim',
+    modName: undefined,
+    target: 'F:\\Victim',
+  };
+  const links = linksOf([unsafe, CORE], MOUNTED, facts([]));
+
+  assert.equal(links[0]?.state, 'invalid');
+  assert.equal(links[0]?.path, '');
+  assert.match(links[0]?.problem ?? '', /letters, digits and underscores/);
+  assert.deepEqual(linksToMake(links).map(name), ['CADCore']);
+});
+
+test('a checked name borrowed from another mod is not used for a work-drive path', () => {
+  const mismatched: Prefix = { ...CORE, name: 'CADMap' };
+  const [link] = linksOf([mismatched], MOUNTED, facts([]));
+
+  assert.equal(link?.state, 'invalid');
+  assert.equal(link?.path, '');
+  assert.match(link?.problem ?? '', /no longer matches/);
+  assert.deepEqual(linksToMake(link === undefined ? [] : [link]), []);
 });
 
 test('nothing at the link is a mod waiting to be linked', () => {
@@ -158,7 +188,12 @@ test('a drive mounted elsewhere is still asked what is on it', () => {
  * second or leave the two of them overwriting each other every time the button is pressed.
  */
 test('two mods of the same name are not both made, and the same one wins every run', () => {
-  const twin: Prefix = { ...MAP, prefixRoot: '/f:/Other/CADCore/CADCore', name: 'CADCore' };
+  const twin: Prefix = {
+    ...MAP,
+    prefixRoot: '/f:/Other/CADCore/CADCore',
+    name: 'CADCore',
+    modName: modNameOf('CADCore'),
+  };
   const both = [CORE, twin];
 
   const fresh = linksOf(both, MOUNTED, facts([]));

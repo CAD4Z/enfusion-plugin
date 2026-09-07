@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fileOf, problemsOf } from './packingLog';
-import type { Link } from './workDrive';
+import { modNameOf } from '../../src/mods/modName';
+import { fileOf, problemsOf } from '../../src/mods/packingLog';
+import type { Link } from '../../src/mods/workDrive';
 
 /**
  * Taken off `P:\temp\EnfusionProbe.packing.log` after pboProject was pointed at a config with a
@@ -31,9 +32,11 @@ const ADDON_BUILDER = `2026-08-21 11:59:03,546 [ INFO]   1:  - Converting cfg "P
 const CORE: Link = {
   prefixRoot: '/f:/Code/CADCore/CADCore',
   name: 'CADCore',
+  modName: modNameOf('CADCore'),
   path: 'P:\\CADCore',
   target: 'F:\\Code\\CADCore\\CADCore',
   at: 'F:\\Code\\CADCore\\CADCore',
+  problem: undefined,
   state: 'linked',
 };
 
@@ -105,7 +108,13 @@ test('a file under no link of ours is left as the builder named it', () => {
 
 /** A mod whose name is the start of another's is not the other one. */
 test('a link is matched by whole folders, never by the letters its name starts with', () => {
-  const other: Link = { ...CORE, name: 'CADCoreExtra', path: 'P:\\CADCoreExtra', target: 'F:\\X' };
+  const other: Link = {
+    ...CORE,
+    name: 'CADCoreExtra',
+    modName: modNameOf('CADCoreExtra'),
+    path: 'P:\\CADCoreExtra',
+    target: 'F:\\X',
+  };
 
   assert.equal(fileOf('\\CADCoreExtra\\config.cpp', 'P:', [CORE, other]), 'F:\\X\\config.cpp');
 });

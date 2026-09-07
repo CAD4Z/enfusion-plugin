@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { type FormEdit, type ManifestKind, type TextChange, changesOf, formOf } from './form';
+import {
+  type FormEdit,
+  type ManifestKind,
+  type TextChange,
+  changesOf,
+  formOf,
+} from '../../src/mods/form';
 
 /** The file with the changes in it, which is what the editor is left holding. */
 function applied(source: string, changes: readonly TextChange[]): string {
@@ -19,7 +25,7 @@ function edited(source: string, edit: FormEdit, kind: ManifestKind = 'mod'): str
 
 const MANIFEST = `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
   "version": "1.0.0",
 
   "launch": {
@@ -39,7 +45,7 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
   const form = formOf('mod', MANIFEST);
 
   assert.equal(form.kind, 'mod');
-  assert.equal(form.mod?.name, 'CAD4Z Core');
+  assert.equal(form.mod?.name, 'CAD4Z_Core');
   assert.equal(form.mod?.version, '1.0.0');
   assert.equal(form.launch.modsDirectory, 'Addons');
   assert.deepEqual(form.launch.targets, [
@@ -75,12 +81,12 @@ test('an empty file is a form with empty fields rather than one that refuses', (
 
 test('a broken file keeps everything that was readable and is not written into', () => {
   const source = `{
-  "name": "CAD4Z Core"
+  "name": "CAD4Z_Core"
   "author": "hurfy"
 }`;
   const form = formOf('mod', source);
 
-  assert.equal(form.mod?.name, 'CAD4Z Core');
+  assert.equal(form.mod?.name, 'CAD4Z_Core');
   assert.deepEqual(form.problems, [{ message: 'Comma expected.', line: 3, column: 3 }]);
   assert.ok(form.refusal?.includes('syntax error'));
   assert.deepEqual(changesOf('mod', source, { kind: 'set', path: ['name'], value: 'Other' }), []);
@@ -154,7 +160,7 @@ test('a list of the wrong type altogether shows no rows, so there is nothing to 
 test('a field that is there is replaced where it stands, and nothing else moves', () => {
   assert.equal(
     edited(MANIFEST, { kind: 'set', path: ['name'], value: 'CAD4Z' }),
-    MANIFEST.replace('"CAD4Z Core"', '"CAD4Z"'),
+    MANIFEST.replace('"CAD4Z_Core"', '"CAD4Z"'),
   );
 });
 
@@ -163,7 +169,7 @@ test('a field that is not there is written where the schema writes it', () => {
     edited(MANIFEST, { kind: 'set', path: ['author'], value: 'hurfy' }),
     `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
   "author": "hurfy",
   "version": "1.0.0",
 
@@ -184,12 +190,12 @@ test('a field that is not there is written where the schema writes it', () => {
 
 test('a new field goes after a field nobody declared rather than in front of it', () => {
   assert.equal(
-    edited('{\n  "name": "CAD4Z Core",\n  "autor": "hurfy"\n}\n', {
+    edited('{\n  "name": "CAD4Z_Core",\n  "autor": "hurfy"\n}\n', {
       kind: 'set',
       path: ['version'],
       value: '1.0.0',
     }),
-    '{\n  "name": "CAD4Z Core",\n  "autor": "hurfy",\n  "version": "1.0.0"\n}\n',
+    '{\n  "name": "CAD4Z_Core",\n  "autor": "hurfy",\n  "version": "1.0.0"\n}\n',
   );
 });
 
@@ -206,13 +212,13 @@ test('a workspace file is written into the same way, and its launch block made t
 
 test('a launch block the form has to make goes last, where both files write it', () => {
   const written = edited(
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z Core",\n  "version": "1.0.0"\n}\n',
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core",\n  "version": "1.0.0"\n}\n',
     { kind: 'set', path: ['launch', 'modsDirectory'], value: 'Addons' },
   );
 
   assert.equal(
     written,
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z Core",\n  "version": "1.0.0",\n' +
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core",\n  "version": "1.0.0",\n' +
       '  "launch": {\n    "modsDirectory": "Addons"\n  }\n}\n',
   );
 });
@@ -222,7 +228,7 @@ test('a box emptied takes the field out of the file', () => {
     edited(MANIFEST, { kind: 'set', path: ['version'], value: '' }),
     `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
 
   "launch": {
     "modsDirectory": "Addons",
@@ -287,12 +293,12 @@ test('a field of the launch block is written into the block rather than beside i
 
 test('a launch block the file has not got is made to hold the field', () => {
   assert.equal(
-    edited('{ "name": "CAD4Z Core" }', {
+    edited('{ "name": "CAD4Z_Core" }', {
       kind: 'set',
       path: ['launch', 'modsDirectory'],
       value: 'Addons',
     }),
-    '{\n  "name": "CAD4Z Core",\n  "launch": {\n    "modsDirectory": "Addons"\n  }\n}',
+    '{\n  "name": "CAD4Z_Core",\n  "launch": {\n    "modsDirectory": "Addons"\n  }\n}',
   );
 });
 
@@ -407,7 +413,7 @@ test('a field of a target is written where the schema writes it, not at the end'
 test('the comments around what is written survive being written around', () => {
   const source = `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
   /* Sources the builder has no business packing. */
   "exclude": [
     "*.psd" // Photoshop
@@ -427,11 +433,11 @@ test('the comments around what is written survive being written around', () => {
 });
 
 test('what the form adds is indented the way the file already is', () => {
-  const tabbed = '{\n\t"name": "CAD4Z Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons"\n\t}\n}';
+  const tabbed = '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons"\n\t}\n}';
 
   assert.equal(
     edited(tabbed, { kind: 'set', path: ['launch', 'clientMods'], value: 'x' }),
-    '{\n\t"name": "CAD4Z Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"clientMods": "x"\n\t}\n}',
+    '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"clientMods": "x"\n\t}\n}',
   );
 
   const wide = '{\n    "launch": {\n        "modsDirectory": "Addons"\n    }\n}';
@@ -442,26 +448,26 @@ test('what the form adds is indented the way the file already is', () => {
 });
 
 test('a file written with CRLF stays written with CRLF', () => {
-  const source = '{\r\n  "name": "CAD4Z Core"\r\n}\r\n';
+  const source = '{\r\n  "name": "CAD4Z_Core"\r\n}\r\n';
   const written = edited(source, { kind: 'set', path: ['version'], value: '1.0.0' });
 
-  assert.equal(written, '{\r\n  "name": "CAD4Z Core",\r\n  "version": "1.0.0"\r\n}\r\n');
+  assert.equal(written, '{\r\n  "name": "CAD4Z_Core",\r\n  "version": "1.0.0"\r\n}\r\n');
 });
 
 test('a trailing comma is JSONC, so the form still writes into the file', () => {
-  const written = edited('{\n  "name": "CAD4Z Core",\n}\n', {
+  const written = edited('{\n  "name": "CAD4Z_Core",\n}\n', {
     kind: 'set',
     path: ['version'],
     value: '1.0.0',
   });
 
   assert.equal(formOf('mod', written).mod?.version, '1.0.0');
-  assert.equal(formOf('mod', written).mod?.name, 'CAD4Z Core');
+  assert.equal(formOf('mod', written).mod?.name, 'CAD4Z_Core');
 });
 
 test('writing back what is already there is not a change, so the file is not marked dirty', () => {
   assert.deepEqual(
-    changesOf('mod', MANIFEST, { kind: 'set', path: ['name'], value: 'CAD4Z Core' }),
+    changesOf('mod', MANIFEST, { kind: 'set', path: ['name'], value: 'CAD4Z_Core' }),
     [],
   );
   assert.deepEqual(
@@ -491,15 +497,15 @@ test('the schema line a file points at itself with stays first', () => {
     edited('{\n  "$schema": "./mod.enf.schema.json"\n}\n', {
       kind: 'set',
       path: ['name'],
-      value: 'CAD4Z Core',
+      value: 'CAD4Z_Core',
     }),
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z Core"\n}\n',
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core"\n}\n',
   );
 });
 
 test('an empty file is one the form writes into rather than refuses', () => {
   assert.equal(
-    edited('', { kind: 'set', path: ['name'], value: 'CAD4Z Core' }),
-    '{\n  "name": "CAD4Z Core"\n}',
+    edited('', { kind: 'set', path: ['name'], value: 'CAD4Z_Core' }),
+    '{\n  "name": "CAD4Z_Core"\n}',
   );
 });

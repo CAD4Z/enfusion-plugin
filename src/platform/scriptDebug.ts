@@ -40,6 +40,69 @@ export interface ScriptDebugHandler {
   note(role: LaunchRole, note: string): void;
 }
 
+/** The ports acquired for one launch, and the non-fatal roles that could not get one. */
+export interface ScriptDebugPorts {
+  readonly listening: readonly ScriptDebugPort[];
+  readonly warnings: readonly string[];
+}
+
+type OpenScriptDebugPort = (
+  role: LaunchRole,
+  handler: ScriptDebugHandler,
+) => Promise<ScriptDebugPort | string>;
+
+/**
+ * Opens every role's listener as one acquisition.
+ *
+ * An ordinary bind failure is a warning returned by `openScriptDebugPort`, so the remaining ports
+ * stay up and the launch can continue without that console stream. An unexpected rejection is
+ * different: no launch plan was produced, ownership cannot be transferred, and every port that
+ * did open is closed before the rejection escapes.
+ */
+export async function openScriptDebugPorts(
+  roles: readonly LaunchRole[],
+  handler: ScriptDebugHandler,
+  open: OpenScriptDebugPort = openScriptDebugPort,
+): Promise<ScriptDebugPorts> {
+  const outcomes = await Promise.allSettled(
+    roles.map((role) => Promise.resolve().then(() => open(role, handler))),
+  );
+  const listening: ScriptDebugPort[] = [];
+  const warnings: string[] = [];
+  const failures: unknown[] = [];
+
+  for (const outcome of outcomes) {
+    if (outcome.status === 'rejected') {
+      failures.push(outcome.reason);
+    } else if (typeof outcome.value === 'string') {
+      warnings.push(outcome.value);
+    } else {
+      listening.push(outcome.value);
+    }
+  }
+
+  if (failures.length > 0) {
+    for (const port of listening) {
+      try {
+        port.close();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+    }
+
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+
+    throw new AggregateError(
+      failures,
+      'Opening the script debugger ports failed; acquired ports were closed.',
+    );
+  }
+
+  return { listening, warnings };
+}
+
 /**
  * A listener for one role, up and bound, or the reason there is none.
  *

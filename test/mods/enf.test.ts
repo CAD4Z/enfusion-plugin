@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { configurationOf, configurationsOf, readMod, readWorkspace, workspaceFor } from './enf';
+import {
+  configurationOf,
+  configurationsOf,
+  readMod,
+  readWorkspace,
+  workspaceFor,
+} from '../../src/mods/enf';
 
 test('reads what a mod says about itself', () => {
   const read = readMod(`{
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
   "description": "The base every other CAD mod builds on",
   "author": "hurfy",
   "version": "1.0.0",
@@ -13,7 +19,7 @@ test('reads what a mod says about itself', () => {
 
   assert.deepEqual(read.problems, []);
   assert.deepEqual(read.value, {
-    name: 'CAD4Z Core',
+    name: 'CAD4Z_Core',
     description: 'The base every other CAD mod builds on',
     author: 'hurfy',
     version: '1.0.0',
@@ -41,24 +47,39 @@ test('an empty manifest declares a mod all the same, and so does an empty file',
 test('comments and a trailing comma are what JSONC is read as', () => {
   const read = readMod(`{
   // The mod as the launcher shows it.
-  "name": "CAD4Z Core",
+  "name": "CAD4Z_Core",
   /* Sources the builder has no business packing. */
   "exclude": ["**/*.psd",],
 }`);
 
   assert.deepEqual(read.problems, []);
-  assert.equal(read.value.name, 'CAD4Z Core');
+  assert.equal(read.value.name, 'CAD4Z_Core');
   assert.deepEqual(read.value.exclude, ['**/*.psd']);
 });
 
 test('a syntax error is reported where it is, and the rest of the manifest is still read', () => {
   const read = readMod(`{
-  "name": "CAD4Z Core"
+  "name": "CAD4Z_Core"
   "author": "hurfy"
 }`);
 
   assert.deepEqual(read.problems, [{ message: 'Comma expected.', line: 3, column: 3 }]);
-  assert.equal(read.value.name, 'CAD4Z Core');
+  assert.equal(read.value.name, 'CAD4Z_Core');
+});
+
+test('an invalid mod name stays readable and is reported on the name field', () => {
+  const read = readMod('{\n  "name": "../Victim",\n  "author": "hurfy"\n}');
+
+  assert.equal(read.value.name, '../Victim');
+  assert.deepEqual(read.problems, [
+    {
+      message:
+        'A mod is named by a class as well as by a folder: letters, digits and underscores, ' +
+        'starting with a letter or underscore.',
+      line: 2,
+      column: 11,
+    },
+  ]);
 });
 
 test('a field of the wrong type is reported where it is written, and left unset', () => {
@@ -148,6 +169,17 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
       },
     ],
   });
+});
+
+test('an unsafe loaded-mod folder stays readable and is reported where it was written', () => {
+  const read = readMod(
+    '{\n  "launch": {\n    "clientMods": ["../Victim", "Community-Online-Tools"]\n  }\n}',
+  );
+
+  assert.deepEqual(read.value.launch?.clientMods, ['../Victim', 'Community-Online-Tools']);
+  assert.equal(read.problems.length, 1);
+  assert.equal(read.problems[0]?.line, 3);
+  assert.match(read.problems[0]?.message ?? '', /one Windows folder name/);
 });
 
 test('a target with no name is dropped, because the Run and Debug list is what names it', () => {
@@ -279,7 +311,7 @@ test('a workspace of mods is configured in one pass, each mod against the file a
       { path: '/w/workspace.enf', source: '{ "launch": { "targets": [{ "name": "Namalsk" }] } }' },
       {
         path: '/w/CADCore/mod.enf',
-        source: '{ "name": "CAD4Z Core", "launch": { "targets": [{ "name": "Sakhal" }] } }',
+        source: '{ "name": "CAD4Z_Core", "launch": { "targets": [{ "name": "Sakhal" }] } }',
       },
       { path: '/w/CADMap/mod.enf', source: '{ "descriptoin": "typo" }' },
       {
@@ -297,7 +329,7 @@ test('a workspace of mods is configured in one pass, each mod against the file a
   assert.equal(configurations.mods.get('/w/CADCore/mod.enf')?.workspace, '/w/workspace.enf');
   assert.equal(
     configurations.mods.get('/w/CADCore/mod.enf')?.configuration.manifest.name,
-    'CAD4Z Core',
+    'CAD4Z_Core',
   );
 
   // The one outside it keeps its own launch block, and has no workspace file to name.

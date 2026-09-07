@@ -7,10 +7,11 @@ import {
   DEFAULT_EXCLUDE,
   buildPlanOf,
   jobsOf,
-} from './build';
-import type { MachineSettings } from './machine';
-import { modsFromScan } from './model';
-import type { Link, LinkState } from './workDrive';
+} from '../../src/mods/build';
+import type { MachineSettings } from '../../src/mods/machine';
+import { modNameOf, modNameProblemOf } from '../../src/mods/modName';
+import { modsFromScan } from '../../src/mods/model';
+import type { Link, LinkState } from '../../src/mods/workDrive';
 
 const TOOLS = 'F:\\DayZ Tools';
 const PBOPROJECT = 'C:\\Mikero\\bin\\pboProject.exe';
@@ -245,6 +246,24 @@ test('a mod with nowhere to build to refuses, and names the file that should hav
   assert.ok(plan.refusals[0]?.reason.includes('workspace.enf'), plan.refusals[0]?.reason);
 });
 
+test('an invalid mod name produces a refusal and no path-derived build step', () => {
+  const unsafe = job({ link: link('../Victim', 'F:\\Victim', 'invalid') });
+  const plan = buildPlanOf([unsafe, job()], settings({ privateKey: '' }));
+
+  assert.equal(plan.refusals[0]?.subject, '../Victim');
+  assert.match(plan.refusals[0]?.reason ?? '', /letters, digits and underscores/);
+  assert.ok(!plan.steps.some((step) => JSON.stringify(step).includes('Victim')));
+  assert.ok(plan.steps.some((step) => step.subject === 'CADCore'));
+});
+
+test('a checked name belonging to another raw mod is refused before build paths are made', () => {
+  const mismatched = job({ link: { ...CORE, name: 'CADMap' } });
+  const plan = buildPlanOf([mismatched], settings());
+
+  assert.deepEqual(plan.steps, []);
+  assert.match(plan.refusals[0]?.reason ?? '', /cannot be used/);
+});
+
 /**
  * Everything the manifest contributes ends up inside quotes on a command line, and a manifest
  * comes out of whatever repository was opened. Windows has no path and no mask with a quotation
@@ -467,12 +486,16 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
 }
 
 function link(name: string, target: string, state: LinkState = 'linked', letter = 'P:'): Link {
+  const modName = state === 'invalid' ? undefined : modNameOf(name);
+
   return {
     prefixRoot: `/f:/Code/${name}/${name}`,
     name,
-    path: `${letter}\\${name}`,
+    modName,
+    path: modName === undefined ? '' : `${letter}\\${name}`,
     target,
     at: state === 'linked' ? target : state === 'elsewhere' ? 'D:\\Somewhere' : '',
+    problem: modName === undefined ? modNameProblemOf(name) : undefined,
     state,
   };
 }

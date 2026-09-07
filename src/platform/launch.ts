@@ -5,10 +5,9 @@
  * stale, what the command line is. This reads the disk, makes the links, spawns the process and
  * kills it again, and decides none of it.
  *
- * The game is started detached and its handle kept, so that two things hold at once: closing the
- * editor does not take the game down with it, and Stop does — through `taskkill /T`, because the
- * process that is started is not always the process that ends up running, and killing the tree is
- * the only way to be sure the game is gone.
+ * The game is started detached and its handle kept, so Stop or disposal can take the whole launch
+ * down through `taskkill /T`. The process that is started is not always the process that ends up
+ * running, and killing the tree is the only way to be sure the game is gone.
  */
 
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
@@ -16,6 +15,7 @@ import { copyFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import type { GameEntry, GameRoot, LaunchPlan, LaunchProcess } from '../mods/launch';
+import type { LaunchGame, ProcessExit } from '../mods/launchSession';
 import { gameExecutableOf } from '../mods/machine';
 import type { MachineSettings } from '../mods/machine';
 import { windowsFolder, windowsPath } from '../mods/paths';
@@ -131,22 +131,22 @@ async function layer(from: string, to: string): Promise<void> {
   await cp(from, to, { recursive: true, force: true });
 }
 
-/** A game that is running: what it is, and the two things anybody wants from it. */
-export interface GameProcess {
-  readonly role: LaunchProcess['role'];
+/** A spawned game, with the platform process id retained for integrations that need it. */
+export interface GameProcess extends LaunchGame {
   readonly pid: number | undefined;
-  /** Resolves when the game is gone, with whatever it exited with. */
-  readonly exited: Promise<number | undefined>;
-  /** Takes the game down, tree and all. Doing it twice is not an error. */
-  kill(): Promise<void>;
 }
 
 /**
  * Starts the game in the folder the plan named. Detached and with its output ignored: the game
  * writes what it has to say to its `.RPT` in the profile, and a pipe nobody reads is a pipe that
- * fills up and stops the process it belongs to.
+ * fills up and stops the process it belongs to. The returned promise confirms the OS accepted the
+ * spawn; an earlier `error` rejects it, while every later way for the process to disappear is an
+ * ordinary `ProcessExit`.
  */
-export function startGame(process_: LaunchProcess, prefix: readonly string[] = []): GameProcess {
+export async function startGame(
+  process_: LaunchProcess,
+  prefix: readonly string[] = [],
+): Promise<GameProcess> {
   // A prefix is another program that starts ours: Sandboxie's `Start.exe`, which is what gives the
   // second client a Steam of its own. It goes in front whole, so the thing that is actually spawned
   // is that program and the game is its argument — and it is told to wait, so that the process
@@ -160,17 +160,35 @@ export function startGame(process_: LaunchProcess, prefix: readonly string[] = [
     stdio: 'ignore',
     windowsHide: false,
   });
-  child.unref();
 
-  const exited = new Promise<number | undefined>((resolve) => {
-    child.on('exit', (code) => {
-      resolve(code ?? undefined);
+  let spawned = false;
+  const exited = new Promise<ProcessExit>((resolve) => {
+    child.once('exit', (code, signal) => {
+      resolve(processExitOf(code, signal));
     });
-    // A program that could not be started never exits, so the error is what ends the waiting.
+    // A post-spawn process error need not be followed by `exit`, but still ends this handle's wait.
     child.on('error', () => {
-      resolve(undefined);
+      if (spawned) {
+        resolve({ kind: 'unknown' });
+      }
     });
   });
+
+  await new Promise<void>((resolve, reject) => {
+    const onSpawn = (): void => {
+      spawned = true;
+      child.off('error', onError);
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      child.off('spawn', onSpawn);
+      reject(error);
+    };
+
+    child.once('spawn', onSpawn);
+    child.once('error', onError);
+  });
+  child.unref();
 
   return {
     role: process_.role,
@@ -178,6 +196,18 @@ export function startGame(process_: LaunchProcess, prefix: readonly string[] = [
     exited,
     kill: () => kill(child),
   };
+}
+
+function processExitOf(code: number | null, signal: NodeJS.Signals | null): ProcessExit {
+  if (code !== null) {
+    return { kind: 'code', code };
+  }
+
+  if (signal !== null) {
+    return { kind: 'signal', signal };
+  }
+
+  return { kind: 'unknown' };
 }
 
 

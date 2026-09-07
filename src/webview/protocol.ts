@@ -49,6 +49,8 @@ export interface LinkView {
   readonly path: string;
   /** Where that points now; empty when nothing is there. */
   readonly at: string;
+  /** Why an invalid name has no path; undefined for every other state. */
+  readonly problem: string | undefined;
 }
 
 export interface ModView {

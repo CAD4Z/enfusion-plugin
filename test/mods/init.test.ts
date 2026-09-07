@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseConfig } from './config';
+import { parseConfig } from '../../src/mods/config';
 import {
   type AddonPlan,
   type Adoption,
   type InitPlan,
+  addonNameProblemOf,
   addonPlanOf,
   adoptionOf,
   initPlanOf,
   modFieldsOf,
-  modNameProblemOf,
   requiringAddon,
-} from './init';
-import { type Mod, modsFromScan } from './model';
+} from '../../src/mods/init';
+import { type ModName, modNameOf, modNameProblemOf } from '../../src/mods/modName';
+import { type Mod, modsFromScan } from '../../src/mods/model';
 
 /**
  * The whole of a new single-addon mod, compared entire. What matters about an initialisation is
@@ -20,7 +21,7 @@ import { type Mod, modsFromScan } from './model';
  * which of them was written first, so this is the shape the test takes.
  */
 test('a single-addon mod comes out whole, with every name in it worked out from the one given', () => {
-  assert.deepEqual(initPlanOf('MyMod', 'single'), {
+  assert.deepEqual(initPlanOf(name('MyMod'), 'single'), {
     folders: [
       'MyMod',
       'MyMod/Scripts',
@@ -215,8 +216,8 @@ version = "0.1.0";
  * mod be split up later by moving files rather than by editing every path in the config.
  */
 test('a multi-addon mod puts the same files in Scripts, and points CfgMods at the same paths', () => {
-  const plan = initPlanOf('MyMod', 'multi');
-  const single = initPlanOf('MyMod', 'single');
+  const plan = initPlanOf(name('MyMod'), 'multi');
+  const single = initPlanOf(name('MyMod'), 'single');
 
   assert.deepEqual(
     plan.files.map((file) => file.path),
@@ -249,8 +250,8 @@ test('a multi-addon mod puts the same files in Scripts, and points CfgMods at th
   }
 });
 
-/** The name is one the developer typed, and it ends up as a class name in three files. */
-test('a name that no class could go by is refused, and every other one is taken', () => {
+/** The name is one the developer typed, and it becomes both classes and folders. */
+test('a name that cannot be both class and folder is refused, and every other one is taken', () => {
   assert.equal(modNameProblemOf('MyMod'), undefined);
   assert.equal(modNameProblemOf('My_Mod_2'), undefined);
 
@@ -259,6 +260,7 @@ test('a name that no class could go by is refused, and every other one is taken'
   assert.match(modNameProblemOf('My Mod') ?? '', /letters, digits and underscores/);
   assert.match(modNameProblemOf('2Mods') ?? '', /starting with a letter/);
   assert.match(modNameProblemOf('My-Mod') ?? '', /letters, digits and underscores/);
+  assert.match(addonNameProblemOf('CON') ?? '', /reserved Windows device name/);
 });
 
 test('an addon is a folder in the prefix root, and a name in the main addon of the mod', () => {
@@ -400,10 +402,22 @@ test('an unconfigured mod is adopted by the one file it is missing, and nothing 
       author: 'somebody',
       version: '1.4',
     },
+    modName: name('Foreign'),
     folders: [],
     files: [{ path: 'mod.enf', content: adoptedManifest() }],
     refusal: undefined,
   } satisfies Adoption);
+});
+
+test('adoption refuses an unsafe dir instead of writing or linking it', () => {
+  const mod = foreignMod('/w/Foreign/Foreign/config.cpp');
+  const source = foreignConfig().replace('dir = "Foreign";', 'dir = "../Victim";');
+  const adoption = adoptionOf(mod, source, ['/w']);
+
+  assert.equal(adoption.fields.name, '../Victim');
+  assert.equal(adoption.modName, undefined);
+  assert.deepEqual(adoption.files, []);
+  assert.match(adoption.refusal ?? '', /cannot be configured/);
 });
 
 /**
@@ -432,7 +446,10 @@ test('a mod with nothing to say about itself is still adopted, under the name it
     author: undefined,
     version: undefined,
   });
-  assert.equal(contentOf(adoption, 'mod.enf'), contentOf(initPlanOf('Foreign', 'single'), 'mod.enf'));
+  assert.equal(
+    contentOf(adoption, 'mod.enf'),
+    contentOf(initPlanOf(name('Foreign'), 'single'), 'mod.enf'),
+  );
 });
 
 test('a mod that has a mod.enf already is refused rather than written over', () => {
@@ -576,4 +593,10 @@ function modOf(scan: Parameters<typeof modsFromScan>[0]): Mod {
   const mod = modsFromScan(scan)[0];
   assert.ok(mod);
   return mod;
+}
+
+function name(value: string): ModName {
+  const checked = modNameOf(value);
+  assert.ok(checked !== undefined);
+  return checked;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { registryValue } from './registry';
+import { registryValue } from '../../src/mods/registry';
 
 test('reads what reg printed, whatever case the value was written in and spaces and all', () => {
   const output = `

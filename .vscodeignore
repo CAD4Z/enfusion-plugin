@@ -4,6 +4,7 @@
 .gitignore
 .vscode-test/**
 src/**
+test/**
 out/**
 node_modules/**
 esbuild.js
