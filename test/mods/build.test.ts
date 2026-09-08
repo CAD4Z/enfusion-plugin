@@ -472,6 +472,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   return {
     dayz: 'F:\\DayZ',
     executable: '',
+    dayzServer: '',
     dayzTools: TOOLS,
     pboProject: PBOPROJECT,
     privateKey: KEY,

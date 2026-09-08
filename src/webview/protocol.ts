@@ -29,8 +29,36 @@ export interface ActionView {
   readonly refusal: string | undefined;
 }
 
-/** The row of buttons above everything: start the game, build it, and put the work drive up. */
+/** One thing a list offers: what it is called, and what picking it would launch. */
+export interface ChoiceView {
+  /** What is sent back when it is picked, which is one the extension gave in the first place. */
+  readonly id: string;
+  readonly label: string;
+  /** The line under it: what this one is, said the way the palette's own list says it. */
+  readonly detail: string;
+}
+
+/** A closed set of answers, and the one that stands. */
+export interface PickerView {
+  readonly options: readonly ChoiceView[];
+  /** The chosen one's id; empty where a workspace of several targets has not been asked yet. */
+  readonly chosen: string;
+  /** What the whole list is for, on hover. */
+  readonly title: string;
+  /** Why there is nothing to pick, which is what a list of nothing says instead of being blank. */
+  readonly refusal: string | undefined;
+}
+
+/**
+ * The row above everything: what the next launch is, and the buttons that act on the whole
+ * workspace. The two lists come first because they are what the buttons under them do — a Start
+ * that says which target and which build it is about is a Start that gets pressed with confidence.
+ */
 export interface ToolsView {
+  /** Which target the next launch puts up: the maps, out of the `.enf`. */
+  readonly target: PickerView;
+  /** And which build it puts up: the diag one, or the pair a player runs. */
+  readonly gameBuild: PickerView;
   readonly start: ActionView;
   /** The second client, which joins the launch that is already up rather than starting one. */
   readonly secondClient: ActionView;
@@ -98,8 +126,12 @@ export type PanelRequest =
       readonly line?: number;
       readonly column?: number;
     }
-  /** Puts the game up: the target chosen on the status bar, the way F5 does. */
+  /** Puts the game up: the target and build the row above says, the way F5 does. */
   | { readonly type: 'launch' }
+  /** Which target the next launch puts up, named the way the panel was offered it. */
+  | { readonly type: 'selectTarget'; readonly id: string }
+  /** And which build, likewise. */
+  | { readonly type: 'selectGameBuild'; readonly build: string }
   /** Adds a second client to the launch that is up, with the Steam the machine settings name. */
   | { readonly type: 'launchSecondClient' }
   /** Runs the work drive command of that action, which the palette runs the same way. */

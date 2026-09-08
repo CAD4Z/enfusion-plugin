@@ -15,12 +15,18 @@ import {
   targetById,
   targetsOf,
 } from '../../src/mods/launch';
-import type { MachineSettings } from '../../src/mods/machine';
+import type { GameBuild, MachineSettings } from '../../src/mods/machine';
 import { modNameOf } from '../../src/mods/modName';
 import type { LinkFact } from '../../src/mods/workDrive';
 
 const GAME = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
 const DIAG = `${GAME}\\DayZDiag_x64.exe`;
+
+/** The retail pair, out of the two installations Steam keeps them in. */
+const RETAIL_CLIENT = `${GAME}\\DayZ_x64.exe`;
+const SERVER_GAME = 'F:\\SteamLibrary\\steamapps\\common\\DayZServer';
+const RETAIL_SERVER = `${SERVER_GAME}\\DayZServer_x64.exe`;
+
 const RUN = 'C:\\Users\\dev\\AppData\\Local\\Enfusion\\run\\cad4z';
 const CORE = mod('CADCore', 'F:\\Code\\cad4z\\CADCore');
 const MAP = mod('CADMap', 'F:\\Code\\cad4z\\CADMap');
@@ -160,6 +166,88 @@ test('a target that puts up both starts the server and a client that joins it', 
       cwd: `${RUN}\\game`,
     },
   ]);
+});
+
+/**
+ * And the whole plan for the same target as a Release launch, which is what the choice buys.
+ *
+ * Everything that makes it a launch of this mod is unchanged — the profiles, the mission, the
+ * `-mod=` out of the built pbo. What changes is what the two processes are: two programs out of
+ * two installations, started where they are installed, given none of the diag arguments, and with
+ * no mirror made for them at all.
+ */
+test('a Release target starts the retail pair where they are installed, and patches nothing', () => {
+  const plan = launchPlanOf(input({ build: 'Release', target: target({ run: 'both' }) }));
+
+  assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(plan.filePatching, {
+    root: `${RUN}\\game`,
+    junctions: [],
+    remove: [],
+    copies: [],
+    conflicts: [],
+  });
+  assert.deepEqual(plan.folders, [
+    `${RUN}\\profiles\\CADCore\\server`,
+    `${RUN}\\profiles\\CADCore\\client`,
+    `${RUN}\\missions\\CADCore.chernarusplus`,
+  ]);
+  assert.deepEqual(plan.processes, [
+    {
+      role: 'server',
+      what: 'Starting the server for Chernarus',
+      program: RETAIL_SERVER,
+      arguments: [
+        '-server',
+        '-doLogs',
+        '-adminlog',
+        '-nopause',
+        '-nosplash',
+        '-world=none',
+        '-port=2302',
+        `-config=${CORE.root}\\server.cfg`,
+        `-profiles=${RUN}\\profiles\\CADCore\\server`,
+        `-mission=${RUN}\\missions\\CADCore.chernarusplus`,
+      ],
+      cwd: SERVER_GAME,
+    },
+    {
+      role: 'client',
+      what: 'Starting the client for Chernarus',
+      program: RETAIL_CLIENT,
+      arguments: [
+        '-doLogs',
+        '-adminlog',
+        '-nopause',
+        '-nosplash',
+        '-window',
+        '-name=SurvivorA',
+        `-profiles=${RUN}\\profiles\\CADCore\\client`,
+        '-mod=P:\\Mods\\@CADCore',
+        '-connect=127.0.0.1',
+        '-port=2302',
+      ],
+      cwd: GAME,
+    },
+  ]);
+});
+
+/** The second client follows the choice like the first: it is the same client, in a sandbox. */
+test('a second client is of whichever build the launch it joins is', () => {
+  const debug = launchPlanOf(input(), ['client2']).processes[0];
+  const release = launchPlanOf(input({ build: 'Release' }), ['client2']).processes[0];
+
+  assert.equal(debug?.program, DIAG);
+  assert.equal(debug?.cwd, `${RUN}\\game`);
+  assert.ok(debug?.arguments.includes('-filePatching'));
+  // No `-debuggerPort`: a `-client2` writes over whatever it is given and dials 1002 regardless.
+  assert.ok(debug?.arguments.includes('-debugger=127.0.0.1'));
+
+  assert.equal(release?.program, RETAIL_CLIENT);
+  assert.equal(release?.cwd, GAME);
+  assert.ok(release?.arguments.includes('-client2'));
+  assert.ok(!release?.arguments.some((argument) => argument.startsWith('-debugger')));
+  assert.ok(!release?.arguments.includes('-filePatching'));
 });
 
 test('a target that puts up the server alone starts the server and nothing else', () => {
@@ -866,7 +954,16 @@ test('a launch refuses when the work drive is not mounted, and starts nothing at
 
 test('a launch refuses when no DayZ installation is set', () => {
   const plan = launchPlanOf(
-    input({ settings: settings({ dayz: '' }), game: { present: false, path: '', executable: '' } }),
+    input({
+      settings: settings({ dayz: '' }),
+      game: {
+        path: '',
+        programs: {
+          client: { root: '', name: 'DayZDiag_x64.exe', path: '', present: false },
+          server: { root: '', name: 'DayZDiag_x64.exe', path: '', present: false },
+        },
+      },
+    }),
   );
 
   assert.deepEqual(plan.refusals, [
@@ -876,12 +973,51 @@ test('a launch refuses when no DayZ installation is set', () => {
 });
 
 test('a launch refuses when the executable it would start is not there', () => {
-  const plan = launchPlanOf(input({ game: { present: false } }));
+  const plan = launchPlanOf(
+    input({
+      game: {
+        programs: {
+          client: { root: GAME, name: 'DayZDiag_x64.exe', path: DIAG, present: false },
+        },
+      },
+    }),
+  );
 
   assert.deepEqual(plan.refusals, [
     `${DIAG} is not there. File patching needs the diag build of the game, which comes with ` +
       'DayZ Tools; enfusion.dayz.executable names the one to start.',
   ]);
+});
+
+/**
+ * The server a Release launch starts is a Steam application of its own, and a machine with the
+ * client and not the server is the ordinary way round — so a client-only target still launches.
+ */
+test('a Release launch refuses over the DayZ Server it would start, and only where it starts one', () => {
+  const missing = {
+    programs: {
+      server: {
+        root: SERVER_GAME,
+        name: 'DayZServer_x64.exe',
+        path: RETAIL_SERVER,
+        present: false,
+      },
+    },
+  };
+
+  assert.deepEqual(
+    launchPlanOf(
+      input({ build: 'Release', target: target({ run: 'both' }), game: missing }),
+    ).refusals,
+    [
+      `${RETAIL_SERVER} is not there. DayZ Server is a Steam application of its own — install ` +
+        'it, or name the folder it is in with enfusion.dayzServer.path.',
+    ],
+  );
+  assert.deepEqual(
+    launchPlanOf(input({ build: 'Release', game: missing })).refusals,
+    [],
+  );
 });
 
 test('a launch refuses when nobody said where the built mods are', () => {
@@ -1014,13 +1150,19 @@ function patching(over: Partial<Parameters<typeof filePatchingPlanOf>[0]> = {}):
 
 /** Everything in place unless a test says otherwise, `found` included: what is asked for is there. */
 function input(
-  over: Omit<Partial<LaunchInput>, 'game'> & { game?: Partial<LaunchInput['game']> } = {},
+  over: Omit<Partial<LaunchInput>, 'game'> & {
+    game?: Partial<Omit<LaunchInput['game'], 'programs'>> & {
+      programs?: Partial<LaunchInput['game']['programs']>;
+    };
+  } = {},
 ): LaunchInput {
   const chosen = over.target ?? target();
   const mods = over.mods ?? [CORE];
+  const build = over.build ?? 'Debug';
 
   return {
     target: chosen,
+    build,
     mods,
     settings: settings(),
     drive: { letter: 'P:', source: 'F:\\Workdrive', at: 'F:\\Workdrive', state: 'mounted' },
@@ -1031,12 +1173,28 @@ function input(
     ...over,
     game: {
       path: GAME,
-      executable: DIAG,
-      present: true,
       entries: [folder('Addons'), folder('sakhal'), file('steam_appid.txt')],
       ...over.game,
+      programs: {
+        client: programs(build).client,
+        server: programs(build).server,
+        ...over.game?.programs,
+      },
     },
   };
+}
+
+/** What the machine would resolve for that build, which is what a launch is planned against. */
+function programs(build: GameBuild): LaunchInput['game']['programs'] {
+  return build === 'Debug'
+    ? {
+        client: { root: GAME, name: 'DayZDiag_x64.exe', path: DIAG, present: true },
+        server: { root: GAME, name: 'DayZDiag_x64.exe', path: DIAG, present: true },
+      }
+    : {
+        client: { root: GAME, name: 'DayZ_x64.exe', path: RETAIL_CLIENT, present: true },
+        server: { root: SERVER_GAME, name: 'DayZServer_x64.exe', path: RETAIL_SERVER, present: true },
+      };
 }
 
 function target(over: Partial<LaunchTarget> = {}): LaunchTarget {
@@ -1087,6 +1245,7 @@ function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   return {
     dayz: GAME,
     executable: '',
+    dayzServer: SERVER_GAME,
     dayzTools: 'F:\\DayZ Tools',
     pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
     privateKey: '',

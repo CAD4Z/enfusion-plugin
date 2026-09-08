@@ -21,10 +21,15 @@ export function activate(context: vscode.ExtensionContext): void {
   // The log is the only place that can answer it, so it answers it without being asked.
   log.info(`Enfusion ${versionOf(context)} activated`);
 
-  const panel = new ModsPanel(context.extensionUri, log);
-  // The chosen target is the workspace's rather than the machine's: it names a target of this
-  // workspace's `.enf`, and means nothing in another one.
-  const launching = registerLaunch(context.workspaceState, log);
+  // The chosen target and build are the workspace's rather than the machine's: one names a target
+  // of this workspace's `.enf` and means nothing in another one, and the other is what this
+  // workspace is being worked on as.
+  const launching = registerLaunch(context.workspaceState, log, () => {
+    // The panel shows both, so a choice made on the status bar or in Run and Debug is a choice the
+    // panel's own lists are already showing by the time anyone looks at them.
+    panel.refresh();
+  });
+  const panel = new ModsPanel(context.extensionUri, log, launching);
 
   context.subscriptions.push(
     log,

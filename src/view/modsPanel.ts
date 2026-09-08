@@ -11,8 +11,8 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { targetsOf } from '../mods/launch';
-import { isWanting } from '../mods/machine';
+import { type LaunchTarget, targetsOf } from '../mods/launch';
+import { type GameBuild, GAME_BUILDS, isWanting } from '../mods/machine';
 import { MANIFEST_FILE, type Mod } from '../mods/model';
 import {
   type Link,
@@ -30,10 +30,23 @@ import {
   prefixesOf,
   targetSourcesOf,
 } from '../platform/workspace';
-import type { ModView, ModsMessage, PanelRequest, ToolsView } from '../webview/protocol';
+import type {
+  ChoiceView,
+  ModView,
+  ModsMessage,
+  PanelRequest,
+  PickerView,
+  ToolsView,
+} from '../webview/protocol';
 import { BUILD_COMMAND, type BuildTarget } from './build';
 import { INIT_COMMAND } from './init';
-import { LAUNCH_COMMAND } from './launch';
+import {
+  type Chosen,
+  type Launching,
+  LAUNCH_COMMAND,
+  describeBuild,
+  describeRun,
+} from './launch';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** A burst of file events — a checkout, a build — should still cost one scan. */
@@ -55,6 +68,8 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly log: vscode.LogOutputChannel,
+    /** Which target and build the next launch puts up, which the two lists above show. */
+    private readonly launching: Launching,
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -131,6 +146,12 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'launchSecondClient':
         this.report(runCommand(LAUNCH_COMMAND.secondClient));
         return;
+      case 'selectTarget':
+        this.report(runCommand(LAUNCH_COMMAND.select, request.id));
+        return;
+      case 'selectGameBuild':
+        this.report(runCommand(LAUNCH_COMMAND.selectBuild, request.build));
+        return;
       case 'workDrive':
         this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
         return;
@@ -188,7 +209,7 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
     const message: ModsMessage = {
       type: 'mods',
-      tools: toolsOf(drive, found),
+      tools: toolsOf(drive, found, this.launching),
       workspaces: [...found.workspaces].map(([path, problems]) => ({
         path,
         location: locationOfFile(path, found),
@@ -249,7 +270,7 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
 async function runCommand(
   command: string,
-  argument?: BuildTarget | { mod: string },
+  argument?: BuildTarget | { mod: string } | string,
 ): Promise<void> {
   await vscode.commands.executeCommand(command, argument);
 }
@@ -272,27 +293,28 @@ function workDriveTitle(action: WorkDriveAction, drive: WorkDrive): string {
  * The row of buttons, with the reason each one would refuse already on it: the disabled button
  * says why without being pressed, and it says it in the same words the command would.
  */
-function toolsOf(drive: WorkDrive, found: Discovery): ToolsView {
+function toolsOf(drive: WorkDrive, found: Discovery, launching: Launching): ToolsView {
   const platform = platformRefusal();
   const targets = targetsOf(targetSourcesOf(found));
   const addons = found.mods.reduce((count, mod) => count + mod.addons.length, 0);
+  const chosen = launching.chosen(targets);
+  const nothing =
+    targets.length === 0
+      ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
+      : undefined;
 
   return {
+    target: targetPickerOf(targets, chosen, nothing),
+    gameBuild: buildPickerOf(chosen.build),
     start: {
-      title: 'Put the game up: the launch target chosen on the status bar',
-      refusal:
-        targets.length === 0
-          ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
-          : undefined,
+      title: `Put the game up: ${sayChoice(chosen)}`,
+      refusal: nothing,
     },
     secondClient: {
       title:
         'Add a second client to the launch that is up: its own profile, its own debugger port, ' +
         'and whatever the machine settings put in front of it',
-      refusal:
-        targets.length === 0
-          ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
-          : undefined,
+      refusal: nothing,
     },
     build: {
       title: 'Pack every addon of this workspace into its pbo, in dependency order',
@@ -304,6 +326,63 @@ function toolsOf(drive: WorkDrive, found: Discovery): ToolsView {
       refusal: platform ?? refusalOf(drive, action),
     })),
   };
+}
+
+/**
+ * The targets of the `.enf`, said the way the palette's own list says them.
+ *
+ * A workspace of several targets that has not been asked yet gets a row of its own at the top,
+ * standing for exactly that. Without it the list would show the first target while Start would
+ * open the question — a panel saying one thing and a button doing another.
+ */
+function targetPickerOf(
+  targets: readonly LaunchTarget[],
+  chosen: Chosen,
+  nothing: string | undefined,
+): PickerView {
+  const unchosen: readonly ChoiceView[] =
+    chosen.target === undefined && targets.length > 0
+      ? [{ id: '', label: 'Select target', detail: 'Nothing is chosen yet, so Start asks' }]
+      : [];
+
+  return {
+    options: [
+      ...unchosen,
+      ...targets.map(
+        (target): ChoiceView => ({
+          id: target.id,
+          label: target.id,
+          detail:
+            `${target.mod}${target.map === undefined ? '' : ` · ${target.map}`} · ` +
+            describeRun(target.run),
+        }),
+      ),
+    ],
+    chosen: chosen.target?.id ?? '',
+    title: 'Which target the next launch puts up',
+    refusal: nothing,
+  };
+}
+
+/** And the two builds, which are the same two on every workspace. */
+function buildPickerOf(chosen: GameBuild): PickerView {
+  return {
+    options: GAME_BUILDS.map(
+      (build): ChoiceView => ({ id: build, label: build, detail: describeBuild(build) }),
+    ),
+    chosen,
+    title: 'Which build of the game the next launch starts',
+    refusal: undefined,
+  };
+}
+
+/** What Start would do, in one line: the target, and the build it comes up as. */
+function sayChoice(chosen: Chosen): string {
+  const target = chosen.target;
+
+  return target === undefined
+    ? `a target of this workspace, as a ${chosen.build} build`
+    : `${target.id}, as a ${chosen.build} build — ${describeBuild(chosen.build)}`;
 }
 
 function toView(mod: Mod, found: Discovery, links: readonly Link[]): ModView {

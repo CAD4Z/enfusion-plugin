@@ -52,6 +52,25 @@
   min-width: 0;
 }
 
+/*
+ * The two lists say what the buttons under them are about, so they sit on the line the heading
+ * used to have and are read left to right: which target, then which build of it. The target takes
+ * whatever is left over — a map's name is as long as it is — and the build takes what two words
+ * need and no more, because its two answers are known and short.
+ */
+.holds.target {
+  flex: 1 1 auto;
+}
+
+.holds.game-build {
+  flex: 0 0 96px;
+}
+
+.choice {
+  width: 100%;
+  min-width: 0;
+}
+
 .tool {
   display: inline-flex;
   flex: 1;

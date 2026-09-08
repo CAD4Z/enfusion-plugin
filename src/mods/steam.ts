@@ -22,6 +22,8 @@ import { windowsPath } from './paths';
 /** The two apps a mod is built and run with, by the id Steam knows them under. */
 export const STEAM_APP = {
   dayz: '221100',
+  /** DayZ Server, which Steam sells and installs as an application of its own. */
+  dayzServer: '223350',
   dayzTools: '830640',
 } as const;
 

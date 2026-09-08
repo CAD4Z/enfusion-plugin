@@ -58,6 +58,10 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
   return {
     dayz: text(SETTING.dayz) || (await installed(DAYZ, STEAM_APP.dayz)),
     executable: text(SETTING.executable),
+    // Through Steam alone: DayZ Server's installer writes no key of the kind the client's does,
+    // so where it is is what Steam's own list of libraries says. A machine Steam cannot answer for
+    // is left empty here, and `dayzServerRootOf` falls back to the folder beside DayZ.
+    dayzServer: text(SETTING.dayzServer) || (await fromSteam(STEAM_APP.dayzServer)),
     dayzTools: text(SETTING.dayzTools) || (await installed(DAYZ_TOOLS, STEAM_APP.dayzTools)),
     pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
     privateKey: text(SETTING.privateKey),

@@ -20,6 +20,13 @@
  * launch block. Which is what makes a target the same launch on somebody else's machine: what a
  * neighbouring mod happens to keep in its `Missions` has no say in it.
  *
+ * The build says which game those processes are. `Debug` is everything above: the diag build, the
+ * mirror, the script log off the debugger port. `Release` is the pair a player and a host run,
+ * started where they are installed and given none of the diag arguments — no mirror is built for
+ * it, because a retail game reads its mods out of the pbo that were packed and out of nothing
+ * else. Which is the point of having the choice: a launch that loads the built artefact is the
+ * only one that says whether the artefact is the mod.
+ *
  * As with a build, the whole of it comes out as a plan — folders, links, copies, command lines —
  * and nothing here goes near a disk or a process. What the disk holds (what is in the game's root,
  * what is in the run folder already, which of the paths of `launchPathsOf` are there) is handed in
@@ -28,6 +35,7 @@
 
 import { sameName } from './config';
 import type { Launch, Run, Target } from './enf';
+import { type GameBuild, type GameProgram, type GameSide, missingProgramOf } from './machine';
 import type { MachineSettings } from './machine';
 import {
   type LoadedModName,
@@ -340,16 +348,24 @@ function carriedOf(input: FilePatchingInput): FileCopy[] {
 
 /** The game's installation as a launch reads it: where it is, what starts it, what it holds. */
 export interface GameRoot {
+  /** The DayZ installation, which is the folder the mirror is made of. */
   readonly path: string;
-  readonly executable: string;
-  /** Whether that executable is actually there, which is a fact about the disk. */
-  readonly present: boolean;
+  /** What each side of this launch starts, already chosen for the build being launched. */
+  readonly programs: Readonly<Record<GameSide, GameProgramFacts>>;
   readonly entries: readonly GameEntry[];
+}
+
+/** One program of a launch, and whether the disk has it. */
+export interface GameProgramFacts extends GameProgram {
+  /** Whether it is actually there, which is a fact about the disk. */
+  readonly present: boolean;
 }
 
 /** Everything a launch is planned from. */
 export interface LaunchInput {
   readonly target: LaunchTarget;
+  /** Which build of the game this launch is of: the diag one, or the pair a player runs. */
+  readonly build: GameBuild;
   /** The mods of the workspace, in the order the model put them in. */
   readonly mods: readonly LaunchMod[];
   readonly settings: MachineSettings;
@@ -413,15 +429,30 @@ export interface LaunchPlan {
 }
 
 /**
- * The arguments the client is started with. The diag build's logging is half the point of
+ * What only the diag build is given, and only a `Debug` launch therefore has.
+ *
+ * All three are the diag build's own. `-filePatching` is what makes the engine read an addon's
+ * files off the disk instead of out of the pbo, and it is the whole reason the mirror exists;
+ * `-scriptDebug=true` is what opens the debugger the script log comes down; and
+ * `-newErrorsAreWarnings=1` turns a script error into a line rather than a stop.
+ *
+ * A retail game is given none of them, and that is the difference the choice is for. Passing
+ * `-filePatching` to it would be asking a launch that exists to run the packed pbo to prefer
+ * whatever is lying unpacked beside them, which is the one thing it must not do.
+ */
+const DIAG_ARGUMENTS: readonly string[] = [
+  '-filePatching',
+  '-scriptDebug=true',
+  '-newErrorsAreWarnings=1',
+];
+
+/**
+ * The arguments the client is started with whichever build it is. The logging is half the point of
  * launching from here — a script error belongs in a log the developer reads rather than in a
  * message the game swallows — and `-window` is what makes it possible to alt-tab back to the
  * editor that started it.
  */
 const CLIENT_ARGUMENTS: readonly string[] = [
-  '-filePatching',
-  '-scriptDebug=true',
-  '-newErrorsAreWarnings=1',
   '-doLogs',
   '-adminlog',
   '-nopause',
@@ -430,15 +461,11 @@ const CLIENT_ARGUMENTS: readonly string[] = [
 ];
 
 /**
- * And the server's. `-server` is what makes the one executable a server; `-world=none` keeps the
- * engine from loading a world of its own, because the world a dev server runs is the one its
- * mission names. The logging is there for the reason the client's is.
+ * And the server's. `-server` is what makes the diag executable a server, and is harmless on the
+ * one that is only ever a server; `-world=none` keeps the engine from loading a world of its own,
+ * because the world a dev server runs is the one its mission names.
  */
 const SERVER_ARGUMENTS: readonly string[] = [
-  '-server',
-  '-filePatching',
-  '-scriptDebug=true',
-  '-newErrorsAreWarnings=1',
   '-doLogs',
   '-adminlog',
   '-nopause',
@@ -578,13 +605,19 @@ export function launchPlanOf(
     };
   }
 
-  const filePatching = filePatchingPlanOf({
-    root: patched,
-    game: input.game.path,
-    entries: input.game.entries,
-    mods: input.mods,
-    present: input.present,
-  });
+  // The mirror is what `-filePatching` reads, so a launch that is not file-patching has no use for
+  // one. Not merely no use: making it would be several hundred junctions and a folder the size of
+  // the installation, laid down for a game that will not look at any of it.
+  const patching = input.build === 'Debug';
+  const filePatching = patching
+    ? filePatchingPlanOf({
+        root: patched,
+        game: input.game.path,
+        entries: input.game.entries,
+        mods: input.mods,
+        present: input.present,
+      })
+    : nothing(patched);
 
   const profile = (role: LaunchRole): string => profileOf(input, role);
   const mission = missionOf(input);
@@ -593,12 +626,13 @@ export function launchPlanOf(
   // folder is there, its links are made, and the game is holding the files that were copied into
   // it — copying them again is refused by Windows, which is exactly how this was found.
   const addition = only !== undefined;
+  const makes = patching && !addition;
 
   return {
     refusals: [],
     warnings: addition ? [] : warningsOf(input, filePatching, roles),
     filePatching: addition ? nothing(patched) : filePatching,
-    folders: [...(addition ? [] : [patched]), ...roles.map(profile), ...(server ? [mission] : [])],
+    folders: [...(makes ? [patched] : []), ...roles.map(profile), ...(server ? [mission] : [])],
     copies: [
       ...roles.flatMap((role) => profileCopiesOf(input, role, profile(role))),
       ...(server ? missionCopiesOf(input, mission) : []),
@@ -622,7 +656,7 @@ function nothing(root: string): FilePatchingPlan {
  */
 function refusalsOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
   const said: string[] = [
-    ...gameRefusalOf(input),
+    ...gameRefusalOf(input, roles),
     ...driveRefusalOf(input.drive),
     ...modNameRefusalsOf(input.mods),
     ...loadedModNameRefusalsOf(input.target, roles),
@@ -675,7 +709,14 @@ function loadedModNameRefusalsOf(
   });
 }
 
-function gameRefusalOf(input: LaunchInput): string[] {
+/**
+ * The programs this launch would start, and whether they are there.
+ *
+ * Only the sides being put up: a client-only target on a machine with no DayZ Server installed is
+ * a launch that goes ahead, and telling it about a program it was never going to start would send
+ * a developer off to install something they do not need.
+ */
+function gameRefusalOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
   if (input.settings.dayz === '' && input.settings.executable === '') {
     return [
       'No DayZ installation is set: fill in enfusion.dayz.path, which is otherwise read from the ' +
@@ -683,14 +724,30 @@ function gameRefusalOf(input: LaunchInput): string[] {
     ];
   }
 
-  if (!input.game.present) {
-    return [
-      `${input.game.executable} is not there. File patching needs the diag build of the game, ` +
-        'which comes with DayZ Tools; enfusion.dayz.executable names the one to start.',
-    ];
+  return sidesOf(roles).flatMap((side) => {
+    const program = input.game.programs[side];
+
+    // The path where there is one, and the bare name where nothing said which installation it
+    // would come out of: "DayZServer_x64.exe is not there" is still the sentence to read.
+    return program.present
+      ? []
+      : [missingProgramOf(input.build, side, program.path === '' ? program.name : program.path)];
+  });
+}
+
+/** Which programs a set of roles is started with: the two clients are the one client program. */
+function sidesOf(roles: readonly LaunchRole[]): GameSide[] {
+  const sides: GameSide[] = [];
+
+  if (roles.some((role) => role !== 'server')) {
+    sides.push('client');
   }
 
-  return [];
+  if (roles.includes('server')) {
+    sides.push('server');
+  }
+
+  return sides;
 }
 
 /**
@@ -842,8 +899,9 @@ function clientProcessOf(
   return {
     role,
     what: `Starting the ${second ? 'second client' : 'client'} for ${input.target.name}`,
-    program: input.game.executable,
+    program: input.game.programs.client.path,
     arguments: [
+      ...diagArgumentsOf(input),
       ...CLIENT_ARGUMENTS,
       ...(second ? ['-client2'] : []),
       ...scriptDebugOf(input, role),
@@ -853,7 +911,7 @@ function clientProcessOf(
       ...(second ? joiningOf() : joinOf(input)),
       ...(second ? [] : offlineMissionOf(input)),
     ],
-    cwd: filePatchingRootOf(input.runRoot),
+    cwd: workingDirectoryOf(input, 'client'),
   };
 }
 
@@ -866,8 +924,10 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
   return {
     role: 'server',
     what: `Starting the server for ${input.target.name}`,
-    program: input.game.executable,
+    program: input.game.programs.server.path,
     arguments: [
+      '-server',
+      ...diagArgumentsOf(input),
       ...SERVER_ARGUMENTS,
       ...scriptDebugOf(input, 'server'),
       `-port=${DEFAULT_PORT}`,
@@ -876,8 +936,26 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
       `-mission=${mission}`,
       ...listArgumentOf('-serverMod', pathsOf(input.target, input.target.launch.serverMods)),
     ],
-    cwd: filePatchingRootOf(input.runRoot),
+    cwd: workingDirectoryOf(input, 'server'),
   };
+}
+
+/** The three the diag build alone understands, and a release launch is given none of. */
+function diagArgumentsOf(input: LaunchInput): readonly string[] {
+  return input.build === 'Debug' ? DIAG_ARGUMENTS : [];
+}
+
+/**
+ * Where the process is started.
+ *
+ * A `Debug` launch runs in the mirror, because that is what `-filePatching` counts an addon's
+ * prefix from. A `Release` one runs where the game is installed: there is no mirror to run in, and
+ * a retail game started anywhere else is one that cannot find its own root files.
+ */
+function workingDirectoryOf(input: LaunchInput, side: GameSide): string {
+  return input.build === 'Debug'
+    ? filePatchingRootOf(input.runRoot)
+    : input.game.programs[side].root;
 }
 
 /**
@@ -895,8 +973,16 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
  * Each role is met on its own port either way, so which process is talking is a fact about which
  * socket it came in on rather than something to work out. The connection does say its process id,
  * which is worth having as a check, but it is not what the two are told apart by.
+ *
+ * A release build carries no debugger at all, so it is told of none: the pair of arguments would
+ * name a listener nothing was ever going to dial, and a command line in the log that reads as
+ * though a script log is coming is worse than one that does not.
  */
 function scriptDebugOf(input: LaunchInput, role: LaunchRole): string[] {
+  if (input.build !== 'Debug') {
+    return [];
+  }
+
   const host = `-debugger=${SCRIPT_DEBUG_HOST}`;
 
   return FORCED_SCRIPT_DEBUG_PORT[role] === undefined

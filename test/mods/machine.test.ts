@@ -6,14 +6,22 @@ import {
   builderOf,
   environmentOf,
   environmentPaths,
-  gameExecutableOf,
+  dayzServerRootOf,
+  gameProgramOf,
   isWanting,
+  missingProgramOf,
   pboProjectExecutableOf,
 } from '../../src/mods/machine';
 
+const DAYZ = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
+
+/** Steam's own name for the folder it puts DayZ Server in, beside DayZ and never inside it. */
+const DAYZ_SERVER = 'F:\\SteamLibrary\\steamapps\\common\\DayZServer';
+
 const SETTINGS: MachineSettings = {
-  dayz: 'F:\\SteamLibrary\\steamapps\\common\\DayZ',
+  dayz: DAYZ,
   executable: '',
+  dayzServer: '',
   dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
   privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
@@ -191,21 +199,70 @@ test('a builder the settings do not name is the one most machines have', () => {
   assert.equal(builderOf(''), 'pboProject');
 });
 
-/** `-filePatching` is honoured by the diag build alone, which is why that is what is started. */
-test('the executable a launch starts is the diag build of the installation', () => {
-  assert.equal(
-    gameExecutableOf(SETTINGS),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ\\DayZDiag_x64.exe',
+/** `-filePatching` is honoured by the diag build alone, which is why that is what Debug starts. */
+test('a Debug launch is one diag executable playing both parts', () => {
+  assert.deepEqual(gameProgramOf(SETTINGS, 'Debug', 'client'), {
+    root: DAYZ,
+    name: 'DayZDiag_x64.exe',
+    path: `${DAYZ}\\DayZDiag_x64.exe`,
+  });
+  assert.deepEqual(
+    gameProgramOf(SETTINGS, 'Debug', 'server'),
+    gameProgramOf(SETTINGS, 'Debug', 'client'),
   );
 });
 
-test('an executable named by the settings is taken as a name in that folder, or as its own path', () => {
+test('a Release launch is the two programs a player and a host run, out of their own folders', () => {
+  assert.deepEqual(gameProgramOf(SETTINGS, 'Release', 'client'), {
+    root: DAYZ,
+    name: 'DayZ_x64.exe',
+    path: `${DAYZ}\\DayZ_x64.exe`,
+  });
+  assert.deepEqual(gameProgramOf(SETTINGS, 'Release', 'server'), {
+    root: DAYZ_SERVER,
+    name: 'DayZServer_x64.exe',
+    path: `${DAYZ_SERVER}\\DayZServer_x64.exe`,
+  });
+});
+
+/** A machine with no installation set still knows what it would have started, which is the line. */
+test('a program with no installation behind it keeps the name it would have been started under', () => {
+  const nowhere = gameProgramOf({ ...SETTINGS, dayz: '' }, 'Release', 'server');
+
+  assert.deepEqual(nowhere, { root: '', name: 'DayZServer_x64.exe', path: '' });
+});
+
+test('the executable setting names the diag build, and a release launch has nothing to override', () => {
   assert.equal(
-    gameExecutableOf({ ...SETTINGS, executable: 'DayZ_x64.exe' }),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ\\DayZ_x64.exe',
+    gameProgramOf({ ...SETTINGS, executable: 'DayZDiag_x64_2.exe' }, 'Debug', 'client').path,
+    `${DAYZ}\\DayZDiag_x64_2.exe`,
   );
   assert.equal(
-    gameExecutableOf({ ...SETTINGS, executable: 'D:\\Diag\\DayZDiag_x64.exe' }),
+    gameProgramOf({ ...SETTINGS, executable: 'D:\\Diag\\DayZDiag_x64.exe' }, 'Debug', 'server').path,
     'D:\\Diag\\DayZDiag_x64.exe',
   );
+  assert.equal(
+    gameProgramOf({ ...SETTINGS, executable: 'D:\\Diag\\DayZDiag_x64.exe' }, 'Release', 'client')
+      .path,
+    `${DAYZ}\\DayZ_x64.exe`,
+  );
+});
+
+test('DayZ Server is the folder beside DayZ until a setting says another one', () => {
+  assert.equal(dayzServerRootOf(SETTINGS), DAYZ_SERVER);
+  assert.equal(
+    dayzServerRootOf({ ...SETTINGS, dayzServer: 'D:\\Servers\\DayZ' }),
+    'D:\\Servers\\DayZ',
+  );
+  assert.equal(dayzServerRootOf({ ...SETTINGS, dayz: '' }), '');
+});
+
+/** Each of the three sends a developer somewhere different, so each says which one it is. */
+test('a program that is not there says which setting or install would put it there', () => {
+  assert.match(missingProgramOf('Debug', 'client', 'DayZDiag_x64.exe'), /enfusion\.dayz\.executable/);
+  assert.match(
+    missingProgramOf('Release', 'server', 'DayZServer_x64.exe'),
+    /enfusion\.dayzServer\.path/,
+  );
+  assert.match(missingProgramOf('Release', 'client', 'DayZ_x64.exe'), /enfusion\.dayz\.path/);
 });

@@ -14,10 +14,16 @@ import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { copyFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
-import type { GameEntry, GameRoot, LaunchPlan, LaunchProcess } from '../mods/launch';
+import type {
+  GameEntry,
+  GameProgramFacts,
+  GameRoot,
+  LaunchPlan,
+  LaunchProcess,
+} from '../mods/launch';
 import type { LaunchGame, ProcessExit } from '../mods/launchSession';
-import { gameExecutableOf } from '../mods/machine';
-import type { MachineSettings } from '../mods/machine';
+import { gameProgramOf } from '../mods/machine';
+import type { GameBuild, GameSide, MachineSettings } from '../mods/machine';
 import { windowsFolder, windowsPath } from '../mods/paths';
 import type { LinkFact } from '../mods/workDrive';
 import { linkFactAt, makeJunction, removeLink } from './workDrive';
@@ -32,15 +38,39 @@ export function localAppData(): string {
   return process.env.LOCALAPPDATA ?? tmpdir();
 }
 
-/** The game as a launch needs to know it: where it is, what starts it, and what its root holds. */
-export async function readGameRoot(settings: MachineSettings): Promise<GameRoot> {
-  const executable = gameExecutableOf(settings);
+/**
+ * The game as a launch needs to know it: where it is, what starts it, and what its root holds.
+ *
+ * Both sides are read whichever the target puts up, because reading a path is two `stat` calls and
+ * the alternative is threading the roles this far down. Which of them a refusal is allowed to
+ * speak about is decided in the plan, where the roles are known.
+ */
+export async function readGameRoot(
+  settings: MachineSettings,
+  build: GameBuild,
+): Promise<GameRoot> {
+  const [client, server] = await Promise.all([
+    programOf(settings, build, 'client'),
+    programOf(settings, build, 'server'),
+  ]);
 
   return {
     path: settings.dayz,
-    executable,
-    present: await exists(executable),
+    programs: { client, server },
     entries: await entriesOf(settings.dayz),
+  };
+}
+
+async function programOf(
+  settings: MachineSettings,
+  build: GameBuild,
+  side: GameSide,
+): Promise<GameProgramFacts> {
+  const program = gameProgramOf(settings, build, side);
+
+  return {
+    ...program,
+    present: program.path !== '' && (await exists(program.path)),
   };
 }
 

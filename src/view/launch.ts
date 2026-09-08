@@ -3,8 +3,8 @@
  *
  * The configurations are handed over **dynamically**, out of the targets in the `.enf`, and no
  * `launch.json` is ever written. One written by hand is no use for configuring anything either: a
- * configuration of ours takes `type`, `request` and `target`, and any other field is refused with
- * a sentence pointing at the manifest. Stopping a file from being written is not something an
+ * configuration of ours takes `type`, `request`, `target` and `build`, and any other field is
+ * refused with a sentence pointing at the manifest. Stopping a file from being written is not something an
  * extension can do; making it pointless is. See
  * `docs/adr/0002-enf-is-the-only-project-configuration.md`.
  *
@@ -25,6 +25,7 @@ import {
   targetById,
   targetsOf,
 } from '../mods/launch';
+import { type GameBuild, GAME_BUILDS, gameBuildOf } from '../mods/machine';
 import {
   type LaunchAttempt,
   type LaunchExit,
@@ -60,6 +61,7 @@ export const LAUNCH_TYPE = 'enfusion';
 
 export const LAUNCH_COMMAND = {
   select: 'enfusion.selectTarget',
+  selectBuild: 'enfusion.selectBuild',
   start: 'enfusion.launch',
   secondClient: 'enfusion.launchSecondClient',
 } as const;
@@ -74,23 +76,48 @@ export const LAUNCH_COMMAND = {
 const SECOND_CLIENT_REQUEST = 'enfusionSecondClient';
 
 /** The fields a configuration of ours takes. Anything else is the manifest's business. */
-const CONFIGURATION_FIELDS: readonly string[] = ['type', 'request', 'name', 'target', 'noDebug'];
+const CONFIGURATION_FIELDS: readonly string[] = [
+  'type',
+  'request',
+  'name',
+  'target',
+  'build',
+  'noDebug',
+];
 
 /** Where the chosen target is remembered, so a reopened workspace opens on the same one. */
 const CHOSEN_KEY = 'enfusion.launch.target';
 
+/** And the chosen build, beside it: both belong to the workspace rather than to the machine. */
+const BUILD_KEY = 'enfusion.launch.build';
+
 /** Registered as one thing, and told to look again whenever the mods can have changed. */
 export interface Launching extends vscode.Disposable {
   refresh(): void;
+  /**
+   * What the next launch would put up, out of the targets whoever asks already has in hand.
+   *
+   * The panel shows the choice and the status bar shows the choice, and there is one of it: both
+   * read it from here rather than from a memento key each of them knows the name of.
+   */
+  chosen(targets: readonly LaunchTarget[]): Chosen;
+}
+
+/** The target and the build the next launch uses. */
+export interface Chosen {
+  readonly target: LaunchTarget | undefined;
+  readonly build: GameBuild;
 }
 
 export function registerLaunch(
   memento: vscode.Memento,
   log: vscode.LogOutputChannel,
+  /** Called when the choice changes, so that whatever shows it says so without being asked. */
+  onChosen: () => void,
 ): Launching {
   const launcher = new Launcher(log);
   const coordinator = new LaunchCoordinator();
-  const bar = new TargetBar(memento, launcher);
+  const bar = new LaunchBar(memento, launcher, onChosen);
   const configurations = new Configurations(launcher, bar);
   const started = new Started(log, coordinator);
 
@@ -107,10 +134,21 @@ export function registerLaunch(
     vscode.debug.registerDebugAdapterDescriptorFactory(LAUNCH_TYPE, {
       createDebugAdapterDescriptor: (session) =>
         new vscode.DebugAdapterInlineImplementation(
-          new GameSession(targetOf(session.configuration), launcher, coordinator, log),
+          new GameSession(
+            targetOf(session.configuration),
+            gameBuildOf(session.configuration.build),
+            launcher,
+            coordinator,
+            log,
+          ),
         ),
     }),
-    vscode.commands.registerCommand(LAUNCH_COMMAND.select, () => bar.choose()),
+    // Both take what to choose, so that the panel's two lists set it directly rather than opening
+    // a question a developer has already answered by picking from a list.
+    vscode.commands.registerCommand(LAUNCH_COMMAND.select, (id?: unknown) => bar.choose(id)),
+    vscode.commands.registerCommand(LAUNCH_COMMAND.selectBuild, (build?: unknown) =>
+      bar.chooseBuild(build),
+    ),
     vscode.commands.registerCommand(LAUNCH_COMMAND.start, () => started.start()),
     vscode.commands.registerCommand(LAUNCH_COMMAND.secondClient, () => addSecondClient()),
   );
@@ -124,6 +162,7 @@ export function registerLaunch(
     refresh: () => {
       bar.refresh();
     },
+    chosen: (targets) => bar.chosen(targets),
   };
 }
 
@@ -218,12 +257,15 @@ function targetOf(configuration: vscode.DebugConfiguration): string {
  * The Run and Debug list, and the gatekeeper of what a configuration may say.
  *
  * A configuration with no target in it is the ordinary case rather than a mistake: it is what F5
- * on a workspace with one target means, and what the status bar's choice is for.
+ * on a workspace with one target means, and what the status bar's choice is for. `build` is the
+ * same: a configuration that names one launches that build whatever is chosen, and one that names
+ * none launches the chosen one — which is what the list of targets below offers, so that the
+ * ordinary F5 follows the panel rather than pinning a build the day it was written.
  */
 class Configurations implements vscode.DebugConfigurationProvider {
   constructor(
     private readonly launcher: Launcher,
-    private readonly bar: TargetBar,
+    private readonly bar: LaunchBar,
   ) {}
 
   async provideDebugConfigurations(): Promise<vscode.DebugConfiguration[]> {
@@ -248,9 +290,9 @@ class Configurations implements vscode.DebugConfigurationProvider {
 
     if (extra.length > 0) {
       await vscode.window.showErrorMessage(
-        `An Enfusion debug configuration takes "type", "request" and "target", and this one also ` +
-          `has ${extra.map((field) => `"${field}"`).join(', ')}. Everything about a launch is ` +
-          `configured in ${MANIFEST_FILE}, not in launch.json.`,
+        `An Enfusion debug configuration takes "type", "request", "target" and "build", and this ` +
+          `one also has ${extra.map((field) => `"${field}"`).join(', ')}. Everything about a ` +
+          `launch is configured in ${MANIFEST_FILE}, not in launch.json.`,
       );
       return undefined;
     }
@@ -260,9 +302,16 @@ class Configurations implements vscode.DebugConfigurationProvider {
       return undefined;
     }
 
-    this.bar.remember(target);
+    const build =
+      configuration.build === undefined
+        ? this.bar.build()
+        : gameBuildOf(configuration.build);
 
-    return { type: LAUNCH_TYPE, request: 'launch', name: target.id, target: target.id };
+    // Remembered, so that the status bar and the panel show what is actually running: a launch
+    // out of Run and Debug is as much a choice of target and build as picking them from a list is.
+    this.bar.remember(target, build);
+
+    return { type: LAUNCH_TYPE, request: 'launch', name: target.id, target: target.id, build };
   }
 
   /** The one it named, the one on the status bar, or — with several to pick from — the question. */
@@ -294,18 +343,21 @@ class Configurations implements vscode.DebugConfigurationProvider {
 }
 
 /**
- * The chosen target, on the status bar and remembered between sessions.
+ * The chosen target and build, on the status bar and remembered between sessions.
  *
- * It is shown rather than only offered because the one mistake worth catching here is launching
- * the wrong map — which costs a full load of the game to find out about.
+ * Both are shown rather than only offered, and for the one reason: the mistakes worth catching
+ * here are launching the wrong map and launching the wrong build, and each of them costs a full
+ * load of the game to find out about. The build especially — a `Release` launch that came up
+ * without the change just made looks exactly like a mod that does not work.
  */
-class TargetBar implements vscode.Disposable {
+class LaunchBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
   private targets: readonly LaunchTarget[] = [];
 
   constructor(
     private readonly memento: vscode.Memento,
     private readonly launcher: Launcher,
+    private readonly onChosen: () => void,
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.item.command = LAUNCH_COMMAND.select;
@@ -331,13 +383,27 @@ class TargetBar implements vscode.Disposable {
     return found ?? (targets.length === 1 ? targets[0] : undefined);
   }
 
-  remember(target: LaunchTarget): void {
-    void this.memento.update(CHOSEN_KEY, target.id);
-    this.refresh();
+  /** The chosen build. A workspace that has never been asked launches the diag build. */
+  build(): GameBuild {
+    return gameBuildOf(this.memento.get(BUILD_KEY));
   }
 
-  /** The command behind the status bar: which target the next F5 puts up. */
-  async choose(): Promise<void> {
+  chosen(targets: readonly LaunchTarget[]): Chosen {
+    return { target: this.current(targets), build: this.build() };
+  }
+
+  remember(target: LaunchTarget, build: GameBuild = this.build()): void {
+    void this.memento.update(CHOSEN_KEY, target.id);
+    void this.memento.update(BUILD_KEY, build);
+    this.refresh();
+    this.onChosen();
+  }
+
+  /**
+   * Which target the next F5 puts up: the one named, or — where nothing named one, which is the
+   * status bar being clicked — the one picked out of the list.
+   */
+  async choose(id?: unknown): Promise<void> {
     const targets = await this.launcher.targets();
     this.targets = targets;
 
@@ -347,10 +413,24 @@ class TargetBar implements vscode.Disposable {
       return;
     }
 
-    const picked = await pick(targets);
+    const named = typeof id === 'string' ? targetById(targets, id) : undefined;
+    const picked = named ?? (typeof id === 'string' ? undefined : await pick(targets));
     if (picked !== undefined) {
       this.remember(picked);
     }
+  }
+
+  /** And which build. The panel's list names one; the palette asks. */
+  async chooseBuild(build?: unknown): Promise<void> {
+    const named = GAME_BUILDS.find((known) => known === build);
+    const picked = named ?? (build === undefined ? await pickBuild() : undefined);
+    if (picked === undefined) {
+      return;
+    }
+
+    await this.memento.update(BUILD_KEY, picked);
+    this.refresh();
+    this.onChosen();
   }
 
   private show(): void {
@@ -360,17 +440,19 @@ class TargetBar implements vscode.Disposable {
     }
 
     const target = this.current(this.targets);
-    this.item.text = `$(rocket) ${target?.id ?? 'Select target'}`;
+    const build = this.build();
+    this.item.text = `$(rocket) ${target?.id ?? 'Select target'} · ${build}`;
     this.item.tooltip =
       target === undefined
-        ? 'Pick the Enfusion target to launch'
+        ? `Pick the Enfusion target to launch, as a ${build} build`
         : `Enfusion: ${target.mod}${target.map === undefined ? '' : `, ${target.map}`} — ` +
-          `${describe(target.run)}`;
+          `${describeRun(target.run)}, ${describeBuild(build)}`;
     this.item.show();
   }
 }
 
-function describe(run: LaunchTarget['run']): string {
+/** What a target puts up, in the words the status bar, the palette and the panel all use. */
+export function describeRun(run: LaunchTarget['run']): string {
   switch (run) {
     case 'client':
       return 'the client alone';
@@ -381,15 +463,28 @@ function describe(run: LaunchTarget['run']): string {
   }
 }
 
+/** What each build is, in one line: the two differ in which game runs and what it reads. */
+export function describeBuild(build: GameBuild): string {
+  return build === 'Debug'
+    ? 'the diag build, patched from the sources'
+    : 'the retail build, out of the packed pbo';
+}
+
 async function pick(targets: readonly LaunchTarget[]): Promise<LaunchTarget | undefined> {
   const items = targets.map((target) => ({
     label: target.id,
     description: target.mod,
-    detail: `${describe(target.run)}${target.map === undefined ? '' : ` · ${target.map}`}`,
+    detail: `${describeRun(target.run)}${target.map === undefined ? '' : ` · ${target.map}`}`,
     target,
   }));
 
   return (await vscode.window.showQuickPick(items, { placeHolder: 'Target to launch' }))?.target;
+}
+
+async function pickBuild(): Promise<GameBuild | undefined> {
+  const items = GAME_BUILDS.map((build) => ({ label: build, detail: describeBuild(build), build }));
+
+  return (await vscode.window.showQuickPick(items, { placeHolder: 'Build to launch' }))?.build;
 }
 
 async function noTargets(): Promise<void> {
@@ -414,6 +509,7 @@ class Launcher {
   /** One atomic running launch, or the refusal that acquired nothing. */
   async start(
     id: string,
+    build: GameBuild,
     say: (text: string) => void,
     signal: AbortSignal,
   ): Promise<LaunchAttempt> {
@@ -450,7 +546,7 @@ class Launcher {
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),
-        readGameRoot(settings),
+        readGameRoot(settings, build),
         readLinkFacts(filePatchingRootOf(runRoot)),
         // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
         // for by the plan itself, so that the two can never go looking at different paths.
@@ -464,6 +560,7 @@ class Launcher {
       signal.throwIfAborted();
       const plan = launchPlanOf({
         target,
+        build,
         mods,
         settings,
         drive,
@@ -488,7 +585,7 @@ class Launcher {
       await prepareLaunch(plan);
       signal.throwIfAborted();
       this.log.info(
-        `launch: ${plan.filePatching.junctions.length} link(s) made, ` +
+        `launch: ${build}, ${plan.filePatching.junctions.length} link(s) made, ` +
           `${plan.filePatching.remove.length} taken off, ${plan.copies.length} layer(s) laid down, ` +
           `in ${runRoot}`,
       );
@@ -529,6 +626,7 @@ class Launcher {
    */
   async startSecond(
     id: string,
+    build: GameBuild,
     say: (text: string) => void,
     signal: AbortSignal,
   ): Promise<LaunchAttempt> {
@@ -579,7 +677,7 @@ class Launcher {
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),
-        readGameRoot(settings),
+        readGameRoot(settings, build),
         readLinkFacts(filePatchingRootOf(runRoot)),
         readFound(launchPathsOf(target, mods)),
       ]);
@@ -590,6 +688,7 @@ class Launcher {
       const plan = launchPlanOf(
         {
           target,
+          build,
           mods,
           settings,
           drive,
@@ -735,6 +834,7 @@ class GameSession implements vscode.DebugAdapter {
 
   constructor(
     private readonly target: string,
+    private readonly build: GameBuild,
     private readonly launcher: Launcher,
     coordinator: LaunchCoordinator,
     private readonly log: vscode.LogOutputChannel,
@@ -811,7 +911,7 @@ class GameSession implements vscode.DebugAdapter {
 
   private async launch(request: DapRequest): Promise<void> {
     const outcome = await this.lifecycle.start((signal) =>
-      this.launcher.start(this.target, (text) => this.output(text), signal),
+      this.launcher.start(this.target, this.build, (text) => this.output(text), signal),
     );
 
     switch (outcome.kind) {
@@ -853,7 +953,7 @@ class GameSession implements vscode.DebugAdapter {
    */
   private async second(request: DapRequest): Promise<void> {
     const outcome = await this.lifecycle.addSecond((signal) =>
-      this.launcher.startSecond(this.target, (text) => this.output(text), signal),
+      this.launcher.startSecond(this.target, this.build, (text) => this.output(text), signal),
     );
 
     switch (outcome.kind) {

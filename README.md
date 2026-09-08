@@ -3,12 +3,13 @@
 A VS Code extension for Enfusion mods: what the Workbench plugins do today, in the editor the code
 is written in anyway.
 
-The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top is a row of
-buttons for everything at once: **Start** puts the game up, **Build** builds the workspace, and the
-three square ones on the right mount the work drive, unmount it, and link the mods onto it. A button
-that would only fail is disabled and says why in its tooltip, so the reason is there before the
-press rather than after it. Below the row is `workspace.enf` and the mods under it, each mod with
-its addons in the order they will be built.
+The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists
+saying what the next launch is — which **target**, and whether it is a **Debug** or a **Release**
+build of the game — and under them a row of buttons for everything at once: **Start** puts the game
+up, **Build** builds the workspace, and the three square ones on the right mount the work drive,
+unmount it, and link the mods onto it. A button that would only fail is disabled and says why in its
+tooltip, so the reason is there before the press rather than after it. Below the row is
+`workspace.enf` and the mods under it, each mod with its addons in the order they will be built.
 
 A mod's row is its manifest: clicking it opens `mod.enf`, the way a file in the explorer does, and
 the only thing written on it is the mod's name. No paths are written there because there is nothing
@@ -66,14 +67,15 @@ at its own place.
 A `launch` block in a `mod.enf` that a `workspace.enf` above it owns is marked by the form as
 ignored, right where it is written.
 
-The paths to DayZ, to DayZ Tools and to `pboProject.exe`, the game executable to run, the private
-key, the source and the letter of the work drive, the file patching root and the choice of builder
-are about the machine rather than about the mod, so they live in VS Code settings with
-`scope: machine`, which the editor physically will not let a workspace write. In the ordinary case
-nothing has to be entered at all. All three paths are read out of the registry, where the installers
+The paths to DayZ, to DayZ Server, to DayZ Tools and to `pboProject.exe`, the diag executable to
+run, the private key, the source and the letter of the work drive, the file patching root and the
+choice of builder are about the machine rather than about the mod, so they live in VS Code settings
+with `scope: machine`, which the editor physically will not let a workspace write. In the ordinary
+case nothing has to be entered at all. The paths are read out of the registry, where the installers
 wrote them; DayZ and DayZ Tools are looked for through Steam as well — by its own list of libraries
 and by the app manifest — and that is what covers a registry path that now leads nowhere: a game
-moved to another library, a key written by another user. The work drive source defaults to the
+moved to another library, a key written by another user. DayZ Server is the one that has no registry
+key at all, so Steam is the whole of the answer for it. The work drive source defaults to the
 folder the letter is already mounted from: the drive DayZ Tools put up is this machine's work drive.
 What resolved and what did not is written to the **Enfusion** log on every scan; the panel does not
 carry it, because there is nothing to look at there, and what was missing is said by the refusal of
@@ -205,13 +207,15 @@ command line (the other is launching), so it wants the folder trusted (Workspace
 
 The game is launched by the editor's own **Run and Debug** — and by the blue **Start** in the row at
 the top, which does exactly the same thing: the same configuration resolved the same way, so it puts
-up the target that is selected in the status bar, and asks only when nothing is selected. The
-configurations are handed out dynamically from the targets of the `launch` block, so `launch.json`
-is not needed and is never created. One written by hand is useless for configuring, too: a debug
-configuration takes exactly `type`, `request` and `target`, and any other field is an error pointing
-at `mod.enf`. The selected target is shown in the status bar and changed there; `target` in a
-configuration is a target's name, and targets of the same name in different mods are told apart as
-`<Mod>: <Name>`. There are no breakpoints, no stacks and no variables, but **Stop** puts down every
+up the target that is selected, and asks only when nothing is selected. The configurations are
+handed out dynamically from the targets of the `launch` block, so `launch.json` is not needed and is
+never created. One written by hand is useless for configuring, too: a debug configuration takes
+exactly `type`, `request`, `target` and `build`, and any other field is an error pointing at
+`mod.enf`. The target and the build are chosen in the two lists at the top of the panel, shown
+together in the status bar, and changed from either or from the palette; `target` in a configuration
+is a target's name, and targets of the same name in different mods are told apart as
+`<Mod>: <Name>`. A configuration that names no `build` uses the chosen one, which is what keeps an
+ordinary F5 following the panel rather than pinning a build the day it was written. There are no breakpoints, no stacks and no variables, but **Stop** puts down every
 process of the launch along with its children (`taskkill /T`). A launch owns its processes and
 debugger listeners as one thing: a failed or cancelled start rolls back everything it acquired,
 and closing the session takes the same cleanup path. The session ends when any primary process goes
@@ -246,9 +250,26 @@ now, and what is written down is only the list of what not to carry over: the ga
 and `.dll` by the path it was started with, and it writes its `.log` itself. A second launch redoes
 nothing: a link pointing where it should stays, one that has moved is repointed, one no longer
 wanted is taken off, and whatever the game itself wrote into the working directory (logs, dumps) is
-not touched at all. A launch refuses to start where the work drive is not mounted, or where there is
-no game executable — by default `DayZDiag_x64.exe`, because only the diagnostic build understands
-`-filePatching`; the name or the path is changed by the `enfusion.dayz.executable` setting.
+not touched at all. A launch refuses to start where the work drive is not mounted, or where the
+program it would start is not there.
+
+Which program that is, is what **Debug** and **Release** decide. Debug is everything above: one
+`DayZDiag_x64.exe` playing both parts, started in the mirror, given `-filePatching`,
+`-scriptDebug=true` and `-newErrorsAreWarnings=1`, reading the mods off the sources. The name or the
+path of that one executable is changed by the `enfusion.dayz.executable` setting, for a diag build
+kept outside the installation. Release is the pair a player and a host run: `DayZ_x64.exe` out of
+the DayZ folder for the client, `DayZServer_x64.exe` out of the DayZ Server folder for the server,
+each started where it is installed and given none of those three arguments — no mirror is built for
+it at all, because a retail game reads its mods out of the packed pbo and out of nothing else. Which
+is the whole point of having the choice: Debug is what a mod is written under, and Release is the
+only launch that says whether what was packed is the same mod. The script log goes with the
+debugger, so a Release console carries what the processes print and no `SCRIPT` channel.
+
+DayZ Server is a Steam application of its own — installed beside DayZ rather than inside it, and
+recording nothing in the registry the way the client does. So it is found through Steam's own list
+of libraries, the folder beside DayZ is what is settled for, and `enfusion.dayzServer.path` names it
+outright on a machine where neither answer is right. A Release launch of a client-only target never
+asks about it: the refusal is only ever about a program that launch would actually start.
 
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
@@ -302,9 +323,9 @@ up quietly without it while everything that depended on it falls into a script e
 target with no `map`, and a missing `server.cfg`, are refused the same way. Like a build, a launch
 puts paths out of a `mod.enf` on a command line, so it wants the folder trusted too.
 
-The "second client" button adds one more client to a launch that is already up: the same target, a
-profile of its own, a debugger port of its own, `-client2`, a name of its own and a connection to
-the same server. Only one may be starting or running at a time. If it leaves, its listener is closed
+The "second client" button adds one more client to a launch that is already up: the same target and
+the same build, a profile of its own, a debugger port of its own, `-client2`, a name of its own and
+a connection to the same server. Only one may be starting or running at a time. If it leaves, its listener is closed
 and the primary launch stays up, so the button can add a replacement. Two clients on one machine
 are two Steam accounts, and Steam holds one signed-in account per Windows session. So the second
 one runs inside a Sandboxie box with a Steam of its own.

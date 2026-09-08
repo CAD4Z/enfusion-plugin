@@ -14,19 +14,38 @@
  * and is what the button that needs it refuses over.
  */
 
-import { resolveWindows, samePath, windowsName, windowsPath } from './paths';
+import { resolveWindows, samePath, windowsFolder, windowsName, windowsPath } from './paths';
 
 /** The program that packs an addon into a pbo. */
 export type Builder = 'pboProject' | 'AddonBuilder';
 
 export const BUILDERS: readonly Builder[] = ['pboProject', 'AddonBuilder'];
 
+/**
+ * Which build of the game a launch starts.
+ *
+ * `Debug` is the diag build, which is one executable playing both parts and the only one that
+ * honours `-filePatching` or carries a script debugger. `Release` is what a player's machine runs:
+ * two programs out of two installations, loading the pbo that were actually packed. Debug is what
+ * a mod is written under; Release is what says whether what was packed is the same mod.
+ */
+export type GameBuild = 'Debug' | 'Release';
+
+export const GAME_BUILDS: readonly GameBuild[] = ['Debug', 'Release'];
+
+/** Anything else — an older remembered choice, a hand-edited configuration — is the diag build. */
+export function gameBuildOf(value: unknown): GameBuild {
+  return GAME_BUILDS.find((build) => build === value) ?? 'Debug';
+}
+
 /** Everything the machine holds, already resolved: settings first, registry behind them. */
 export interface MachineSettings {
   /** The DayZ installation — the folder the client and the diag executable sit in. */
   readonly dayz: string;
-  /** The executable a launch starts, as a name in that folder or as a path of its own. */
+  /** The diag executable, as a name in that folder or as a path of its own. */
   readonly executable: string;
+  /** The DayZ Server installation; empty is the folder Steam puts it in beside DayZ. */
+  readonly dayzServer: string;
   readonly dayzTools: string;
   /** `pboProject.exe`, or the folder holding it; see `pboProjectExecutableOf`. */
   readonly pboProject: string;
@@ -73,6 +92,7 @@ export interface SecondClient {
 export const SETTING = {
   dayz: 'enfusion.dayz.path',
   executable: 'enfusion.dayz.executable',
+  dayzServer: 'enfusion.dayzServer.path',
   dayzTools: 'enfusion.dayzTools.path',
   privateKey: 'enfusion.signing.privateKey',
   workDrive: 'enfusion.workDrive.source',
@@ -180,16 +200,103 @@ export function signToolOf(settings: MachineSettings): string {
 /** The build of the game that reads scripts off the disk rather than out of a pbo. */
 export const DEFAULT_EXECUTABLE = 'DayZDiag_x64.exe';
 
-/**
- * The program a launch starts. The diag build is the one that honours `-filePatching`, so that is
- * what the setting stands in for when it is empty; a setting holding a path of its own is taken as
- * it is written, which is how a developer whose diag build sits outside the installation launches
- * at all.
- */
-export function gameExecutableOf(settings: MachineSettings): string {
-  const executable = settings.executable === '' ? DEFAULT_EXECUTABLE : settings.executable;
+/** The retail pair: the client a player starts, and the server a host does. */
+const RELEASE_CLIENT = 'DayZ_x64.exe';
+const RELEASE_SERVER = 'DayZServer_x64.exe';
 
-  return resolveWindows(settings.dayz, executable);
+/** What Steam calls the DayZ Server folder, which it installs beside DayZ rather than inside it. */
+const SERVER_FOLDER = 'DayZServer';
+
+/** Which role's part of a launch is being started, as far as choosing a program goes. */
+export type GameSide = 'client' | 'server';
+
+/** A program to start, out of the installation it belongs to. */
+export interface GameProgram {
+  /**
+   * The installation it comes out of. A release build is started in it — nothing is patched into
+   * a retail game, so there is no mirror for it to run in and no reason to build one.
+   */
+  readonly root: string;
+  /** What it is called, which a machine with no installation set still knows. */
+  readonly name: string;
+  /** Where it is; empty where nothing said which installation it is in. */
+  readonly path: string;
+}
+
+/**
+ * The program each side of a launch starts, which is a fact about the build and about the role.
+ *
+ * The diag build is one executable and one installation: told `-server` it is the server, and it
+ * is the only build that honours `-filePatching`, which is why it is what `Debug` means. The
+ * retail build is two — `DayZ_x64.exe` out of DayZ, `DayZServer_x64.exe` out of DayZ Server —
+ * because Steam sells and installs them as two things.
+ *
+ * `enfusion.dayz.executable` names the diag build only. It is there for a developer whose diag
+ * build sits outside the installation, and a retail launch has nothing to override: those two
+ * programs are what the installations hold, under the names Bohemia ships them under.
+ */
+export function gameProgramOf(
+  settings: MachineSettings,
+  build: GameBuild,
+  side: GameSide,
+): GameProgram {
+  if (build === 'Debug') {
+    const executable = settings.executable === '' ? DEFAULT_EXECUTABLE : settings.executable;
+
+    return {
+      root: settings.dayz,
+      name: windowsName(executable),
+      path: resolveWindows(settings.dayz, executable),
+    };
+  }
+
+  if (side === 'server') {
+    const root = dayzServerRootOf(settings);
+
+    return {
+      root,
+      name: RELEASE_SERVER,
+      path: root === '' ? '' : windowsPath(root, RELEASE_SERVER),
+    };
+  }
+
+  return {
+    root: settings.dayz,
+    name: RELEASE_CLIENT,
+    path: settings.dayz === '' ? '' : windowsPath(settings.dayz, RELEASE_CLIENT),
+  };
+}
+
+/**
+ * Where DayZ Server is. Steam installs it as an application of its own, beside DayZ in the same
+ * library and never inside it, and its installer writes no registry key of the kind the client's
+ * does — so with nothing set the folder beside DayZ is the guess, and it is a good one on a
+ * machine where both came from Steam. A setting overrides it for a machine where they did not.
+ */
+export function dayzServerRootOf(settings: MachineSettings): string {
+  if (settings.dayzServer !== '') {
+    return settings.dayzServer;
+  }
+
+  const library = windowsFolder(settings.dayz);
+
+  return library === '' ? '' : windowsPath(library, SERVER_FOLDER);
+}
+
+/** Why a release launch cannot start that side of itself, in the words that say what to do. */
+export function missingProgramOf(build: GameBuild, side: GameSide, program: string): string {
+  if (build === 'Debug') {
+    return (
+      `${program} is not there. File patching needs the diag build of the game, which comes with ` +
+      `DayZ Tools; ${SETTING.executable} names the one to start.`
+    );
+  }
+
+  return side === 'server'
+    ? `${program} is not there. DayZ Server is a Steam application of its own — install it, or ` +
+        `name the folder it is in with ${SETTING.dayzServer}.`
+    : `${program} is not there. A Release launch starts the game a player starts, out of the ` +
+        `installation ${SETTING.dayz} names.`;
 }
 
 export type EnvironmentKind = 'dayz' | 'dayzTools' | 'privateKey' | 'workDrive' | 'builder';

@@ -12,6 +12,7 @@
  */
 
 import '@vscode-elements/elements/dist/vscode-button/index.js';
+import '@vscode-elements/elements/dist/vscode-single-select/index.js';
 import type { ManifestProblem } from '../mods/enf';
 import type { Problem } from '../mods/model';
 import type { LinkState } from '../mods/workDrive';
@@ -26,6 +27,7 @@ import type {
   ModView,
   ModsMessage,
   PanelRequest,
+  PickerView,
   ToolsView,
 } from './protocol';
 import './main.css';
@@ -129,14 +131,23 @@ function stale(): HTMLElement {
 }
 
 /**
- * The buttons everything else is done with, in the order they are reached for: put the game up,
- * build what it would load, and — off to the side, because they are done once and then forgotten
- * — the three that the work drive is made of.
+ * The buttons everything else is done with, in the order they are reached for: say what the next
+ * launch is, put the game up, build what it would load, and — off to the side, because they are
+ * done once and then forgotten — the three that the work drive is made of.
+ *
+ * The two lists sit where the heading was rather than beside the buttons. They are the heading:
+ * what this row is about is which target and which build, and a Start with those written over it
+ * needs no word saying that it runs and builds.
  */
 function toolsOf(tools: ToolsView): HTMLElement {
   const primary = div('tool-group');
   const primaryActions = div('tool-row primary-actions');
-  primary.append(span('tool-heading', 'Run & build'), primaryActions);
+  const choices = div('tool-row choices');
+  choices.append(
+    picker('target', tools.target, (id) => ({ type: 'selectTarget', id })),
+    picker('game-build', tools.gameBuild, (build) => ({ type: 'selectGameBuild', build })),
+  );
+  primary.append(choices, primaryActions);
   primaryActions.append(
     tool('start', tools.start, 'Start', { type: 'launch' }, true),
     tool('secondClient', tools.secondClient, 'Add client', { type: 'launchSecondClient' }),
@@ -160,6 +171,50 @@ function toolsOf(tools: ToolsView): HTMLElement {
   const toolsRoot = div('tools');
   toolsRoot.append(primary, workDrive);
   return toolsRoot;
+}
+
+/**
+ * One of the two lists over the buttons.
+ *
+ * A `change` rather than a press, so it costs one click rather than a click and a pick — and it is
+ * never a stolen press: the focus a returning console steals lands on whatever it was on, and
+ * `change` fires when a value is chosen rather than when a control is touched.
+ *
+ * A list with nothing in it is disabled and says why, the way the buttons under it do. It is never
+ * left blank: an empty control that gives no reason is the one thing worse than a missing one.
+ */
+function picker(
+  name: string,
+  view: PickerView,
+  chose: (id: string) => PanelRequest,
+): HTMLElement {
+  const select = document.createElement('vscode-single-select');
+  select.className = 'choice';
+  select.disabled = view.refusal !== undefined || view.options.length === 0;
+  select.title = view.refusal ?? view.title;
+  select.append(
+    ...view.options.map((option) => {
+      const item = document.createElement('vscode-option');
+      item.value = option.id;
+      item.description = option.detail;
+      item.textContent = option.label;
+      item.selected = option.id === view.chosen;
+      return item;
+    }),
+  );
+
+  select.addEventListener('change', () => {
+    // An empty value is the row that stands for nothing having been chosen, and choosing nothing
+    // is not a choice. The comparison is what makes a render that settles on its own value quiet.
+    if (select.value !== '' && select.value !== view.chosen) {
+      host.postMessage(chose(select.value));
+    }
+  });
+
+  const holder = span(`holds ${name}`, '', view.refusal ?? view.title);
+  holder.append(select);
+
+  return holder;
 }
 
 /**
