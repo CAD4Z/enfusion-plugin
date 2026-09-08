@@ -11,7 +11,7 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import {
@@ -22,10 +22,12 @@ import {
   boxPidsOf,
   boxPrefixOf,
   boxRootOf,
+  connectionLogPathOf,
   imagePidsOf,
   loginUsersPathOf,
-  signedInNowOf,
-  signedInOf,
+  previousConnectionLogPathOf,
+  steamAccountIdOf,
+  steamConnectedSinceOf,
   steamCommandOf,
 } from '../mods/sandbox';
 import type { GameProcess } from './launch';
@@ -34,6 +36,9 @@ const run = promisify(execFile);
 
 /** Steam's own name, which is what the box is asked whether it is running. */
 const STEAM_IMAGE = 'steam.exe';
+
+/** A process of the final client, which the bootstrap updater does not put up. */
+const STEAM_CLIENT_IMAGE = 'steamwebhelper.exe';
 
 /** How often the wait looks again. */
 const POLL = 2000;
@@ -49,6 +54,44 @@ const POLL = 2000;
 /** How often the waiting says so, so that a wait for a human does not look like a hang. */
 const SAY_EVERY = 15 * 1000;
 
+/** The host operations behind one `openSandbox` call, replaceable by its deterministic test. */
+export interface SandboxRuntime {
+  now(): number;
+  boxExists(sandbox: Sandbox, signal?: AbortSignal): Promise<boolean>;
+  makeBox(sandbox: Sandbox, signal?: AbortSignal): Promise<string | undefined>;
+  steamFiles(sandbox: Sandbox, signal?: AbortSignal): Promise<SandboxSteamFiles | undefined>;
+  imageIsUp(sandbox: Sandbox, image: string, signal?: AbortSignal): Promise<boolean>;
+  imageStartedAt(
+    sandbox: Sandbox,
+    image: string,
+    signal?: AbortSignal,
+  ): Promise<number | undefined>;
+  startSteam(sandbox: Sandbox): void;
+  accountId(users: string, account: string, signal?: AbortSignal): Promise<string | undefined>;
+  readConnectionLogs(logs: readonly string[], signal?: AbortSignal): Promise<string>;
+  sleep(milliseconds: number, signal?: AbortSignal): Promise<void>;
+}
+
+/** The boxed Steam files needed to distinguish current identity from live readiness. */
+export interface SandboxSteamFiles {
+  readonly loginUsers: string;
+  /** The rotated predecessor first, then the live connection log. */
+  readonly connectionLogs: readonly string[];
+}
+
+const SYSTEM_RUNTIME: SandboxRuntime = {
+  now: Date.now,
+  boxExists,
+  makeBox,
+  steamFiles,
+  imageIsUp,
+  imageStartedAt,
+  startSteam,
+  accountId,
+  readConnectionLogs,
+  sleep,
+};
+
 /**
  * The box, ready for a game to be started in it — or the sentence saying why it is not.
  *
@@ -61,14 +104,15 @@ export async function openSandbox(
   sandbox: Sandbox,
   say: (text: string) => void,
   signal?: AbortSignal,
+  runtime: SandboxRuntime = SYSTEM_RUNTIME,
 ): Promise<string | undefined> {
   signal?.throwIfAborted();
 
-  if (!(await boxExists(sandbox))) {
+  if (!(await runtime.boxExists(sandbox, signal))) {
     signal?.throwIfAborted();
     say(`Making the ${sandbox.box} sandbox.`);
 
-    const failed = await makeBox(sandbox, signal);
+    const failed = await runtime.makeBox(sandbox, signal);
     signal?.throwIfAborted();
     if (failed !== undefined) {
       return failed;
@@ -76,35 +120,30 @@ export async function openSandbox(
   }
 
   signal?.throwIfAborted();
-  const users = await loginUsersPath(sandbox);
+  const files = await runtime.steamFiles(sandbox, signal);
   signal?.throwIfAborted();
-  if (users === undefined) {
+  if (files === undefined) {
     return `Steam is at ${sandbox.steam}, which is not a path this can find inside the ${sandbox.box} sandbox.`;
   }
 
-  const steamIsRunning = await steamIsUp(sandbox);
+  const steamIsRunning = await runtime.imageIsUp(sandbox, STEAM_IMAGE, signal);
   signal?.throwIfAborted();
 
   if (steamIsRunning) {
-    // A Steam that is up but has never signed this account in is a Steam somebody is in the middle
-    // of signing in to, which is worth waiting for rather than starting a second one on top of.
-    // Nothing was started here, so there is no moment for the record to be newer than: a zero.
-    const written = await signInWritten(users, sandbox.account);
+    // A Steam that is up but not connected yet is either bootstrapping or being signed in. Both are
+    // worth waiting for rather than starting a second one on top of it. Its process start time is
+    // the boundary that stops an unclosed success from an older Steam answering for this one.
+    const ready = await steamReady(sandbox, files, runtime, signal);
     signal?.throwIfAborted();
 
-    return signedInNowOf(written, 0, Date.now())
-      ? undefined
-      : await waitForSignIn(sandbox, users, 0, say, signal);
+    return ready ? undefined : await waitForSteam(sandbox, files, say, signal, runtime);
   }
 
-  // Read before the start rather than after it, so that a file Steam rewrites the moment it signs
-  // in cannot be mistaken for the one it left there last time.
-  const since = Date.now();
   say(`Starting Steam in the ${sandbox.box} sandbox as ${sandbox.account}.`);
   signal?.throwIfAborted();
-  startSteam(sandbox);
+  runtime.startSteam(sandbox);
 
-  return waitForSignIn(sandbox, users, since, say, signal);
+  return waitForSteam(sandbox, files, say, signal, runtime);
 }
 
 /**
@@ -145,53 +184,92 @@ async function killInBox(sandbox: Sandbox, image: string): Promise<void> {
 }
 
 /**
- * The wait itself: every couple of seconds, has Steam written down that the account is signed in.
+ * The wait itself: every couple of seconds, has the final Steam client completed its logon.
  *
  * Giving up is not a failure of the launch so much as the end of what waiting can do — the box is
  * up and the sign-in is a person's to finish — so what comes back says exactly that, and pressing
  * the button again is the whole of the recovery.
  */
-async function waitForSignIn(
+async function waitForSteam(
   sandbox: Sandbox,
-  users: string,
-  since: number,
+  files: SandboxSteamFiles,
   say: (text: string) => void,
   signal?: AbortSignal,
+  runtime: SandboxRuntime = SYSTEM_RUNTIME,
 ): Promise<string | undefined> {
   signal?.throwIfAborted();
-  const until = Date.now() + SIGN_IN_PATIENCE;
-  let said = Date.now();
+  const until = runtime.now() + SIGN_IN_PATIENCE;
+  let said = runtime.now();
 
-  while (Date.now() < until) {
-    await sleep(POLL, signal);
+  while (runtime.now() < until) {
+    await runtime.sleep(POLL, signal);
     signal?.throwIfAborted();
 
-    const written = await signInWritten(users, sandbox.account);
+    const ready = await steamReady(sandbox, files, runtime, signal);
     signal?.throwIfAborted();
 
-    if (signedInNowOf(written, since, Date.now())) {
-      say(`${sandbox.account} is signed in to the ${sandbox.box} sandbox.`);
+    if (ready) {
+      say(`Steam is ready in the ${sandbox.box} sandbox as ${sandbox.account}.`);
       signal?.throwIfAborted();
       return undefined;
     }
 
-    if (Date.now() - said >= SAY_EVERY) {
-      said = Date.now();
+    if (runtime.now() - said >= SAY_EVERY) {
+      said = runtime.now();
       say(`Waiting for ${sandbox.account} to sign in to the ${sandbox.box} sandbox.`);
     }
   }
 
   signal?.throwIfAborted();
   return (
-    `${sandbox.account} has not signed in to the ${sandbox.box} sandbox. Sign in to the Steam ` +
-    'that is up in it, then press the second-client button again.'
+    `Steam has not finished starting and signing in as ${sandbox.account} in the ${sandbox.box} ` +
+    'sandbox. Finish the sign-in there, then press the second-client button again.'
+  );
+}
+
+/**
+ * The four independent facts that make the boxed Steam usable by a game.
+ *
+ * `steam.exe` alone is also the bootstrap updater. `steamwebhelper.exe` appears only with the
+ * final client, but before logon completes. `loginusers.vdf` identifies its most recent account,
+ * while the connection log says that this client is live. None of the four is sufficient alone.
+ */
+async function steamReady(
+  sandbox: Sandbox,
+  files: SandboxSteamFiles,
+  runtime: SandboxRuntime,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const [client, accountId] = await Promise.all([
+    runtime.imageIsUp(sandbox, STEAM_CLIENT_IMAGE, signal),
+    runtime.accountId(files.loginUsers, sandbox.account, signal),
+  ]);
+  signal?.throwIfAborted();
+
+  if (!client || accountId === undefined) {
+    return false;
+  }
+
+  // The logs can be several megabytes after rotation. Do not reread them while the bootstrap
+  // updater or the login window already proves that the final client is not ready.
+  const connection = await runtime.readConnectionLogs(files.connectionLogs, signal);
+  signal?.throwIfAborted();
+
+  // Read this last. If Steam restarted while the other facts were sampled, the newer process time
+  // wins and the preceding process's connection cannot be mixed into a ready snapshot.
+  const steamStartedAt = await runtime.imageStartedAt(sandbox, STEAM_IMAGE, signal);
+  signal?.throwIfAborted();
+
+  return (
+    steamStartedAt !== undefined &&
+    steamConnectedSinceOf(connection, steamStartedAt, accountId)
   );
 }
 
 /** Whether Sandboxie's configuration holds the box: `SbieIni` answers a box that is not there with nothing. */
-async function boxExists(sandbox: Sandbox): Promise<boolean> {
+async function boxExists(sandbox: Sandbox, signal?: AbortSignal): Promise<boolean> {
   try {
-    const { stdout } = await run(sandbox.ini, ['query', sandbox.box, 'Enabled']);
+    const { stdout } = await run(sandbox.ini, ['query', sandbox.box, 'Enabled'], { signal });
 
     return boxExistsOf(stdout);
   } catch {
@@ -210,7 +288,7 @@ async function makeBox(sandbox: Sandbox, signal?: AbortSignal): Promise<string |
     signal?.throwIfAborted();
 
     try {
-      await run(sandbox.ini, ['set', sandbox.box, setting, value]);
+      await run(sandbox.ini, ['set', sandbox.box, setting, value], { signal });
     } catch (error) {
       return (
         `The ${sandbox.box} sandbox could not be made: ${sandbox.ini} set ${sandbox.box} ` +
@@ -229,15 +307,64 @@ async function makeBox(sandbox: Sandbox, signal?: AbortSignal): Promise<string |
  * are in the box but not what they are, and `tasklist` says where every Steam is but not which of
  * them is sandboxed. Where the two lists meet is a Steam in this box.
  */
-async function steamIsUp(sandbox: Sandbox): Promise<boolean> {
-  const [inside, steams] = await Promise.all([boxPids(sandbox), imagePids(STEAM_IMAGE)]);
-
-  return steams.some((pid) => inside.includes(pid));
+async function imageIsUp(
+  sandbox: Sandbox,
+  image: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return (await boxedImagePids(sandbox, image, signal)).length !== 0;
 }
 
-async function boxPids(sandbox: Sandbox): Promise<number[]> {
+/** When the newest boxed process with this image was started, in epoch milliseconds. */
+async function imageStartedAt(
+  sandbox: Sandbox,
+  image: string,
+  signal?: AbortSignal,
+): Promise<number | undefined> {
+  const pids = await boxedImagePids(sandbox, image, signal);
+  if (pids.length === 0) {
+    return undefined;
+  }
+
+  const script = [
+    '& { param([string]$PidList)',
+    "$ids = [int[]]$PidList.Split(':')",
+    '$found = Get-Process -Id $ids -ErrorAction SilentlyContinue',
+    '$latest = $found | Sort-Object -Property StartTime -Descending | Select-Object -First 1',
+    "if ($null -ne $latest) { $latest.StartTime.ToUniversalTime().ToString('O') }",
+    '}',
+  ].join('; ');
+
   try {
-    const { stdout } = await run(sandbox.start, [`/box:${sandbox.box}`, '/listpids']);
+    const { stdout } = await run(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', script, pids.join(':')],
+      { signal, windowsHide: true },
+    );
+    const startedAt = Date.parse(stdout.trim());
+
+    return Number.isNaN(startedAt) ? undefined : startedAt;
+  } catch {
+    return undefined;
+  }
+}
+
+async function boxedImagePids(
+  sandbox: Sandbox,
+  image: string,
+  signal?: AbortSignal,
+): Promise<number[]> {
+  const [inside, running] = await Promise.all([
+    boxPids(sandbox, signal),
+    imagePids(image, signal),
+  ]);
+
+  return running.filter((pid) => inside.includes(pid));
+}
+
+async function boxPids(sandbox: Sandbox, signal?: AbortSignal): Promise<number[]> {
+  try {
+    const { stdout } = await run(sandbox.start, [`/box:${sandbox.box}`, '/listpids'], { signal });
 
     return boxPidsOf(stdout);
   } catch {
@@ -245,9 +372,13 @@ async function boxPids(sandbox: Sandbox): Promise<number[]> {
   }
 }
 
-async function imagePids(image: string): Promise<number[]> {
+async function imagePids(image: string, signal?: AbortSignal): Promise<number[]> {
   try {
-    const { stdout } = await run('tasklist', ['/FI', `IMAGENAME eq ${image}`, '/NH', '/FO', 'CSV']);
+    const { stdout } = await run(
+      'tasklist',
+      ['/FI', `IMAGENAME eq ${image}`, '/NH', '/FO', 'CSV'],
+      { signal, windowsHide: true },
+    );
 
     return imagePidsOf(stdout);
   } catch {
@@ -271,22 +402,34 @@ function startSteam(sandbox: Sandbox): void {
   child.unref();
 }
 
-/** Where the box keeps its own copy of Steam's record of who is signed in. */
-async function loginUsersPath(sandbox: Sandbox): Promise<string | undefined> {
+/** The boxed copies of Steam's current identity and live connection state. */
+async function steamFiles(
+  sandbox: Sandbox,
+  signal?: AbortSignal,
+): Promise<SandboxSteamFiles | undefined> {
   const root = boxRootOf(
-    await fileRootPath(sandbox),
+    await fileRootPath(sandbox, signal),
     sandbox.box,
     process.env.USERNAME ?? '',
     process.env.SystemDrive ?? 'C:',
   );
+  const loginUsers = loginUsersPathOf(root, sandbox.steam);
+  const connectionLog = connectionLogPathOf(root, sandbox.steam);
+  const previousConnectionLog = previousConnectionLogPathOf(root, sandbox.steam);
 
-  return loginUsersPathOf(root, sandbox.steam);
+  return loginUsers === undefined || connectionLog === undefined || previousConnectionLog === undefined
+    ? undefined
+    : { loginUsers, connectionLogs: [previousConnectionLog, connectionLog] };
 }
 
 /** Where Sandboxie puts its boxes, which is nothing at all on an installation nobody has moved. */
-async function fileRootPath(sandbox: Sandbox): Promise<string> {
+async function fileRootPath(sandbox: Sandbox, signal?: AbortSignal): Promise<string> {
   try {
-    const { stdout } = await run(sandbox.ini, ['query', 'GlobalSettings', 'FileRootPath']);
+    const { stdout } = await run(
+      sandbox.ini,
+      ['query', 'GlobalSettings', 'FileRootPath'],
+      { signal },
+    );
 
     return stdout;
   } catch {
@@ -295,22 +438,41 @@ async function fileRootPath(sandbox: Sandbox): Promise<string> {
 }
 
 /**
- * When Steam last wrote down that this account is signed in, or nothing where it has not.
+ * Whether the boxed Steam marks the account it is meant to use as its most recent one.
  *
- * The when is what tells a sign-in from the memory of one: Steam rewrites this file every time it
- * signs in, so a file newer than the Steam that was just started is that Steam signing in, and one
- * older than it is what the box remembered from last time. Whether that is enough is
- * `signedInNowOf`'s to say; this only reads.
+ * This establishes identity only. The record can belong to a stopped or bootstrapping Steam, so
+ * `steamReady` combines it with the two processes and the live connection state.
  */
-async function signInWritten(users: string, account: string): Promise<number | undefined> {
+async function accountId(
+  users: string,
+  account: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
   try {
-    const written = await stat(users);
-
-    return signedInOf(await readFile(users, 'utf8'), account) ? written.mtimeMs : undefined;
+    return steamAccountIdOf(await readFile(users, { encoding: 'utf8', signal }), account);
   } catch {
     // A box that has never had a Steam in it has no such file, which is simply "not yet".
     return undefined;
   }
+}
+
+/** The rotated predecessor and live log, in chronological order. Either may be absent. */
+async function readConnectionLogs(
+  logs: readonly string[],
+  signal?: AbortSignal,
+): Promise<string> {
+  const parts = await Promise.all(
+    logs.map(async (log) => {
+      try {
+        return await readFile(log, { encoding: 'utf8', signal });
+      } catch {
+        signal?.throwIfAborted();
+        return '';
+      }
+    }),
+  );
+
+  return parts.join('\n');
 }
 
 function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {

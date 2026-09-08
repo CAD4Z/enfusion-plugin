@@ -32,6 +32,27 @@ const STEAM = 'steam.exe';
 /** Where Steam records who is signed in, counted from the folder Steam is installed in. */
 const LOGIN_USERS: readonly string[] = ['config', 'loginusers.vdf'];
 
+/** Where Steam records the live connection state of the client. */
+const CONNECTION_LOG: readonly string[] = ['logs', 'connection_log.txt'];
+
+/** The preceding part of the connection log, retained when Steam rotates the live file. */
+const PREVIOUS_CONNECTION_LOG: readonly string[] = ['logs', 'connection_log.previous.txt'];
+
+/** A successful completion, including the local-time timestamp Steam writes at the start. */
+const LOGGED_ON_COMPLETE = new RegExp(
+  String.raw`^\[(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\].*\[Logged On,[^\]\r\n]*\].*\[U:1:(\d+)\].*RecvMsgClientLogOnResponse\(\) : processing complete`,
+  'gm',
+);
+
+/** Lines after a completed logon that mean it no longer describes the current client state. */
+const NOT_CONNECTED: readonly string[] = [
+  'Client version:',
+  '[Logged Off,',
+  '[Logging On,',
+  '[Logging Off,',
+  'Log session ended',
+];
+
 /**
  * What Sandboxie calls the folder a box keeps its files in when nothing said otherwise. The
  * pattern is Sandboxie's own default for `FileRootPath`, and the `\??\` in front of it is the NT
@@ -136,10 +157,19 @@ export function gamePrefixOf(sandbox: Sandbox): string[] {
  * `-login` names the account rather than switching to it: a box that has signed in before signs in
  * again by itself, and a box that has not shows its login window with the name already in it.
  * `-silent` keeps it out of the way once it is up — what was asked for is a client, not a Steam
- * window in front of the game that is already playing.
+ * window in front of the game that is already playing. `-inhibitbootstrap` is deliberately the
+ * one undocumented switch here: a Steam sharing its installation with the unboxed Steam cannot
+ * replace those files while that instance is running. Letting it try leaves a mixed sandbox copy,
+ * followed by a checksum pass and rollback; the host installation is the one that updates them.
  */
 export function steamCommandOf(sandbox: Sandbox): string[] {
-  return [steamExecutableOf(sandbox), '-login', sandbox.account, '-silent'];
+  return [
+    steamExecutableOf(sandbox),
+    '-login',
+    sandbox.account,
+    '-silent',
+    '-inhibitbootstrap',
+  ];
 }
 
 /**
@@ -235,6 +265,24 @@ export function boxRootOf(
  * thing a launch has to wait for.
  */
 export function loginUsersPathOf(boxRoot: string, steam: string): string | undefined {
+  return steamFileInBoxOf(boxRoot, steam, ...LOGIN_USERS);
+}
+
+/** Where the boxed Steam appends its live connection state. */
+export function connectionLogPathOf(boxRoot: string, steam: string): string | undefined {
+  return steamFileInBoxOf(boxRoot, steam, ...CONNECTION_LOG);
+}
+
+/** Where Steam keeps the preceding segment when it rotates the boxed connection log. */
+export function previousConnectionLogPathOf(boxRoot: string, steam: string): string | undefined {
+  return steamFileInBoxOf(boxRoot, steam, ...PREVIOUS_CONNECTION_LOG);
+}
+
+function steamFileInBoxOf(
+  boxRoot: string,
+  steam: string,
+  ...file: readonly string[]
+): string | undefined {
   const drive = /^([A-Za-z]):[\\/]?(.*)$/.exec(steam);
   if (drive === null) {
     return undefined;
@@ -245,48 +293,80 @@ export function loginUsersPathOf(boxRoot: string, steam: string): string | undef
     'drive',
     (drive[1] ?? '').toUpperCase(),
     drive[2] ?? '',
-    ...LOGIN_USERS,
+    ...file,
   );
 }
 
-/**
- * Whether Steam's own record of who is signed in names the account.
- *
- * Steam writes this file when a sign-in succeeds and not before, which is what makes it the answer
- * to "has the developer finished typing the password" — a question nothing else here can ask. The
- * file is a Valve key-value tree; what is wanted out of it is one name, so it is looked for rather
- * than parsed.
- */
-export function signedInOf(vdf: string, account: string): boolean {
+/** The Steam3 account id belonging to a remembered account. */
+export function steamAccountIdOf(vdf: string, account: string): string | undefined {
   const wanted = account.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  return new RegExp(`"AccountName"\\s*"${wanted}"`, 'i').test(vdf);
-}
+  for (const user of vdf.matchAll(/^\s*"(\d+)"\s*\{([^{}]*)\}/gm)) {
+    const fields = user[2] ?? '';
+    if (new RegExp(`"AccountName"\\s*"${wanted}"`, 'i').test(fields)) {
+      const steamId = user[1];
+      if (steamId !== undefined) {
+        return (BigInt(steamId) & 0xffffffffn).toString();
+      }
+    }
+  }
 
-/**
- * How long a Steam that was started here is given to sign itself in before the record it left last
- * time is taken as the answer.
- *
- * Which is the hedge, and it is worth being plain about what it hedges. The record is rewritten on
- * every successful sign-in — that is what dates it, and what tells this sign-in from the memory of
- * the last one. If some build of Steam ever signs in without touching it, the alternative to a
- * grace period is a launch that waits the full five minutes every single time and then says the
- * account is not signed in while it plainly is. Long enough that a login window is still being
- * typed into when it passes, short enough that nobody sits through it.
- */
-export const SIGN_IN_GRACE = 45 * 1000;
+  return undefined;
+}
 
 /** A first sign-in includes a password and often Steam Guard, so it gets five full minutes. */
 export const SIGN_IN_PATIENCE = 5 * 60 * 1000;
 
 /**
- * Whether the account counts as signed in: named in what Steam wrote, and either written since the
- * Steam that is being waited for was started or old enough not to be worth doubting.
+ * Whether this Steam process, rather than a preceding one, completed a successful logon.
  *
- * `written` is when the record was last written, or nothing at all for a box that has never had a
- * Steam in it. `since` is when that Steam was started, and nothing to have started — a Steam that
- * was already up when this began — is a zero, which every record is newer than.
+ * Steam's log timestamps have one-second precision. The process start is therefore rounded down
+ * to the same precision before they are compared. Reading the rotated predecessor before the live
+ * file keeps a still-connected session recognisable after `connection_log.txt` is rotated.
  */
-export function signedInNowOf(written: number | undefined, since: number, now: number): boolean {
-  return written !== undefined && (written >= since || now - since >= SIGN_IN_GRACE);
+export function steamConnectedSinceOf(
+  log: string,
+  processStartedAt: number,
+  accountId: string,
+): boolean {
+  const connection = currentConnectionOf(log);
+  const processSecond = Math.floor(processStartedAt / 1000) * 1000;
+
+  return (
+    connection !== undefined && connection.at >= processSecond && connection.accountId === accountId
+  );
+}
+
+interface SteamConnection {
+  readonly accountId: string;
+  readonly at: number;
+  readonly offset: number;
+}
+
+function currentConnectionOf(log: string): SteamConnection | undefined {
+  let connection: SteamConnection | undefined;
+
+  for (const match of log.matchAll(LOGGED_ON_COMPLETE)) {
+    const at = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6]),
+    ).getTime();
+
+    const accountId = match[7];
+    if (!Number.isNaN(at) && match.index !== undefined && accountId !== undefined) {
+      connection = { accountId, at, offset: match.index };
+    }
+  }
+
+  if (connection === undefined) {
+    return undefined;
+  }
+
+  const disconnected = Math.max(...NOT_CONNECTED.map((marker) => log.lastIndexOf(marker)));
+
+  return connection.offset > disconnected ? connection : undefined;
 }

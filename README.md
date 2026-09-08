@@ -329,24 +329,38 @@ its own defaults — templates, recovery folders, the border); `NeverRemove=y` a
 added to those, and only at creation. That is the protection from deletion, and it is about the
 sign-in: what is inside the box is a signed-in Steam, and a box that gets removed is a password and
 a Steam Guard code on the next launch. Then: the Steam in the box is not up, and it is started
-(`Start.exe /box:steam2 steam.exe -login <account> -silent`), and the launch **waits for the
-sign-in** rather than asking for the button to be pressed again. The first time, the wait is as long
-as a human takes to type a password; after that Steam signs itself in within ten seconds or so. Once
-the account is in, the game starts.
+(`Start.exe /box:steam2 steam.exe -login <account> -silent -inhibitbootstrap`). The boxed and
+unboxed Steams share one installation, so the boxed one must not try to update files held by the
+unboxed one: the failed update otherwise falls into a full checksum pass and rollback. The launch
+then **waits for the final client and its sign-in** rather than asking for the button to be pressed
+again. The first time, the wait is as long as a human takes to type a password; after that Steam
+signs itself in within ten seconds or so. Only then does the game start.
 
 Three things here are not obvious and cost some debugging. First: "is there anything in the box" is
 the wrong question — `Start.exe /box:<box> /listpids` counts Sandboxie's own service processes,
 which live in a box after anything at all has run in it; so the list of pids is crossed with
 `tasklist` by program name. Second: the sign-in is visible from outside the box — Steam writes
-`config\loginusers.vdf`, the sandbox keeps it in its own copy of the disk (`<box>\drive\C\...`), and
-it is rewritten exactly on a successful sign-in; hence "signed in" means the file names the account
-and is newer than the moment the Steam was started — or simply names the account, where enough time
-has passed since that start not to doubt it. Third: `Start.exe` without `/wait` hands the program to
-Sandboxie's service and exits at once, so the game is started with `/wait` — otherwise the session
-reports the second client "gone" a second after it started. And even with `/wait`, `taskkill /T`
-does not reach the game: a boxed process is a child of the service rather than of `Start.exe`, so
-Stop additionally puts down the game's processes by their pids inside the box. The first client is
-not touched by that: it is the same executable, but not in a box.
+`config\loginusers.vdf`, and the sandbox keeps it in its own copy of the disk
+(`<box>\drive\C\...`). That file only remembers which accounts belong here; it does not mean
+that the current Steam is ready. What it is good for is the account's Steam3 id, taken from the
+SteamID it is filed under, because that id is what the connection log names. Readiness therefore
+needs three facts: the final client's `steamwebhelper.exe` is in the box, the latest connection
+state is `[Logged On, ...] [U:1:<id>] RecvMsgClientLogOnResponse() : processing complete`, and that
+`<id>` belongs to the requested account — a box that remembers two accounts and signed the other
+one in is not ready for this launch. The line's timestamp must not predate the current boxed
+`steam.exe` process, so a success left by the preceding process cannot release the game.
+Both `logs\connection_log.previous.txt` and `connection_log.txt` are read because Steam rotates the
+live log while it is running. Third: `Start.exe` without `/wait` hands the program to Sandboxie's
+service and exits at once, so the game is started with `/wait` — otherwise the session reports the
+second client "gone" a second after it started. And even with `/wait`, `taskkill /T` does not reach
+the game: a boxed process is a child of the service rather than of `Start.exe`, so Stop
+additionally puts down the game's processes by their pids inside the box. The first client is not
+touched by that: it is the same executable, but not in a box.
+
+`-inhibitbootstrap` prevents the failed updater on subsequent starts; it cannot remove files an
+older failed attempt has already copied into the box. If such a box still cannot reach "Steam is
+ready", close its Steam and empty/recreate `steam2` once in Sandboxie. That recovery deliberately
+is not automatic because it also removes the remembered login and requires Steam Guard again.
 
 With no account set, the second client is just one more client: fine for offline, and unable to join
 a server the first one is already on.
