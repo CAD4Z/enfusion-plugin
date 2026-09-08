@@ -137,12 +137,14 @@ function stale(): HTMLElement {
  *
  * The two lists sit where the heading was rather than beside the buttons. They are the heading:
  * what this row is about is which target and which build, and a Start with those written over it
- * needs no word saying that it runs and builds.
+ * needs no word saying that it runs and builds. They stand in the buttons' own columns — the
+ * target over Start and Add client, the build over Build — so that the two rows read as one block
+ * at every width the panel is dragged to.
  */
 function toolsOf(tools: ToolsView): HTMLElement {
   const primary = div('tool-group');
   const primaryActions = div('tool-row primary-actions');
-  const choices = div('tool-row choices');
+  const choices = div('choices');
   choices.append(
     picker('target', tools.target, (id) => ({ type: 'selectTarget', id })),
     picker('game-build', tools.gameBuild, (build) => ({ type: 'selectGameBuild', build })),

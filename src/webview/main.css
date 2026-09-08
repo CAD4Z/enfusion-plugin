@@ -53,17 +53,25 @@
 }
 
 /*
- * The two lists say what the buttons under them are about, so they sit on the line the heading
- * used to have and are read left to right: which target, then which build of it. The target takes
- * whatever is left over — a map's name is as long as it is — and the build takes what two words
- * need and no more, because its two answers are known and short.
+ * The two lists say what the buttons under them are about, so they stand in the buttons' own
+ * columns: the target over Start and Add client, the build over Build. Three columns of the same
+ * gap, one of them spanned — rather than a width of its own, which would line up with the row
+ * under it at one panel width and at no other.
+ *
+ * The columns come out the same size as the flex row's by construction: three tracks of `1fr` with
+ * a 4px gap and three items of `flex: 1 1 0` with a 4px gap both leave a third of what is left
+ * after the gaps. Spanning two takes the gap between them with it, which is the 4px that makes the
+ * list end exactly where Add client does.
  */
-.holds.target {
-  flex: 1 1 auto;
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
 }
 
-.holds.game-build {
-  flex: 0 0 96px;
+.holds.target {
+  grid-column: span 2;
 }
 
 .choice {
