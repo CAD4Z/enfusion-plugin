@@ -329,7 +329,7 @@ function toolsOf(drive: WorkDrive, found: Discovery, launching: Launching): Tool
 }
 
 /**
- * The targets of the `.enf`, said the way the palette's own list says them.
+ * The targets of the `.enf`, by their names.
  *
  * A workspace of several targets that has not been asked yet gets a row of its own at the top,
  * standing for exactly that. Without it the list would show the first target while Start would
@@ -341,25 +341,15 @@ function targetPickerOf(
   nothing: string | undefined,
 ): PickerView {
   const unchosen: readonly ChoiceView[] =
-    chosen.target === undefined && targets.length > 0
-      ? [{ id: '', label: 'Select target', detail: 'Nothing is chosen yet, so Start asks' }]
-      : [];
+    chosen.target === undefined && targets.length > 0 ? [{ id: '', label: 'Select target' }] : [];
 
   return {
     options: [
       ...unchosen,
-      ...targets.map(
-        (target): ChoiceView => ({
-          id: target.id,
-          label: target.id,
-          detail:
-            `${target.mod}${target.map === undefined ? '' : ` · ${target.map}`} · ` +
-            describeRun(target.run),
-        }),
-      ),
+      ...targets.map((target): ChoiceView => ({ id: target.id, label: target.id })),
     ],
     chosen: chosen.target?.id ?? '',
-    title: 'Which target the next launch puts up',
+    title: sayTarget(chosen.target),
     refusal: nothing,
   };
 }
@@ -367,13 +357,19 @@ function targetPickerOf(
 /** And the two builds, which are the same two on every workspace. */
 function buildPickerOf(chosen: GameBuild): PickerView {
   return {
-    options: GAME_BUILDS.map(
-      (build): ChoiceView => ({ id: build, label: build, detail: describeBuild(build) }),
-    ),
+    options: GAME_BUILDS.map((build): ChoiceView => ({ id: build, label: build })),
     chosen,
-    title: 'Which build of the game the next launch starts',
+    title: `Which build of the game the next launch starts — ${describeBuild(chosen)}`,
     refusal: undefined,
   };
+}
+
+/** What the chosen target is, for the one place it is still worth spelling out: the hover. */
+function sayTarget(target: LaunchTarget | undefined): string {
+  return target === undefined
+    ? 'Which target the next launch puts up'
+    : `Which target the next launch puts up — ${target.mod}` +
+        `${target.map === undefined ? '' : `, ${target.map}`}, ${describeRun(target.run)}`;
 }
 
 /** What Start would do, in one line: the target, and the build it comes up as. */

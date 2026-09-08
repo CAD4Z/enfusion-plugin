@@ -198,7 +198,6 @@ function picker(
     ...view.options.map((option) => {
       const item = document.createElement('vscode-option');
       item.value = option.id;
-      item.description = option.detail;
       item.textContent = option.label;
       item.selected = option.id === view.chosen;
       return item;

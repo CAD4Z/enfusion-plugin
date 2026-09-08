@@ -29,13 +29,17 @@ export interface ActionView {
   readonly refusal: string | undefined;
 }
 
-/** One thing a list offers: what it is called, and what picking it would launch. */
+/**
+ * One thing a list offers: what it is called, and nothing else.
+ *
+ * A name and no second line under it. A target's name and the word `Debug` are what a developer
+ * reads to know which launch this is, and what a target runs or what a build means is on the
+ * button underneath, where it is read once rather than four times over.
+ */
 export interface ChoiceView {
   /** What is sent back when it is picked, which is one the extension gave in the first place. */
   readonly id: string;
   readonly label: string;
-  /** The line under it: what this one is, said the way the palette's own list says it. */
-  readonly detail: string;
 }
 
 /** A closed set of answers, and the one that stands. */
