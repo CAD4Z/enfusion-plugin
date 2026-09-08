@@ -271,6 +271,18 @@ of libraries, the folder beside DayZ is what is settled for, and `enfusion.dayzS
 outright on a machine where neither answer is right. A Release launch of a client-only target never
 asks about it: the refusal is only ever about a program that launch would actually start.
 
+BattlEye is left to the game. The retail client is started directly, the way DayZ's own launcher
+starts it with the BattlEye tick off, and neither side is given anything about it. There is nothing
+else to give: the server has no switch for it, and three ways round it were measured and all three
+failed. `-BEpath` names where BattlEye lives rather than whether it runs, and both processes deploy
+their own copies into whatever folder it names; a file where that folder would go hangs the server
+six seconds into its start; and `battlEye = 0` in `serverDZ.cfg` changes nothing, because there is
+no such configuration key — the only `battleye` the server executable knows is the tag it reports
+to the server browser, beside `privHive` and `no3rd`. Both sides deploy and update their own
+BattlEye themselves, and a client whose BattlEye has just updated itself asks to be started again
+before it will let one play: if a Release client is thrown off a moment after joining for
+`BattlEye: Game Restart Required`, the second launch is the one that goes through.
+
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
 connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
