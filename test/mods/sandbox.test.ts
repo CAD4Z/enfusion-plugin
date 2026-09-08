@@ -22,7 +22,7 @@ import {
 } from '../../src/mods/sandbox';
 
 /** The Steam3 account id of the account the fixtures below are signed in as. */
-const ACCOUNT_ID = '1547129925';
+const ACCOUNT_ID = '123';
 
 const SECOND: SecondClient = {
   account: 'estrv05733',
@@ -159,11 +159,10 @@ test('the box holds Steam’s connection log beside the rest of its installation
 test('the account id in what Steam wrote is what a connection is read against', () => {
   const vdf = `"users"
 {
-\t"76561199507395653"
+\t"76561197960265851"
 \t{
 \t\t"AccountName"\t\t"estrv05733"
 \t\t"AutoLogin"\t\t"1"
-\t\t"MostRecent"\t\t"1"
 \t}
 }`;
 
@@ -179,12 +178,10 @@ test('every account the box remembers keeps an id of its own', () => {
 \t"76561197960265729"
 \t{
 \t\t"AccountName" "first"
-\t\t"MostRecent" "1"
 \t}
 \t"76561197960265730"
 \t{
 \t\t"AccountName" "second"
-\t\t"MostRecent" "0"
 \t}
 }`;
 
@@ -196,7 +193,7 @@ test('Steam is connected only after its latest session finishes logging on', () 
   const started = new Date(2026, 8, 8, 0, 0, 0).getTime();
   const oldSession = loggedOn('00:01:00');
   const denied =
-    '[2026-09-08 00:02:00] [Logging On, layered fields] [U:1:1547129925] ' +
+    '[2026-09-08 00:02:00] [Logging On, layered fields] [U:1:123] ' +
     'RecvMsgClientLogOnResponse() : processing complete\n';
   const newSession = '[2026-09-08 00:06:28] Client version: 123\n';
   const connected = loggedOn('00:07:00');
@@ -225,6 +222,22 @@ test('a logon another account completed is not this account being connected', ()
 
   assert.equal(steamConnectedSinceOf(loggedOn('00:01:00', '2'), started, ACCOUNT_ID), false);
   assert.equal(steamConnectedSinceOf(loggedOn('00:01:00', '2'), started, '2'), true);
+});
+
+test('disconnecting invalidates a logon before Steam updates its state prefix', () => {
+  const started = new Date(2026, 8, 8, 0, 0, 0).getTime();
+
+  for (const disconnect of [
+    'RecvMsgClientLoggedOff(Service Unavailable)',
+    'AsyncDisconnect()',
+    'ConnectionDisconnected()',
+    'LogOff()',
+  ]) {
+    assert.equal(
+      steamConnectedSinceOf(`${loggedOn('00:01:00')}${disconnect}\n`, started, ACCOUNT_ID),
+      false,
+    );
+  }
 });
 
 test('a Steam process needs a successful connection no older than that process', () => {

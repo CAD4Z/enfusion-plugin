@@ -47,6 +47,10 @@ const LOGGED_ON_COMPLETE = new RegExp(
 /** Lines after a completed logon that mean it no longer describes the current client state. */
 const NOT_CONNECTED: readonly string[] = [
   'Client version:',
+  'RecvMsgClientLoggedOff(',
+  'AsyncDisconnect(',
+  'ConnectionDisconnected(',
+  'LogOff()',
   '[Logged Off,',
   '[Logging On,',
   '[Logging Off,',
@@ -297,7 +301,12 @@ function steamFileInBoxOf(
   );
 }
 
-/** The Steam3 account id belonging to a remembered account. */
+/**
+ * The Steam3 account id belonging to a remembered account.
+ *
+ * `loginusers.vdf` files each account under its SteamID64. The low 32 bits are the account id in
+ * the `[U:1:<id>]` Steam3 form used by the live connection log.
+ */
 export function steamAccountIdOf(vdf: string, account: string): string | undefined {
   const wanted = account.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

@@ -231,8 +231,8 @@ async function waitForSteam(
  * The four independent facts that make the boxed Steam usable by a game.
  *
  * `steam.exe` alone is also the bootstrap updater. `steamwebhelper.exe` appears only with the
- * final client, but before logon completes. `loginusers.vdf` identifies its most recent account,
- * while the connection log says that this client is live. None of the four is sufficient alone.
+ * final client, but before logon completes. `loginusers.vdf` maps the requested name to an account
+ * id, while the connection log says that same account is live. None of the four is sufficient alone.
  */
 async function steamReady(
   sandbox: Sandbox,
@@ -438,10 +438,10 @@ async function fileRootPath(sandbox: Sandbox, signal?: AbortSignal): Promise<str
 }
 
 /**
- * Whether the boxed Steam marks the account it is meant to use as its most recent one.
+ * The id Steam assigned to the account this box is meant to use.
  *
- * This establishes identity only. The record can belong to a stopped or bootstrapping Steam, so
- * `steamReady` combines it with the two processes and the live connection state.
+ * This establishes identity only. `steamReady` also requires that exact id in the successful live
+ * connection state, so another remembered account cannot answer for the requested one.
  */
 async function accountId(
   users: string,

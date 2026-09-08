@@ -4,7 +4,7 @@ import type { Sandbox } from '../../src/mods/sandbox';
 import { openSandbox, type SandboxRuntime } from '../../src/platform/sandbox';
 
 /** The Steam3 account id the boxed Steam signs `second` in as. */
-const ACCOUNT_ID = '1547129925';
+const ACCOUNT_ID = '123';
 
 const SANDBOX: Sandbox = {
   box: 'steam2',
@@ -99,7 +99,16 @@ test('an already running Steam cannot reuse a successful logon from its previous
   const opening = openSandbox(SANDBOX, () => undefined, cancelled.signal, runtime);
 
   try {
-    await runtime.waitForSleep(1);
+    assert.equal(
+      await Promise.race([
+        opening.then(
+          () => 'settled' as const,
+          () => 'settled' as const,
+        ),
+        runtime.waitForSleep(1).then(() => 'waiting' as const),
+      ]),
+      'waiting',
+    );
     const stillWaiting = runtime.waitForSleep(2).then(() => 'waiting' as const);
     runtime.advance(2 * 1000);
 
