@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  extension:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +21,95 @@ jobs:
           cache: npm
 
       - run: npm ci
-
       - run: npm run check-types
-
       - run: npm run lint
-
       - run: npm test
 
-      # The .vsix of every green build, so a branch can be installed before it is released.
-      - name: Package
-        run: npx vsce package --out enfusion-plugin.vsix
+  native-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure C17 core with Clang sanitizers and libFuzzer
+        run: >-
+          cmake -S native -B native/.build-sanitize
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DEDDS_BUILD_FUZZER=ON
+
+      - run: cmake --build native/.build-sanitize --parallel
+      - run: ctest --test-dir native/.build-sanitize --output-on-failure
+      - name: Build owned fuzz seed corpus
+        run: |
+          mkdir -p native/.build-sanitize/fuzz-corpus
+          native/.build-sanitize/edds-fixture \
+            native/.build-sanitize/fuzz-corpus/copy \
+            native/.build-sanitize/fuzz-corpus/lz4 \
+            native/.build-sanitize/fuzz-corpus/dxt1 \
+            native/.build-sanitize/fuzz-corpus/odd-fourcc \
+            native/.build-sanitize/fuzz-corpus/integer-overflow
+      - name: Fuzz parser and selected-mip decoder smoke
+        run: native/.build-sanitize/edds-fuzz -runs=2000 native/.build-sanitize/fuzz-corpus
+
+  windows-x64-package:
+    needs: [extension, native-sanitizers]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Configure native converter
+        run: cmake -S native -B native/.build -A x64 -DCMAKE_INSTALL_PREFIX=dist/native/win32-x64
+
+      - name: Build native converter
+        run: cmake --build native/.build --config Release --parallel
+
+      - name: Test native core and black-box CLI
+        run: ctest --test-dir native/.build -C Release --output-on-failure
+
+      - name: Stage the tested executable and notices
+        run: cmake --install native/.build --config Release
+
+      - name: Verify x64 image and static MSVC runtime
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $tools = Get-ChildItem -LiteralPath "$installation\VC\Tools\MSVC" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          $dumpbin = Join-Path $tools.FullName 'bin\Hostx64\x64\dumpbin.exe'
+          $binary = 'dist\native\win32-x64\edds-convert.exe'
+          $headers = & $dumpbin /headers $binary | Out-String
+          if ($headers -notmatch '8664 machine \(x64\)') { throw 'converter is not a Windows x64 image' }
+          $dependencies = & $dumpbin /dependents $binary | Out-String
+          if ($dependencies -match '(?i)(VCRUNTIME|MSVCP|ucrtbase)') { throw "dynamic MSVC runtime dependency found: $dependencies" }
+
+      - run: npm run package
+
+      - name: Package allowlist and binary-identity smoke
+        shell: pwsh
+        run: ./scripts/package-smoke.ps1 -Vsix enfusion-plugin-win32-x64.vsix
+
+      - name: Clean-install and activation smoke
+        run: npm run test:installed
 
       - uses: actions/upload-artifact@v4
         with:
-          name: enfusion-plugin-vsix
-          path: enfusion-plugin.vsix
+          name: enfusion-plugin-win32-x64-vsix
+          path: enfusion-plugin-win32-x64.vsix
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edds-converter-win32-x64
+          path: |
+            dist/native/win32-x64/edds-convert.exe
+            dist/native/win32-x64/NOTICE.txt
+            dist/native/win32-x64/THIRD-PARTY.md
           if-no-files-found: error

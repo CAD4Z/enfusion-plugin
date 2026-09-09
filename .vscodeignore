@@ -4,6 +4,8 @@
 .gitignore
 .vscode-test/**
 src/**
+native/**
+scripts/**
 test/**
 out/**
 node_modules/**

@@ -10,6 +10,7 @@ import { EnfEditor } from './view/enfEditor';
 import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
+import { registerTextureEditor } from './view/textureEditor';
 import { registerWorkDriveCommands } from './view/workDrive';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -65,6 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerInitCommands(log, () => {
       panel.refresh();
     }),
+    registerTextureEditor(context, log),
   );
 }
 

@@ -5,6 +5,7 @@ const esbuild = require('esbuild');
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 const tests = process.argv.includes('--tests');
+const smoke = process.argv.includes('--smoke');
 
 /** One line per diagnostic, in the `file:line:column: severity: message` shape the task matcher reads. */
 function report(messages, severity) {
@@ -71,7 +72,11 @@ const extension = {
  */
 const webview = {
   ...shared,
-  entryPoints: { webview: 'src/webview/main.ts', form: 'src/webview/form.ts' },
+  entryPoints: {
+    webview: 'src/webview/main.ts',
+    form: 'src/webview/form.ts',
+    texture: 'src/webview/texture.ts',
+  },
   outdir: 'dist',
   format: 'esm',
   platform: 'browser',
@@ -96,6 +101,22 @@ function testBuild() {
   };
 }
 
+function smokeBuild() {
+  return {
+    ...shared,
+    entryPoints: ['test/smoke/activation.smoke.ts'],
+    outfile: 'out/smoke/activation.js',
+    format: 'cjs',
+    platform: 'node',
+    target: 'node20',
+    ...NODE_MODULE_FIELDS,
+    external: ['vscode'],
+    minify: false,
+    plugins: [],
+    logLevel: 'warning',
+  };
+}
+
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const full = path.posix.join(directory, entry.name);
@@ -104,6 +125,10 @@ function walk(directory) {
 }
 
 async function main() {
+  if (smoke) {
+    await esbuild.build(smokeBuild());
+    return;
+  }
   if (tests) {
     // Wiped first: a test file that was deleted would otherwise keep running from the last build.
     fs.rmSync('out/test', { recursive: true, force: true });

@@ -1,0 +1,14 @@
+{
+  "name": "enfusion-installed-smoke-driver",
+  "displayName": "Enfusion Installed Smoke Driver",
+  "version": "0.0.0",
+  "publisher": "enfusion-tests",
+  "private": true,
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "main": "./noop.js",
+  "activationEvents": [
+    "*"
+  ]
+}

@@ -20,7 +20,7 @@ const HOST_FREE = ['src/mods/**', 'src/webview/**', 'test/mods/**', 'test/webvie
 const HOST_MODULES = ['**/platform/*', '**/view/*'];
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'out/**', 'node_modules/**', '**/*.d.ts'] },
+  { ignores: ['dist/**', 'out/**', 'node_modules/**', '.vscode-test/**', '**/*.d.ts'] },
 
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
@@ -30,7 +30,14 @@ export default tseslint.config(
     name: 'enfusion/parser',
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['esbuild.js', 'eslint.config.mjs'] },
+        projectService: {
+          allowDefaultProject: [
+            'esbuild.js',
+            'eslint.config.mjs',
+            'scripts/*.mjs',
+            'test/smoke/driver/*.js',
+          ],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -87,7 +94,7 @@ export default tseslint.config(
 
   {
     name: 'enfusion/build-script',
-    files: ['esbuild.js', 'eslint.config.mjs'],
+    files: ['esbuild.js', 'eslint.config.mjs', 'test/smoke/driver/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       globals: {
@@ -96,6 +103,7 @@ export default tseslint.config(
         process: 'readonly',
         console: 'readonly',
         __dirname: 'readonly',
+        exports: 'writable',
       },
     },
     rules: {

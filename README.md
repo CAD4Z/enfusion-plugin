@@ -3,6 +3,26 @@
 A VS Code extension for Enfusion mods: what the Workbench plugins do today, in the editor the code
 is written in anyway.
 
+## EDDS preview
+
+On Windows x64, **Enfusion: Open EDDS Preview** opens any local `.edds` as a read-only editor; the
+same command is available from the Explorer context menu. It does not require an Enfusion
+workspace, a source image, sibling metadata or DayZ Tools. The editor reports the DDS and `ENF1`
+container properties and every mip level it actually finds. Modern 32-bit BGRX/BGRA textures can
+also be viewed from their real `COPY` or `LZ4` payload as RGBA or as individual R, G, B and A
+channels, with an alpha checkerboard, mip selection, zoom and pan.
+
+Formats whose pixel decoder is not available are still inspected, but are labelled
+`unsupported-format` and are never represented by source pixels or a plausible placeholder.
+Standalone preview is always read-only: Reconvert is unavailable because no validated metadata →
+source relation has been established, and a same-stem image beside the EDDS is deliberately never
+treated as its source.
+
+The platform-specific VSIX carries its own C17 `edds-convert.exe`. The extension only starts that
+binary from its installation directory, passes arguments without a shell and checks protocol
+compatibility before asking it to inspect a file. The executable has no DayZ Tools, language
+runtime or dynamically loaded codec dependency.
+
 The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists
 saying what the next launch is — which **target**, and whether it is a **Debug** or a **Release**
 build of the game — and under them a row of buttons for everything at once: **Start** puts the game
@@ -413,6 +433,9 @@ work drive. One broken `config.cpp` in any third-party mod on `P:` brings down a
 | `npm run lint` | ESLint with type checking |
 | `npm test` | builds `*.test.ts` through esbuild and runs `node --test`, with no extension host |
 | `npm run vsix` | build the `.vsix` |
+| `cmake -S native -B native/.build -A x64` | configure the C17 EDDS converter with MSVC |
+| `cmake --build native/.build --config Release` | build the native converter with the static CRT |
+| `ctest --test-dir native/.build -C Release` | run native core and black-box CLI tests |
 
 `F5` puts up an Extension Development Host and opens the folder one level above this one in it, so
 that the panel has some mods to show straight away.
@@ -432,6 +455,8 @@ test/
   webview/            browser-side logic that needs no DOM or extension host
   schemas.test.ts     the contract shared by the two JSON schemas
 schemas/              the JSON schemas of `mod.enf` and `workspace.enf`, registered through jsonValidation
+native/               dependency-free C17 EDDS parser/decoder, CLI, synthetic tests and fuzz target
+dist/native/           staged platform executable and notices; produced by CI, not kept in git
 ```
 
 The "the domain knows nothing of the host" boundary is held by `no-restricted-imports` in

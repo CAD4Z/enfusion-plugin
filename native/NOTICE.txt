@@ -1,0 +1,4 @@
+EDDS Converter
+Copyright (c) 2026 Enfusion extension contributors
+
+This program is distributed under the MIT License in the repository root.
