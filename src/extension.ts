@@ -5,16 +5,19 @@
 import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
+import { EddsConverter } from './platform/eddsConverter';
 import { registerBuildCommands } from './view/build';
 import { EnfEditor } from './view/enfEditor';
 import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
 import { registerTextureEditor } from './view/textureEditor';
+import { registerTextureConversionEditor } from './view/textureConversionEditor';
 import { registerWorkDriveCommands } from './view/workDrive';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
+  const converter = new EddsConverter(context.extensionPath);
 
   // Which version is actually running, said once at the top of the log. Installing over a running
   // extension leaves the old code in the host until the window is reloaded, and every symptom of
@@ -66,7 +69,8 @@ export function activate(context: vscode.ExtensionContext): void {
     registerInitCommands(log, () => {
       panel.refresh();
     }),
-    registerTextureEditor(context, log),
+    registerTextureEditor(context, log, converter),
+    registerTextureConversionEditor(context, log, converter),
   );
 }
 

@@ -48,8 +48,18 @@ jobs:
             native/.build-sanitize/fuzz-corpus/lz4 \
             native/.build-sanitize/fuzz-corpus/dxt1 \
             native/.build-sanitize/fuzz-corpus/odd-fourcc \
-            native/.build-sanitize/fuzz-corpus/integer-overflow
-      - name: Fuzz parser and selected-mip decoder smoke
+            native/.build-sanitize/fuzz-corpus/integer-overflow \
+            native/.build-sanitize/fuzz-corpus/source.png \
+            native/.build-sanitize/fuzz-corpus/source.tga
+          cp native/.build-sanitize/black-box-png-result.edds.meta \
+            native/.build-sanitize/fuzz-corpus/metadata
+          printf '%s' '{"protocolVersion":1,"kind":"batch","jobCount":100}' \
+            > native/.build-sanitize/fuzz-corpus/batch-header
+          printf '%s' '{"protocolVersion":2,"kind":"batch","jobCount":1}' \
+            > native/.build-sanitize/fuzz-corpus/batch-incompatible
+          printf '%s' '{"protocolVersion":1,"kind":"surprise"}' \
+            > native/.build-sanitize/fuzz-corpus/batch-unknown
+      - name: Fuzz EDDS, images, metadata, and batch NDJSON smoke
         run: native/.build-sanitize/edds-fuzz -runs=2000 native/.build-sanitize/fuzz-corpus
 
   windows-x64-package:

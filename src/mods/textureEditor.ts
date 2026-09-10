@@ -16,7 +16,9 @@ export const RECONVERT_REFUSAL =
 
 interface ReadOnlyTexture {
   readonly readOnly: true;
-  readonly reconvert: { readonly kind: 'refused'; readonly reason: string };
+  readonly reconvert:
+    | { readonly kind: 'refused'; readonly reason: string; readonly source?: undefined }
+    | { readonly kind: 'available'; readonly source: string; readonly reason?: undefined };
 }
 
 export interface LoadingTexture extends ReadOnlyTexture {
@@ -54,7 +56,9 @@ export type TextureEditorEvent =
   | { readonly kind: 'select-channel'; readonly channel: TextureChannel }
   | { readonly kind: 'select-mip'; readonly mip: number }
   | { readonly kind: 'previewed'; readonly request: number; readonly preview: EddsPreview }
-  | { readonly kind: 'preview-failed'; readonly request: number; readonly reason: string };
+  | { readonly kind: 'preview-failed'; readonly request: number; readonly reason: string }
+  | { readonly kind: 'reconversion-available'; readonly source: string }
+  | { readonly kind: 'reconversion-refused'; readonly reason: string };
 
 export type TextureEditorEffect =
   | { readonly kind: 'inspect' }
@@ -99,6 +103,16 @@ export function updateTexture(
       return previewed(state, event.request, event.preview);
     case 'preview-failed':
       return previewFailed(state, event.request, event.reason);
+    case 'reconversion-available':
+      return {
+        state: { ...state, reconvert: { kind: 'available', source: event.source } },
+        effects: [],
+      };
+    case 'reconversion-refused':
+      return {
+        state: { ...state, reconvert: { kind: 'refused', reason: event.reason } },
+        effects: [],
+      };
   }
 }
 

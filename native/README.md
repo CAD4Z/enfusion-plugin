@@ -23,11 +23,24 @@ integer boundary case, as an owned seed corpus and passes the corpus directory t
 ```text
 edds-convert protocol --machine
 edds-convert inspect --machine --protocol 1 --input PATH
+edds-convert inspect --machine --protocol 1 --input PATH --metadata PATH.edds.meta
 edds-convert preview --machine --protocol 1 --mip N --input PATH
+edds-convert batch --machine --protocol 1 < jobs.ndjson
+edds-convert convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
+  --target-format enfusion-dds --format-compress fastest --compress-threshold 80 \
+  --conversion none --conversion-quality 1 --swizzling none --generate-mips true \
+  --mipmap-function filter --mipmap-filter box --tiled-texture true
 ```
 
-Machine output is one protocol-versioned JSON value on stdout. Diagnostics are also written for a
-human on stderr. Exit categories are stable: `0` success, `2` invalid invocation, `3` invalid
+Machine output is protocol-versioned JSON on stdout. Batch stdin and stdout are NDJSON: one header,
+1–256 complete job values, and one end record are validated before encoding starts; stdout carries
+start, progress, diagnostic, result, and completion events. The bounded native implementation uses
+one worker, so decoded images cannot accumulate in an unbounded queue and a 100-item batch is
+supported without independent codec thread pools. The extension passes a private cancellation-file
+control to the process; the codec polls it at its existing cancellation points, then the extension
+force-kills only after a grace period and removes any matching sibling transaction temps.
+Diagnostics are also written for a human on
+stderr. Exit categories are stable: `0` success, `2` invalid invocation, `3` invalid
 input, `4` unsupported preview format, `5` cancellation and `6` internal failure.
 
 ## Supported slice and hard limits
@@ -42,3 +55,16 @@ Inputs are bounded to 1 GiB, dimensions to 32768 on either axis, mip levels to 3
 mips to 64 MiB, LZ4 streams to 1024 blocks and each stored LZ4 block to 1 MiB. Every offset and size
 is checked before reads or allocation; trailing bytes, malformed final-block markers and decoded
 size mismatches are invalid input.
+
+Conversion accepts non-interlaced 8-bit RGB/RGBA PNG and uncompressed true-color 24/32-bit TGA.
+It writes BGRX/BGRA EnfusionDDS with a floor-halved NPOT Box mip chain. `Copy` always uses `COPY`;
+`Fastest`, `Medium` and `Best` select lossless `COPY` or independent-block `LZ4` per mip using the
+declared `CompressTreshold` percentage (equality selects LZ4). Unsupported known profile values are
+refused rather than substituted.
+
+Registration is explicit: supplying `--metadata`, `--resource-name`, `--source-file` and `--guid`
+together publishes a canonical EDDS/metadata pair; omitting all four publishes only EDDS and
+refuses an existing sibling metadata file. The optional `--expect-*-revision size:mtime` (or
+`missing`) triplet lets a caller bind the publish step to the filesystem snapshot it presented.
+Both artifacts are built and flushed in sibling temporary files, then replaced with rollback.
+`EDDS_CONVERT_FAIL` is reserved for the black-box transaction tests.

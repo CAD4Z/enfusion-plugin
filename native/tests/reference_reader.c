@@ -210,9 +210,11 @@ int main(int argc, char **argv) {
     bytes copy = { NULL, 0 };
     bytes lz4 = { NULL, 0 };
     bytes decoded = { NULL, 0 };
+    bytes png = { NULL, 0 };
+    bytes tga = { NULL, 0 };
     int ok;
-    if (argc != 3) {
-        fputs("usage: edds-reference-reader COPY_PATH LZ4_PATH\n", stderr);
+    if (argc != 3 && argc != 5) {
+        fputs("usage: edds-reference-reader COPY_PATH LZ4_PATH [PNG_RESULT TGA_RESULT]\n", stderr);
         return 2;
     }
     if (!load(argv[1], &copy) || !load(argv[2], &lz4)) {
@@ -230,8 +232,41 @@ int main(int argc, char **argv) {
         decoded.size == sizeof lz4_expected &&
         memcmp(decoded.data, lz4_expected, sizeof lz4_expected) == 0;
     free(decoded.data);
+    decoded.data = NULL;
+    decoded.size = 0;
+    if (argc == 5) {
+        static const uint8_t png_level_zero[] = {
+            30, 20, 10, 40, 70, 60, 50, 80, 110, 100, 90, 120,
+            130, 120, 110, 140, 170, 160, 150, 180, 210, 200, 190, 220
+        };
+        static const uint8_t png_level_one[] = { 100, 90, 80, 110 };
+        static const uint8_t tga_level_zero[] = {
+            30, 20, 10, 255, 60, 50, 40, 255, 90, 80, 70, 255,
+            120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
+        };
+        ok = ok && load(argv[3], &png) && load(argv[4], &tga) &&
+            u32le(png.data + 80) == 0x41u && u32le(tga.data + 80) == 0x40u &&
+            selected_mip(&png, 0, 3, 2, 2, "COPY", &decoded) &&
+            decoded.size == sizeof png_level_zero &&
+            memcmp(decoded.data, png_level_zero, sizeof png_level_zero) == 0;
+        free(decoded.data);
+        decoded.data = NULL;
+        decoded.size = 0;
+        ok = ok && selected_mip(&png, 1, 3, 2, 2, "COPY", &decoded) &&
+            decoded.size == sizeof png_level_one &&
+            memcmp(decoded.data, png_level_one, sizeof png_level_one) == 0;
+        free(decoded.data);
+        decoded.data = NULL;
+        decoded.size = 0;
+        ok = ok && selected_mip(&tga, 0, 3, 2, 1, "COPY", &decoded) &&
+            decoded.size == sizeof tga_level_zero &&
+            memcmp(decoded.data, tga_level_zero, sizeof tga_level_zero) == 0;
+        free(decoded.data);
+    }
     free(copy.data);
     free(lz4.data);
+    free(png.data);
+    free(tga.data);
     if (!ok) {
         fputs("independent EDDS reference reader disagreed with the fixture\n", stderr);
     }

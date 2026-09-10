@@ -42,6 +42,7 @@ function render(next: TextureEditorState): void {
     facts([
       ['Dimensions', `${next.inspection.width} × ${next.inspection.height}`],
       ['Pixel format', next.inspection.pixelFormat],
+      ['Channels', next.inspection.channels],
       ['Mip levels', String(next.inspection.mips.length)],
       ['Access', 'Read-only'],
     ]),
@@ -49,7 +50,7 @@ function render(next: TextureEditorState): void {
     facts(ddsFacts(next.inspection)),
     heading('ENF1 mip table'),
     mipTable(next.inspection),
-    refusal(next.reconvert.reason),
+    reconversion(next.reconvert),
   );
 
   root.replaceChildren(content, details);
@@ -254,14 +255,20 @@ function mipTable(inspection: EddsInspection): HTMLElement {
   return table;
 }
 
-function refusal(reason: string): HTMLElement {
+function reconversion(reconvert: Extract<TextureEditorState, { kind: 'inspect-only' }>['reconvert']): HTMLElement {
   const block = element('section', 'refusal');
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = 'Reconvert';
-  button.disabled = true;
-  button.title = reason;
-  block.append(button, paragraph(reason));
+  button.disabled = reconvert.kind !== 'available';
+  button.title = reconvert.reason ?? 'Open the validated source and preserved texture profile.';
+  button.addEventListener('click', () => host.postMessage({ type: 'reconvert' }));
+  block.append(
+    button,
+    paragraph(
+      reconvert.reason ?? 'This EDDS has a validated metadata relationship to its source image.',
+    ),
+  );
   return block;
 }
 

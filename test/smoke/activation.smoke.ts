@@ -1,7 +1,8 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { deflateSync } from 'node:zlib';
 import * as vscode from 'vscode';
 
 const executeFile = promisify(execFile);
@@ -19,21 +20,44 @@ export async function run(): Promise<void> {
   await extension.activate();
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes('enfusion.edds.openPreview'), 'the EDDS preview command is not registered');
+  assert.ok(commands.includes('enfusion.texture.convert'), 'the texture conversion command is not registered');
 
   const workspace = vscode.workspace.workspaceFolders?.[0];
   assert.ok(workspace, 'the smoke has no local workspace for its owned fixture');
   const fixture = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.edds');
   await vscode.workspace.fs.writeFile(fixture, copyFixture());
   await vscode.commands.executeCommand('enfusion.edds.openPreview', fixture);
-  await eventually(() =>
-    vscode.window.tabGroups.all.some((group) =>
-      group.tabs.some(
-        (tab) =>
-          tab.input instanceof vscode.TabInputCustom &&
-          tab.input.viewType === 'enfusion.eddsPreview' &&
-          tab.input.uri.toString() === fixture.toString(),
+  await eventually(
+    () =>
+      vscode.window.tabGroups.all.some((group) =>
+        group.tabs.some(
+          (tab) =>
+            tab.input instanceof vscode.TabInputCustom &&
+            tab.input.viewType === 'enfusion.eddsPreview' &&
+            tab.input.uri.toString() === fixture.toString(),
+        ),
       ),
-    ),
+    'the EDDS custom editor did not open',
+  );
+
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(workspace.uri, 'workspace.enf'),
+    new TextEncoder().encode('{}\n'),
+  );
+  const source = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.png');
+  await vscode.workspace.fs.writeFile(source, pngFixture());
+  await vscode.commands.executeCommand('enfusion.texture.convert', source);
+  await eventually(
+    () =>
+      vscode.window.tabGroups.all.some((group) =>
+        group.tabs.some(
+          (tab) =>
+            tab.input instanceof vscode.TabInputCustom &&
+            tab.input.viewType === 'enfusion.textureConversion' &&
+            tab.input.uri.toString() === source.toString(),
+        ),
+      ),
+    'the PNG Explorer conversion editor did not open',
   );
 
   const executable = path.join(
@@ -53,7 +77,114 @@ export async function run(): Promise<void> {
     protocolVersion: 1,
     kind: 'protocol',
     toolVersion: '0.1.0',
-    commands: ['inspect', 'preview'],
+    commands: ['inspect', 'preview', 'convert', 'batch'],
+  });
+
+  const secondSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.tga');
+  await vscode.workspace.fs.writeFile(secondSource, tgaFixture());
+  await vscode.commands.executeCommand(
+    'enfusion.texture.convert',
+    source,
+    [secondSource, source],
+  );
+  await eventually(
+    () => vscode.window.tabGroups.all.some((group) => group.tabs.some(
+      (tab) => tab.input instanceof vscode.TabInputWebview &&
+        tab.input.viewType.endsWith('enfusion.textureBatchConversion'),
+    )),
+    'Explorer multi-select did not open one texture batch editor',
+  );
+
+  const batchPng = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-png.edds');
+  const batchTga = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-tga.edds');
+  const batch = await executeBatchProcess(executable, batchInput([
+    { id: 'png', input: source.fsPath, output: batchPng.fsPath },
+    { id: 'tga', input: secondSource.fsPath, output: batchTga.fsPath },
+  ]));
+  assert.deepEqual(batch.filter(({ kind }) => kind === 'result').map(({ id, status }) => [id, status]), [
+    ['png', 'Converted'],
+    ['tga', 'Converted'],
+  ]);
+  assert.deepEqual(batch.at(-1), {
+    protocolVersion: 1, kind: 'complete', converted: 2, failed: 0, cancelled: 0,
+  });
+  assert.equal((await vscode.workspace.fs.stat(batchPng)).type, vscode.FileType.File);
+  assert.equal((await vscode.workspace.fs.stat(batchTga)).type, vscode.FileType.File);
+
+  const converted = vscode.Uri.joinPath(workspace.uri, 'packaged-conversion.edds');
+  const conversion = await executeFile(
+    executable,
+    [
+      'convert', '--machine', '--protocol', '1',
+      '--input', source.fsPath, '--output', converted.fsPath,
+      '--target-format', 'enfusion-dds', '--format-compress', 'fastest',
+      '--compress-threshold', '80', '--conversion', 'none', '--conversion-quality', '1',
+      '--swizzling', 'none', '--generate-mips', 'true', '--mipmap-function', 'filter',
+      '--mipmap-filter', 'box', '--tiled-texture', 'true',
+    ],
+    { encoding: 'utf8', shell: false, windowsHide: true },
+  );
+  assert.deepEqual(JSON.parse(conversion.stdout), {
+    protocolVersion: 1,
+    kind: 'convert',
+    width: 2,
+    height: 1,
+    mipCount: 2,
+    pixelFormat: 'BGRA8',
+    registered: false,
+  });
+  assert.equal((await vscode.workspace.fs.stat(converted)).type, vscode.FileType.File);
+}
+
+interface SmokeBatchJob {
+  readonly id: string;
+  readonly input: string;
+  readonly output: string;
+}
+
+function batchInput(jobs: readonly SmokeBatchJob[]): string {
+  const profile = {
+    TargetFormat: 'EnfusionDDS', FormatCompress: 'Fastest', CompressTreshold: 80,
+    Conversion: 'None', ConversionQuality: 1, Swizzling: 'None', GenerateMips: false,
+    MipMapFunction: 'Filter', MipMapFilter: 'Box', TiledTexture: true,
+  };
+  return [
+    { protocolVersion: 1, kind: 'batch', jobCount: jobs.length },
+    ...jobs.map((job) => ({
+      protocolVersion: 1,
+      kind: 'job',
+      ...job,
+      metadata: null,
+      identity: null,
+      profile,
+      expected: null,
+    })),
+    { protocolVersion: 1, kind: 'end' },
+  ].map((record) => JSON.stringify(record)).join('\n') + '\n';
+}
+
+function executeBatchProcess(executable: string, input: string): Promise<Record<string, unknown>[]> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, ['batch', '--machine', '--protocol', '1'], {
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `installed batch process exited with ${String(code)}`));
+        return;
+      }
+      resolve(stdout.trim().split(/\r?\n/).map((line) => JSON.parse(line) as Record<string, unknown>));
+    });
+    child.stdin.end(input, 'utf8');
   });
 }
 
@@ -82,20 +213,71 @@ function copyFixture(): Uint8Array {
   return bytes;
 }
 
+function pngFixture(): Uint8Array {
+  const signature = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = new Uint8Array(13);
+  const view = new DataView(ihdr.buffer);
+  view.setUint32(0, 2);
+  view.setUint32(4, 1);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  const pixels = Uint8Array.from([0, 10, 20, 30, 40, 50, 60, 70, 80]);
+  return join(signature, pngChunk('IHDR', ihdr), pngChunk('IDAT', deflateSync(pixels)), pngChunk('IEND', new Uint8Array()));
+}
+
+function tgaFixture(): Uint8Array {
+  return Uint8Array.from([
+    0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 1, 0, 24, 0x20,
+    30, 20, 10,
+  ]);
+}
+
+function pngChunk(name: string, body: Uint8Array): Uint8Array {
+  const type = new TextEncoder().encode(name);
+  const result = new Uint8Array(body.length + 12);
+  const view = new DataView(result.buffer);
+  view.setUint32(0, body.length);
+  result.set(type, 4);
+  result.set(body, 8);
+  view.setUint32(body.length + 8, crc32(join(type, body)));
+  return result;
+}
+
+function join(...parts: readonly Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    result.set(part, at);
+    at += part.length;
+  }
+  return result;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function putText(bytes: Uint8Array, at: number, text: string): void {
   for (let index = 0; index < text.length; ++index) {
     bytes[at + index] = text.charCodeAt(index);
   }
 }
 
-async function eventually(condition: () => boolean): Promise<void> {
+async function eventually(condition: () => boolean, failure: string): Promise<void> {
   for (let attempt = 0; attempt < 50; ++attempt) {
     if (condition()) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.fail('the EDDS custom editor did not open');
+  assert.fail(failure);
 }
 
 function requiredEnvironment(name: string): string {

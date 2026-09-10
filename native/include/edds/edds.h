@@ -39,6 +39,36 @@ typedef enum edds_pixel_format {
     EDDS_PIXEL_UNKNOWN
 } edds_pixel_format;
 
+typedef enum edds_source_format {
+    EDDS_SOURCE_PNG,
+    EDDS_SOURCE_TGA
+} edds_source_format;
+
+typedef enum edds_format_compress {
+    EDDS_COMPRESS_COPY,
+    EDDS_COMPRESS_FASTEST,
+    EDDS_COMPRESS_MEDIUM,
+    EDDS_COMPRESS_BEST
+} edds_format_compress;
+
+/** The exact supported Workbench slice. Values outside it are refused, never substituted. */
+typedef struct edds_profile {
+    edds_format_compress format_compress;
+    uint32_t compress_threshold;
+    int generate_mips;
+} edds_profile;
+
+#define EDDS_METADATA_GUID_BYTES 17u
+#define EDDS_METADATA_PATH_BYTES 1024u
+
+typedef struct edds_metadata {
+    char guid[EDDS_METADATA_GUID_BYTES];
+    char name[EDDS_METADATA_PATH_BYTES];
+    char source_file[EDDS_METADATA_PATH_BYTES];
+    edds_source_format source_format;
+    edds_profile profile;
+} edds_metadata;
+
 typedef struct edds_error {
     char code[64];
     char message[256];
@@ -101,6 +131,21 @@ edds_status edds_preview(
     size_t *rgba_size,
     edds_error *error
 );
+
+void edds_default_profile(edds_profile *profile);
+
+edds_status edds_convert(
+    FILE *source,
+    edds_source_format source_format,
+    FILE *output,
+    const edds_profile *profile,
+    edds_cancelled_fn cancelled,
+    void *cancel_context,
+    edds_error *error
+);
+
+edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error);
+edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error);
 
 void edds_free(void *allocation);
 const char *edds_container_name(edds_container container);

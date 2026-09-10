@@ -16,6 +16,9 @@ test_bytes fixture_dx10_bgrx(void);
 test_bytes fixture_dxt1(void);
 test_bytes fixture_odd_fourcc(void);
 test_bytes fixture_integer_overflow(void);
+test_bytes fixture_png_rgba(void);
+test_bytes fixture_png_rgba_gamma(void);
+test_bytes fixture_tga_bgrx(void);
 void fixture_free(test_bytes fixture);
 int fixture_write(const char *path, test_bytes fixture);
 

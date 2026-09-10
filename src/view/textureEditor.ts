@@ -15,6 +15,7 @@ import {
   updateTexture,
 } from '../mods/textureEditor';
 import { EddsConverter } from '../platform/eddsConverter';
+import { reconvertSourceOf } from '../platform/textureConversion';
 import type { TextureRequest, TextureStateMessage } from '../webview/textureProtocol';
 
 class EddsDocument implements vscode.CustomDocument {
@@ -137,6 +138,13 @@ export class TextureEditor implements vscode.CustomReadonlyEditorProvider<EddsDo
                 for (const effect of opening.effects) {
                   run(effect);
                 }
+                void reconvertSourceOf(document.uri, this.converter).then((reconvert) => {
+                  apply(
+                    reconvert.kind === 'available'
+                      ? { kind: 'reconversion-available', source: reconvert.source }
+                      : { kind: 'reconversion-refused', reason: reconvert.reason },
+                  );
+                });
               }
             }
             return;
@@ -145,6 +153,15 @@ export class TextureEditor implements vscode.CustomReadonlyEditorProvider<EddsDo
             return;
           case 'select-mip':
             apply({ kind: 'select-mip', mip: request.mip });
+            return;
+          case 'reconvert':
+            if (current.reconvert.kind === 'available') {
+              void vscode.commands.executeCommand(
+                'vscode.openWith',
+                vscode.Uri.file(current.reconvert.source),
+                'enfusion.textureConversion',
+              );
+            }
             return;
         }
       }),
@@ -196,8 +213,8 @@ export class TextureEditor implements vscode.CustomReadonlyEditorProvider<EddsDo
 export function registerTextureEditor(
   context: vscode.ExtensionContext,
   log: vscode.LogOutputChannel,
+  converter = new EddsConverter(context.extensionPath),
 ): vscode.Disposable {
-  const converter = new EddsConverter(context.extensionPath);
   const provider = new TextureEditor(context.extensionUri, converter, log);
   const editor = vscode.window.registerCustomEditorProvider(TextureEditor.viewType, provider, {
     supportsMultipleEditorsPerDocument: true,

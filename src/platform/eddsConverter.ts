@@ -10,13 +10,23 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import {
   type EddsFailureCategory,
+  type EddsConversion,
   type EddsInspection,
   type EddsPreview,
+  conversionOf,
   inspectionOf,
   machineFailureOf,
   previewOf,
   protocolOf,
 } from '../mods/edds';
+import type { TextureConversionPlan } from '../mods/textureConversion';
+import type { TextureBatchEvent } from '../mods/textureBatchProtocol';
+import type { TextureBatchJob } from '../mods/textureBatch';
+import {
+  type EddsBatchExecution,
+  runEddsBatch,
+} from './eddsBatch';
+import { TextureScheduler } from './textureScheduler';
 
 const OUTPUT_LIMIT = 96 * 1024 * 1024;
 
@@ -55,6 +65,7 @@ export class EddsConverter {
   constructor(
     extensionPath: string,
     private readonly execute: Execute = executeFile,
+    private readonly scheduler = new TextureScheduler(),
   ) {
     this.executable = path.join(
       extensionPath,
@@ -65,25 +76,105 @@ export class EddsConverter {
     );
   }
 
-  async inspect(input: string, signal?: AbortSignal): Promise<EddsInspection> {
-    await this.compatible();
-    return inspectionOf(
-      await this.invoke(['inspect', '--machine', '--protocol', '1', '--input', input], signal),
-    );
+  async inspect(
+    input: string,
+    signal?: AbortSignal,
+    metadata?: string,
+    identityOnly = false,
+  ): Promise<EddsInspection> {
+    return this.scheduler.run('inspect', async (scheduledSignal) => {
+      await this.compatible(scheduledSignal);
+      return inspectionOf(
+        await this.invoke(
+          [
+            'inspect', '--machine', '--protocol', '1', '--input', input,
+            ...(metadata === undefined ? [] : ['--metadata', metadata]),
+            ...(identityOnly ? ['--identity-only'] : []),
+          ],
+          scheduledSignal,
+        ),
+      );
+    }, signal);
   }
 
   async preview(input: string, mip: number, signal?: AbortSignal): Promise<EddsPreview> {
-    await this.compatible();
-    return previewOf(
-      await this.invoke(
-        ['preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input],
-        signal,
-      ),
-    );
+    return this.scheduler.run('preview', async (scheduledSignal) => {
+      await this.compatible(scheduledSignal);
+      return previewOf(
+        await this.invoke(
+          ['preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input],
+          scheduledSignal,
+        ),
+      );
+    }, signal);
   }
 
-  private async compatible(): Promise<void> {
-    this.handshake ??= this.invoke(['protocol', '--machine']).then((source) => {
+  async convert(
+    plan: Extract<TextureConversionPlan, { kind: 'ready' }>,
+    signal?: AbortSignal,
+    workKind: 'convert' | 'preview' = 'convert',
+  ): Promise<EddsConversion> {
+    return this.scheduler.run(workKind, async (scheduledSignal) => {
+      await this.compatible(scheduledSignal);
+      const profile = plan.profile;
+      const registration =
+        plan.metadata === undefined || plan.identity === undefined
+          ? []
+          : [
+              '--metadata', plan.metadata,
+              '--resource-name', plan.identity.name,
+              '--source-file', plan.identity.sourceFile,
+              '--guid', plan.identity.guid,
+            ];
+      const revision = (value: { readonly size: number; readonly modified: number } | undefined) =>
+        value === undefined ? 'missing' : `${value.size}:${value.modified}`;
+      return conversionOf(
+        await this.invoke(
+          [
+            'convert', '--machine', '--protocol', '1',
+            '--input', plan.source,
+            '--output', plan.output,
+            '--target-format', 'enfusion-dds',
+            '--format-compress', profile.FormatCompress.toLowerCase(),
+            '--compress-threshold', String(profile.CompressTreshold),
+            '--conversion', 'none',
+            '--conversion-quality', '1',
+            '--swizzling', 'none',
+            '--generate-mips', String(profile.GenerateMips),
+            '--mipmap-function', 'filter',
+            '--mipmap-filter', 'box',
+            '--tiled-texture', 'true',
+            '--expect-source-revision', revision(plan.revisions.source),
+            '--expect-output-revision', revision(plan.revisions.output),
+            '--expect-metadata-revision', revision(plan.revisions.metadata),
+            ...registration,
+          ],
+          scheduledSignal,
+        ),
+      );
+    }, signal);
+  }
+
+  async batch(
+    jobs: readonly TextureBatchJob[],
+    onEvent: (event: TextureBatchEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<EddsBatchExecution> {
+    return this.scheduler.run('batch', async (scheduledSignal) => {
+      await this.compatible(scheduledSignal);
+      return runEddsBatch(
+        this.executable,
+        jobs,
+        undefined,
+        undefined,
+        onEvent,
+        scheduledSignal,
+      );
+    }, signal);
+  }
+
+  private async compatible(signal?: AbortSignal): Promise<void> {
+    this.handshake ??= this.invoke(['protocol', '--machine'], signal).then((source) => {
         protocolOf(source);
       });
     try {

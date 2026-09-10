@@ -11,6 +11,7 @@ const INSPECTION: EddsInspection = {
   width: 4,
   height: 2,
   pixelFormat: 'BGRA8',
+  channels: 'RGBA',
   dds: {
     flags: 0x1_000f,
     pitchOrLinearSize: 16,
@@ -73,6 +74,7 @@ test('an unsupported pixel format keeps every inspected fact without inventing p
   const inspection: EddsInspection = {
     ...INSPECTION,
     pixelFormat: 'DXGI_98',
+    channels: 'UNKNOWN',
     pixels: { kind: 'unsupported', reason: 'BC7 preview is not supported yet.' },
   };
 
@@ -129,4 +131,17 @@ test('a late preview response cannot replace the pixels of the newly selected mi
 
   assert.strictEqual(stale.state, selected.state);
   assert.deepEqual(stale.effects, []);
+});
+
+test('direct preview exposes reconvert only after a validated metadata relationship', () => {
+  const loading = openedTexture().state;
+  const available = updateTexture(loading, {
+    kind: 'reconversion-available',
+    source: 'C:\\mod\\Mod\\icon.png',
+  });
+
+  assert.deepEqual(available.state.reconvert, {
+    kind: 'available',
+    source: 'C:\\mod\\Mod\\icon.png',
+  });
 });

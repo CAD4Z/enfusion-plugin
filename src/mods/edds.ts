@@ -5,6 +5,8 @@
  * value is checked before the view can allocate from it or describe it as a fact of the file.
  */
 
+import type { TextureIdentity, TextureMetadata, TextureProfile } from './textureConversion';
+
 export const EDDS_PROTOCOL_VERSION = 1;
 export const EDDS_MAX_DIMENSION = 32_768;
 export const EDDS_MAX_MIPS = 32;
@@ -50,11 +52,19 @@ export interface EddsInspection {
   readonly width: number;
   readonly height: number;
   readonly pixelFormat: EddsPixelFormat;
+  readonly channels: 'RGB' | 'RGBA' | 'UNKNOWN';
   readonly dds: DdsFacts;
   readonly mips: readonly EddsMip[];
   readonly pixels:
     | { readonly kind: 'supported' }
     | { readonly kind: 'unsupported'; readonly reason: string };
+  /** Present only when inspect was explicitly given a sibling metadata path. */
+  readonly metadata?: TextureMetadata;
+  /** Native-validated identity when the old recipe is recognized but not implemented. */
+  readonly unsupportedMetadata?: {
+    readonly identity: TextureIdentity;
+    readonly reason: string;
+  };
 }
 
 /** Actual pixels decoded from one runtime mip, normalized to top-to-bottom RGBA. */
@@ -63,6 +73,14 @@ export interface EddsPreview {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8Array;
+}
+
+export interface EddsConversion {
+  readonly width: number;
+  readonly height: number;
+  readonly mipCount: number;
+  readonly pixelFormat: PreviewablePixelFormat;
+  readonly registered: boolean;
 }
 
 export interface EddsProtocol {
@@ -98,6 +116,12 @@ export function protocolOf(source: string): EddsProtocol {
   if (!commands.includes('preview')) {
     throw new Error('The EDDS converter protocol has no preview command.');
   }
+  if (!commands.includes('convert')) {
+    throw new Error('The EDDS converter protocol has no convert command.');
+  }
+  if (!commands.includes('batch')) {
+    throw new Error('The EDDS converter protocol has no batch command.');
+  }
 
   return { protocolVersion: EDDS_PROTOCOL_VERSION, toolVersion, commands };
 }
@@ -109,6 +133,7 @@ export function inspectionOf(source: string): EddsInspection {
   const height = positiveIntegerOf(value, 'height', EDDS_MAX_DIMENSION);
   const mipCount = positiveIntegerOf(value, 'mipCount', EDDS_MAX_MIPS);
   const pixelFormat = pixelFormatOf(value.pixelFormat);
+  const channels = channelsOf(value.channels);
   const previewSupported = booleanOf(value, 'previewSupported');
   const ddsValue = objectValue(value.dds, 'dds');
   const dds: DdsFacts = {
@@ -130,6 +155,14 @@ export function inspectionOf(source: string): EddsInspection {
     miscFlag: unsignedOf(ddsValue, 'miscFlag'),
   };
   const mips = arrayOf(value, 'mips').map(mipOf);
+  const metadata = value.metadata === undefined ? undefined : metadataOf(value.metadata);
+  const unsupportedMetadata = value.unsupportedMetadata === undefined
+    ? undefined
+    : unsupportedMetadataOf(value.unsupportedMetadata);
+
+  if (metadata !== undefined && unsupportedMetadata !== undefined) {
+    throw new Error('inspect cannot return supported and unsupported metadata together.');
+  }
 
   if (mips.length !== mipCount) {
     throw new Error(`inspect.mipCount is ${mipCount}, but inspect.mips has ${mips.length} entries.`);
@@ -151,6 +184,7 @@ export function inspectionOf(source: string): EddsInspection {
     width,
     height,
     pixelFormat,
+    channels,
     dds,
     mips,
     pixels: previewSupported
@@ -161,6 +195,50 @@ export function inspectionOf(source: string): EddsInspection {
             unsupportedReason ??
             `Pixel preview is unavailable because ${pixelFormat} is not supported.`,
         },
+    ...(metadata === undefined ? {} : { metadata }),
+    ...(unsupportedMetadata === undefined ? {} : { unsupportedMetadata }),
+  };
+}
+
+function unsupportedMetadataOf(source: unknown): NonNullable<EddsInspection['unsupportedMetadata']> {
+  const value = objectValue(source, 'unsupportedMetadata');
+  const identity = objectValue(value.identity, 'unsupportedMetadata.identity');
+  const guid = stringOf(identity, 'guid');
+  if (!/^[0-9A-Fa-f]{16}$/.test(guid)) {
+    throw new Error('unsupportedMetadata.identity.guid must be 64-bit hexadecimal.');
+  }
+  return {
+    identity: {
+      guid,
+      name: stringOf(identity, 'name'),
+      sourceFile: stringOf(identity, 'sourceFile'),
+    },
+    reason: stringOf(value, 'reason'),
+  };
+}
+
+function channelsOf(value: unknown): 'RGB' | 'RGBA' | 'UNKNOWN' {
+  const channels = stringValue(value, 'channels');
+  if (channels !== 'RGB' && channels !== 'RGBA' && channels !== 'UNKNOWN') {
+    throw new Error(`channels is not recognized: ${channels}.`);
+  }
+  return channels;
+}
+
+/** Actual facts reported only after the native converter committed its artifact transaction. */
+export function conversionOf(source: string): EddsConversion {
+  const value = envelopeOf(source, 'convert');
+  const pixelFormat = pixelFormatOf(value.pixelFormat);
+  if (pixelFormat !== 'BGRA8' && pixelFormat !== 'BGRX8') {
+    throw new Error(`convert.pixelFormat must be BGRA8 or BGRX8, not ${pixelFormat}.`);
+  }
+
+  return {
+    width: positiveIntegerOf(value, 'width', EDDS_MAX_DIMENSION),
+    height: positiveIntegerOf(value, 'height', EDDS_MAX_DIMENSION),
+    mipCount: positiveIntegerOf(value, 'mipCount', EDDS_MAX_MIPS),
+    pixelFormat,
+    registered: booleanOf(value, 'registered'),
   };
 }
 
@@ -225,6 +303,75 @@ function mipOf(value: unknown, at: number): EddsMip {
     storedBytes: nonnegativeIntegerOf(mip, 'storedBytes', Number.MAX_SAFE_INTEGER),
     decodedBytes: positiveIntegerOf(mip, 'decodedBytes', Number.MAX_SAFE_INTEGER),
   };
+}
+
+function metadataOf(source: unknown): TextureMetadata {
+  const value = objectValue(source, 'metadata');
+  if (integerValue(value.schemaVersion, 'metadata.schemaVersion') !== 1) {
+    throw new Error('metadata.schemaVersion must be 1.');
+  }
+  const identity = objectValue(value.identity, 'metadata.identity');
+  const recipe = objectValue(value.recipe, 'metadata.recipe');
+  const guid = stringOf(identity, 'guid');
+  if (!/^[0-9A-Fa-f]{16}$/.test(guid)) {
+    throw new Error('metadata.identity.guid must be 64-bit hexadecimal.');
+  }
+  const sourceFormat = stringOf(identity, 'sourceFormat');
+  if (sourceFormat !== 'png' && sourceFormat !== 'tga') {
+    throw new Error('metadata.identity.sourceFormat must be png or tga.');
+  }
+
+  return {
+    guid,
+    name: stringOf(identity, 'name'),
+    sourceFile: stringOf(identity, 'sourceFile'),
+    sourceFormat: sourceFormat === 'png' ? 'PNG' : 'TGA',
+    profile: profileOf(recipe),
+  };
+}
+
+function profileOf(value: Record<string, unknown>): TextureProfile {
+  literalOf(value, 'TargetFormat', 'EnfusionDDS');
+  const compression = stringOf(value, 'FormatCompress');
+  if (
+    compression !== 'Copy' &&
+    compression !== 'Fastest' &&
+    compression !== 'Medium' &&
+    compression !== 'Best'
+  ) {
+    throw new Error('metadata.recipe.FormatCompress is not supported.');
+  }
+  const threshold = nonnegativeIntegerOf(value, 'CompressTreshold', 100);
+  literalOf(value, 'Conversion', 'None');
+  if (integerValue(value.ConversionQuality, 'metadata.recipe.ConversionQuality') !== 1) {
+    throw new Error('metadata.recipe.ConversionQuality must be 1.');
+  }
+  literalOf(value, 'Swizzling', 'None');
+  const generateMips = booleanOf(value, 'GenerateMips');
+  literalOf(value, 'MipMapFunction', 'Filter');
+  literalOf(value, 'MipMapFilter', 'Box');
+  if (booleanOf(value, 'TiledTexture') !== true) {
+    throw new Error('metadata.recipe.TiledTexture must be true.');
+  }
+
+  return {
+    TargetFormat: 'EnfusionDDS',
+    FormatCompress: compression,
+    CompressTreshold: threshold,
+    Conversion: 'None',
+    ConversionQuality: 1,
+    Swizzling: 'None',
+    GenerateMips: generateMips,
+    MipMapFunction: 'Filter',
+    MipMapFilter: 'Box',
+    TiledTexture: true,
+  };
+}
+
+function literalOf(value: Record<string, unknown>, name: string, expected: string): void {
+  if (stringOf(value, name) !== expected) {
+    throw new Error(`metadata.recipe.${name} must be ${expected}.`);
+  }
 }
 
 function envelopeOf(source: string, kind: string): Record<string, unknown> {

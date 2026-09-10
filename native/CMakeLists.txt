@@ -24,7 +24,7 @@ function(edds_configure_target target)
   endif()
 endfunction()
 
-add_library(edds_core STATIC src/edds.c)
+add_library(edds_core STATIC src/edds.c src/convert.c src/metadata.c src/batch.c)
 target_include_directories(edds_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 edds_configure_target(edds_core)
 

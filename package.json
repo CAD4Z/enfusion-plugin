@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The workspace is only ever read: mods are found by their mod.enf and config.cpp, and nothing in it is ever executed. EDDS preview passes only the explicitly opened local file to the fixed converter bundled with the extension, without a shell. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive, neither of which reads anything of the workspace. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
+      "description": "Mods are discovered by reading mod.enf, workspace.enf, and config.cpp; none of them is executed. EDDS preview and PNG/TGA preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed; draft previews write only under extension storage. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -134,6 +134,12 @@
         "title": "Open EDDS Preview",
         "category": "Enfusion",
         "icon": "$(preview)"
+      },
+      {
+        "command": "enfusion.texture.convert",
+        "title": "Convert Texture to EDDS",
+        "category": "Enfusion",
+        "icon": "$(file-media)"
       }
     ],
     "menus": {
@@ -158,6 +164,11 @@
         {
           "command": "enfusion.edds.openPreview",
           "when": "resourceScheme == file && resourceExtname =~ /\\.edds/i",
+          "group": "navigation@20"
+        },
+        {
+          "command": "enfusion.texture.convert",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga)$/i",
           "group": "navigation@20"
         }
       ]
@@ -194,6 +205,19 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "enfusion.textureConversion",
+        "displayName": "Texture Conversion",
+        "selector": [
+          {
+            "filenamePattern": "*.[pP][nN][gG]"
+          },
+          {
+            "filenamePattern": "*.[tT][gG][aA]"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "jsonValidation": [
@@ -369,7 +393,9 @@
     "workspaceContains:**/workspace.enf",
     "onView:enfusion.mods",
     "onCommand:enfusion.edds.openPreview",
+    "onCommand:enfusion.texture.convert",
     "onCustomEditor:enfusion.eddsPreview",
+    "onCustomEditor:enfusion.textureConversion",
     "onDebugResolve:enfusion",
     "onDebugDynamicConfigurations:enfusion"
   ]

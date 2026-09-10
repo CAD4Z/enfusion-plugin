@@ -14,9 +14,41 @@ channels, with an alpha checkerboard, mip selection, zoom and pan.
 
 Formats whose pixel decoder is not available are still inspected, but are labelled
 `unsupported-format` and are never represented by source pixels or a plausible placeholder.
-Standalone preview is always read-only: Reconvert is unavailable because no validated metadata →
-source relation has been established, and a same-stem image beside the EDDS is deliberately never
-treated as its source.
+Standalone preview is read-only. Reconvert becomes available only when the native metadata codec
+validates the sibling `.edds.meta`, its declared PNG/TGA source exists inside the discovered
+Enfusion scope, and that relation owns this exact EDDS. A same-stem image is never guessed as the
+source.
+
+## PNG/TGA conversion
+
+On Windows x64, **Enfusion: Convert Texture to EDDS** is available on local `.png` and `.tga`
+files when the window contains a discovered `mod.enf` or `workspace.enf`. The editor opens before
+anything in the project is written. It shows the decoded source beside a result decoded back from
+a temporary native EDDS, with shared channel, alpha checkerboard, mip, zoom and pan controls.
+Changing `FormatCompress`, `CompressTreshold` or `GenerateMips` rebuilds only that temporary
+preview; the other visible Workbench fields show the exact fixed first-slice values and explain why
+they are locked.
+
+The primary action says **Convert**, **Reconvert** or **Replace** from the validated ownership
+state. It always targets the sibling `.edds`. Inside a prefix root it also writes canonical sibling
+`.edds.meta`; elsewhere inside the enclosing Enfusion root it makes a detached EDDS and says that
+registration was skipped. Existing registered GUIDs are preserved character-for-character, while
+a new registered resource receives a random collision-scanned 64-bit GUID. Source, EDDS and
+metadata revisions are captured for the session and checked again by the native worker immediately
+before its temporary files are published. A failure leaves the complete old pair or the complete
+new pair, never one file from each.
+
+An explicit Explorer multi-selection opens one conversion batch. The file whose context menu was
+used is the primary source image and supplies the one complete profile; selection order does not.
+The editor lists create/reconvert/replace or refusal per item, renders one active viewport, and
+reports per-file and overall progress. Sources sharing a Windows-normalized destination are all
+refused without a winner. One bundled `edds-convert batch` process owns up to 256 jobs (including
+selections of 100), keeps completed outputs on cancellation, and lets retryable failures be retried
+without rerunning successes.
+
+The public native CLI can convert a PNG or TGA to any explicit output path without a project gate.
+It accepts the same stable recipe flags used by the editor; `inspect --metadata PATH` returns the
+metadata identity and recipe as versioned structured JSON through the same native codec.
 
 The platform-specific VSIX carries its own C17 `edds-convert.exe`. The extension only starts that
 binary from its installation directory, passes arguments without a shell and checks protocol

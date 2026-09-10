@@ -13,6 +13,44 @@ static void put_u32(uint8_t *at, uint32_t value) {
     at[3] = (uint8_t)(value >> 24);
 }
 
+static void put_u32be(uint8_t *at, uint32_t value) {
+    at[0] = (uint8_t)(value >> 24);
+    at[1] = (uint8_t)(value >> 16);
+    at[2] = (uint8_t)(value >> 8);
+    at[3] = (uint8_t)value;
+}
+
+static uint32_t crc32(const uint8_t *bytes, size_t size) {
+    uint32_t crc = 0xffffffffu;
+    for (size_t at = 0; at < size; ++at) {
+        crc ^= bytes[at];
+        for (unsigned bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (0xedb88320u & (uint32_t)-(int32_t)(crc & 1u));
+        }
+    }
+    return ~crc;
+}
+
+static uint32_t adler32(const uint8_t *bytes, size_t size) {
+    uint32_t first = 1;
+    uint32_t second = 0;
+    for (size_t at = 0; at < size; ++at) {
+        first = (first + bytes[at]) % 65521u;
+        second = (second + first) % 65521u;
+    }
+    return (second << 16) | first;
+}
+
+static size_t png_chunk(uint8_t *output, const char type[4], const uint8_t *data, uint32_t size) {
+    put_u32be(output, size);
+    memcpy(output + 4, type, 4);
+    if (size != 0) {
+        memcpy(output + 8, data, size);
+    }
+    put_u32be(output + 8u + size, crc32(output + 4, 4u + size));
+    return 12u + size;
+}
+
 static void header(
     uint8_t *bytes,
     uint32_t width,
@@ -199,6 +237,73 @@ test_bytes fixture_integer_overflow(void) {
     test_bytes fixture = fixture_copy_bgra();
     if (fixture.data != NULL) {
         memset(fixture.data + 12, 0xff, 8);
+    }
+    return fixture;
+}
+
+test_bytes fixture_png_rgba(void) {
+    static const uint8_t filtered[] = {
+        0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120,
+        0, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220
+    };
+    uint8_t ihdr[13] = { 0 };
+    uint8_t idat[2u + 5u + sizeof filtered + 4u];
+    test_bytes fixture = allocated(8u + 25u + 12u + sizeof idat + 12u);
+    size_t at = 0;
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    memcpy(fixture.data + at, "\x89PNG\r\n\x1a\n", 8);
+    at += 8;
+    put_u32be(ihdr, 3);
+    put_u32be(ihdr + 4, 2);
+    ihdr[8] = 8;
+    ihdr[9] = 6;
+    at += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
+    idat[0] = 0x78;
+    idat[1] = 0x01;
+    idat[2] = 0x01;
+    idat[3] = (uint8_t)sizeof filtered;
+    idat[4] = 0;
+    idat[5] = (uint8_t)(~(uint32_t)sizeof filtered & 0xffu);
+    idat[6] = 0xff;
+    memcpy(idat + 7, filtered, sizeof filtered);
+    put_u32be(idat + 7u + sizeof filtered, adler32(filtered, sizeof filtered));
+    at += png_chunk(fixture.data + at, "IDAT", idat, sizeof idat);
+    at += png_chunk(fixture.data + at, "IEND", NULL, 0);
+    fixture.size = at;
+    return fixture;
+}
+
+test_bytes fixture_png_rgba_gamma(void) {
+    test_bytes base = fixture_png_rgba();
+    test_bytes fixture = allocated(base.size + 16u);
+    uint8_t gamma[4];
+    size_t at = 33u;
+    if (base.data == NULL || fixture.data == NULL) {
+        fixture_free(base);
+        fixture_free(fixture);
+        return (test_bytes){ NULL, 0 };
+    }
+    memcpy(fixture.data, base.data, at);
+    put_u32be(gamma, 45455u);
+    at += png_chunk(fixture.data + at, "gAMA", gamma, sizeof gamma);
+    memcpy(fixture.data + at, base.data + 33u, base.size - 33u);
+    fixture.size = base.size + 16u;
+    fixture_free(base);
+    return fixture;
+}
+
+test_bytes fixture_tga_bgrx(void) {
+    static const uint8_t source[] = {
+        0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        3, 0, 2, 0, 24, 0x20,
+        30, 20, 10, 60, 50, 40, 90, 80, 70,
+        120, 110, 100, 150, 140, 130, 180, 170, 160
+    };
+    test_bytes fixture = allocated(sizeof source);
+    if (fixture.data != NULL) {
+        memcpy(fixture.data, source, sizeof source);
     }
     return fixture;
 }

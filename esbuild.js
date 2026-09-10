@@ -76,6 +76,8 @@ const webview = {
     webview: 'src/webview/main.ts',
     form: 'src/webview/form.ts',
     texture: 'src/webview/texture.ts',
+    'texture-conversion': 'src/webview/textureConversion.ts',
+    'texture-batch': 'src/webview/textureBatch.ts',
   },
   outdir: 'dist',
   format: 'esm',

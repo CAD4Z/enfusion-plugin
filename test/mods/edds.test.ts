@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   EDDS_PROTOCOL_VERSION,
+  conversionOf,
   inspectionOf,
   machineFailureOf,
   previewOf,
@@ -15,14 +16,114 @@ test('the protocol handshake accepts the converter contract this extension speak
         protocolVersion: 1,
         kind: 'protocol',
         toolVersion: '0.1.0',
-        commands: ['inspect', 'preview'],
+        commands: ['inspect', 'preview', 'convert', 'batch'],
       }),
     ),
     {
       protocolVersion: EDDS_PROTOCOL_VERSION,
       toolVersion: '0.1.0',
-      commands: ['inspect', 'preview'],
+      commands: ['inspect', 'preview', 'convert', 'batch'],
     },
+  );
+});
+
+test('inspect accepts only the structured supported metadata recipe', () => {
+  const inspection = inspectionOf(
+    JSON.stringify({
+      ...inspectMessage({}),
+      metadata: {
+        schemaVersion: 1,
+        identity: {
+          guid: 'aBcDeF0123456789',
+          name: 'MyMod/GUI/icon.edds',
+          sourceFile: 'icon.png',
+          sourceFormat: 'png',
+        },
+        recipe: {
+          TargetFormat: 'EnfusionDDS',
+          FormatCompress: 'Best',
+          CompressTreshold: 72,
+          Conversion: 'None',
+          ConversionQuality: 1,
+          Swizzling: 'None',
+          GenerateMips: false,
+          MipMapFunction: 'Filter',
+          MipMapFilter: 'Box',
+          TiledTexture: true,
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(inspection.metadata, {
+    guid: 'aBcDeF0123456789',
+    name: 'MyMod/GUI/icon.edds',
+    sourceFile: 'icon.png',
+    sourceFormat: 'PNG',
+    profile: {
+      TargetFormat: 'EnfusionDDS',
+      FormatCompress: 'Best',
+      CompressTreshold: 72,
+      Conversion: 'None',
+      ConversionQuality: 1,
+      Swizzling: 'None',
+      GenerateMips: false,
+      MipMapFunction: 'Filter',
+      MipMapFilter: 'Box',
+      TiledTexture: true,
+    },
+  });
+  assert.throws(
+    () =>
+      inspectionOf(
+        JSON.stringify({
+          ...inspectMessage({}),
+          metadata: {
+            schemaVersion: 1,
+            identity: {
+              guid: 'short',
+              name: 'x.edds',
+              sourceFile: 'x.png',
+              sourceFormat: 'png',
+            },
+            recipe: {},
+          },
+        }),
+      ),
+    /guid/i,
+  );
+});
+
+test('identity-only inspect keeps a valid GUID when the old recipe is unsupported', () => {
+  const value = inspectionOf(JSON.stringify({
+    ...inspectMessage({}),
+    unsupportedMetadata: {
+      reason: 'Workbench setting Conversion=DXTCompression is recognized but unsupported.',
+      identity: {
+        guid: 'aBcDeF0123456789',
+        name: 'Mod/icon.edds',
+        sourceFile: 'icon.png',
+      },
+    },
+  }));
+
+  assert.deepEqual(value.unsupportedMetadata, {
+    reason: 'Workbench setting Conversion=DXTCompression is recognized but unsupported.',
+    identity: {
+      guid: 'aBcDeF0123456789',
+      name: 'Mod/icon.edds',
+      sourceFile: 'icon.png',
+    },
+  });
+  assert.equal(value.metadata, undefined);
+});
+
+test('convert returns only actual committed artifact facts', () => {
+  assert.deepEqual(
+    conversionOf(
+      '{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"BGRA8","registered":true}',
+    ),
+    { width: 3, height: 2, mipCount: 2, pixelFormat: 'BGRA8', registered: true },
   );
 });
 
@@ -50,6 +151,7 @@ test('inspect preserves common DDS and every actual ENF1 mip fact', () => {
       height: 2,
       mipCount: 2,
       pixelFormat: 'BGRA8',
+      channels: 'RGBA',
       previewSupported: true,
       dds: {
         flags: 0x1_000f,
@@ -91,6 +193,7 @@ test('inspect preserves common DDS and every actual ENF1 mip fact', () => {
   );
 
   assert.equal(inspection.pixelFormat, 'BGRA8');
+  assert.equal(inspection.channels, 'RGBA');
   assert.deepEqual(inspection.pixels, { kind: 'supported' });
   assert.equal(inspection.dds.aMask, 0xff00_0000);
   assert.deepEqual(
@@ -206,6 +309,7 @@ function inspectMessage(changes: Record<string, unknown>): Record<string, unknow
     height: 1,
     mipCount: 1,
     pixelFormat: 'BGRX8',
+    channels: 'RGB',
     previewSupported: true,
     dds: {
       flags: 0x1_000f,

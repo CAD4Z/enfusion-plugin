@@ -1,0 +1,190 @@
+/** Compact batch authoring UI: one item list, one common profile, one active viewport. */
+
+import { TEXTURE_PROFILE_FIELDS } from '../mods/textureAuthoring';
+import {
+  textureBatchProgress,
+  type TextureBatchAuthoringState,
+} from '../mods/textureBatchAuthoring';
+import type { TextureProfile } from '../mods/textureConversion';
+import type { TextureBatchRequest, TextureBatchStateMessage } from './textureBatchProtocol';
+import './textureBatch.css';
+
+declare function acquireVsCodeApi(): { postMessage(message: TextureBatchRequest): void };
+
+const host = acquireVsCodeApi();
+const root = document.body.appendChild(element('main', 'batch-editor'));
+
+window.addEventListener('message', (event: MessageEvent<TextureBatchStateMessage>) => {
+  if (event.data.type === 'state') render(event.data.state);
+});
+host.postMessage({ type: 'ready' });
+
+function render(state: TextureBatchAuthoringState): void {
+  if (state.kind === 'loading') {
+    root.replaceChildren(message('Capturing selection, ownership, and revisions…'));
+    return;
+  }
+  if (state.kind === 'refused') {
+    root.replaceChildren(message(state.reason, 'error'));
+    return;
+  }
+
+  const list = element('section', 'item-list');
+  const title = document.createElement('h1');
+  title.textContent = `${state.plan.items.length} selected textures`;
+  list.append(title);
+  for (const planned of state.plan.items) {
+    const runtime = state.kind === 'authoring'
+      ? undefined
+      : state.items.find(({ source }) => source === planned.source);
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = `item-row${planned.source === state.activeSource ? ' active' : ''}`;
+    row.disabled = state.kind !== 'authoring';
+    row.addEventListener('click', () => host.postMessage({ type: 'select-item', source: planned.source }));
+    const name = document.createElement('span');
+    name.className = 'item-name';
+    name.textContent = leaf(planned.source);
+    name.title = planned.source;
+    const status = document.createElement('span');
+    status.className = planned.kind === 'refused' || runtime?.status === 'Failed' ? 'item-status error' : 'item-status';
+    status.textContent = planned.kind === 'refused'
+      ? `Refused · ${planned.reason}`
+      : runtime === undefined
+        ? planned.label
+        : `${runtime.status}${runtime.status === 'Converting' ? ` · ${Math.round(runtime.progress * 100)}%` : ''}${runtime.reason === undefined ? '' : ` · ${runtime.reason}`}`;
+    const progress = document.createElement('progress');
+    progress.max = 1;
+    progress.value = runtime?.progress ?? 0;
+    row.append(name, status, progress);
+    list.append(row);
+  }
+
+  const workspace = element('section', 'active-workspace');
+  const activeTitle = document.createElement('h2');
+  activeTitle.textContent = leaf(state.activeSource);
+  workspace.append(activeTitle);
+  const rendered = state.kind === 'authoring'
+    ? state.preview.kind === 'ready' ? state.preview.rendered : undefined
+    : state.rendered;
+  if (rendered === undefined) {
+    workspace.append(message(
+      state.kind === 'authoring' && state.preview.kind === 'unavailable'
+        ? state.preview.reason
+        : 'Rendering one active preview…',
+      state.kind === 'authoring' && state.preview.kind === 'unavailable' ? 'error' : '',
+    ));
+  } else {
+    const viewport = element('div', 'viewport');
+    const canvas = document.createElement('canvas');
+    canvas.width = rendered.result.width;
+    canvas.height = rendered.result.height;
+    canvas.style.width = `${rendered.result.width}px`;
+    canvas.style.height = `${rendered.result.height}px`;
+    const context = canvas.getContext('2d');
+    context?.putImageData(new ImageData(
+      new Uint8ClampedArray(rendered.result.rgba),
+      rendered.result.width,
+      rendered.result.height,
+    ), 0, 0);
+    viewport.append(canvas);
+    workspace.append(viewport);
+  }
+
+  const sidebar = element('aside', 'batch-sidebar');
+  const heading = document.createElement('h2');
+  heading.textContent = 'Common texture profile';
+  sidebar.append(heading, profileForm(state.draft, state.kind !== 'authoring'));
+  if (state.kind === 'running' || state.kind === 'result') {
+    const overall = document.createElement('progress');
+    overall.className = 'overall-progress';
+    overall.max = 1;
+    overall.value = textureBatchProgress(state);
+    sidebar.append(overall);
+  }
+  const action = document.createElement('button');
+  action.className = 'primary-action';
+  action.type = 'button';
+  if (state.kind === 'authoring') {
+    action.textContent = `Convert ${state.plan.jobs.length} textures`;
+    action.disabled = state.plan.jobs.length === 0;
+    action.addEventListener('click', () => host.postMessage({ type: 'run' }));
+  } else if (state.kind === 'running') {
+    action.textContent = state.cancelling ? 'Cancelling…' : 'Cancel';
+    action.disabled = state.cancelling;
+    action.addEventListener('click', () => host.postMessage({ type: 'cancel' }));
+  } else {
+    const failed = state.items.filter((item) => item.status === 'Failed').length;
+    action.textContent = state.checkingRetry
+      ? 'Checking failed textures…'
+      : failed === 0 ? 'Batch complete' : `Retry Failed (${failed})`;
+    action.disabled = state.checkingRetry || failed === 0;
+    action.addEventListener('click', () => host.postMessage({ type: 'retry-failed' }));
+    if (state.retryReason !== undefined) sidebar.append(message(state.retryReason, 'error'));
+  }
+  sidebar.append(action);
+  root.replaceChildren(list, workspace, sidebar);
+}
+
+function profileForm(profile: TextureProfile, locked: boolean): HTMLElement {
+  const form = element('div', 'profile-form');
+  for (const field of TEXTURE_PROFILE_FIELDS) {
+    const label = document.createElement('label');
+    const caption = document.createElement('span');
+    caption.textContent = field.key;
+    let control: HTMLInputElement | HTMLSelectElement;
+    if (field.key === 'FormatCompress') {
+      const select = document.createElement('select');
+      for (const value of ['Copy', 'Fastest', 'Medium', 'Best'] as const) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        option.selected = value === profile.FormatCompress;
+        select.append(option);
+      }
+      select.addEventListener('change', () => {
+        const value = select.value;
+        if (value === 'Copy' || value === 'Fastest' || value === 'Medium' || value === 'Best') {
+          host.postMessage({ type: 'change-compression', value });
+        }
+      });
+      control = select;
+    } else {
+      const input = document.createElement('input');
+      if (field.key === 'GenerateMips' || field.key === 'TiledTexture') {
+        input.type = 'checkbox';
+        input.checked = Boolean(profile[field.key]);
+        if (field.key === 'GenerateMips') {
+          input.addEventListener('change', () => host.postMessage({ type: 'change-mips', value: input.checked }));
+        }
+      } else if (field.key === 'CompressTreshold') {
+        input.type = 'number'; input.min = '0'; input.max = '100'; input.value = String(profile.CompressTreshold);
+        input.addEventListener('change', () => host.postMessage({ type: 'change-threshold', value: Number(input.value) }));
+      } else {
+        input.type = 'text'; input.value = String(profile[field.key]);
+      }
+      control = input;
+    }
+    control.disabled = locked || !field.editable;
+    control.title = field.reason ?? field.key;
+    label.append(caption, control);
+    form.append(label);
+  }
+  return form;
+}
+
+function leaf(source: string): string {
+  return source.split(/[\\/]/).at(-1) ?? source;
+}
+
+function message(text: string, kind = ''): HTMLElement {
+  const result = element('div', `message ${kind}`.trim());
+  result.textContent = text;
+  return result;
+}
+
+function element<K extends keyof HTMLElementTagNameMap>(kind: K, className: string): HTMLElementTagNameMap[K] {
+  const result = document.createElement(kind);
+  result.className = className;
+  return result;
+}

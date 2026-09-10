@@ -11,7 +11,7 @@ const PROTOCOL = JSON.stringify({
   protocolVersion: 1,
   kind: 'protocol',
   toolVersion: '0.1.0',
-  commands: ['inspect', 'preview'],
+  commands: ['inspect', 'preview', 'convert', 'batch'],
 });
 
 test('the adapter handshakes once and invokes only its installed executable without a shell', async () => {
@@ -68,6 +68,70 @@ test('machine failures retain the stable native category and useful diagnostics'
   });
 });
 
+test('conversion spells out the immutable plan through stable native flags', async () => {
+  const calls: ExecutableRequest[] = [];
+  const converter = new EddsConverter('C:\\extension', (request) => {
+    calls.push(request);
+    return Promise.resolve({
+      stdout:
+        request.args[0] === 'protocol'
+          ? PROTOCOL
+          : '{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"BGRA8","registered":true}',
+      stderr: '',
+    });
+  });
+
+  const result = await converter.convert({
+    kind: 'ready',
+    scope: 'registered',
+    action: 'replace',
+    label: 'Replace',
+    source: 'C:\\mod\\Mod\\icon.png',
+    sourceFormat: 'PNG',
+    output: 'C:\\mod\\Mod\\icon.edds',
+    metadata: 'C:\\mod\\Mod\\icon.edds.meta',
+    identity: { guid: '0123456789ABCDEF', name: 'Mod/icon.edds', sourceFile: 'icon.png' },
+    identityAction: 'preserve',
+    profile: {
+      TargetFormat: 'EnfusionDDS',
+      FormatCompress: 'Medium',
+      CompressTreshold: 80,
+      Conversion: 'None',
+      ConversionQuality: 1,
+      Swizzling: 'None',
+      GenerateMips: false,
+      MipMapFunction: 'Filter',
+      MipMapFilter: 'Box',
+      TiledTexture: true,
+    },
+    revisions: { source: { size: 1, modified: 2 } },
+  });
+
+  assert.equal(result.registered, true);
+  assert.deepEqual(calls[1]?.args, [
+    'convert', '--machine', '--protocol', '1',
+    '--input', 'C:\\mod\\Mod\\icon.png',
+    '--output', 'C:\\mod\\Mod\\icon.edds',
+    '--target-format', 'enfusion-dds',
+    '--format-compress', 'medium',
+    '--compress-threshold', '80',
+    '--conversion', 'none',
+    '--conversion-quality', '1',
+    '--swizzling', 'none',
+    '--generate-mips', 'false',
+    '--mipmap-function', 'filter',
+    '--mipmap-filter', 'box',
+    '--tiled-texture', 'true',
+    '--expect-source-revision', '1:2',
+    '--expect-output-revision', 'missing',
+    '--expect-metadata-revision', 'missing',
+    '--metadata', 'C:\\mod\\Mod\\icon.edds.meta',
+    '--resource-name', 'Mod/icon.edds',
+    '--source-file', 'icon.png',
+    '--guid', '0123456789ABCDEF',
+  ]);
+});
+
 function inspectMessage(): string {
   return JSON.stringify({
     protocolVersion: 1,
@@ -76,6 +140,7 @@ function inspectMessage(): string {
     height: 1,
     mipCount: 1,
     pixelFormat: 'BGRX8',
+    channels: 'RGB',
     previewSupported: true,
     dds: {
       flags: 1,

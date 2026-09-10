@@ -10,4 +10,5 @@ export interface TextureStateMessage {
 export type TextureRequest =
   | { readonly type: 'ready' }
   | { readonly type: 'select-channel'; readonly channel: TextureChannel }
-  | { readonly type: 'select-mip'; readonly mip: number };
+  | { readonly type: 'select-mip'; readonly mip: number }
+  | { readonly type: 'reconvert' };
