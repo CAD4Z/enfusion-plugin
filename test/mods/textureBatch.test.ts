@@ -7,6 +7,7 @@ import {
   withTextureBatchProfile,
 } from '../../src/mods/textureBatch';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import { BATCH_MAX_JOBS } from '../../src/mods/textureBatchProtocol';
 
 const revision = { size: 91, modified: 1_725_000_000_000 };
 
@@ -216,6 +217,48 @@ test('an unsupported old non-primary profile keeps valid identity but is replace
   assert.equal(alpha?.kind, 'ready');
   assert.equal(alpha?.kind === 'ready' && alpha.plan.identity?.guid, 'A0A1A2A3A4A5A6A7');
   assert.deepEqual(alpha?.kind === 'ready' && alpha.plan.profile, DEFAULT_TEXTURE_PROFILE);
+});
+
+test('a destination reached through a dot segment is the same destination', () => {
+  const plan = textureBatchPlanOf(batch({
+    primary: 'C:\\mod\\Mod\\zeta.png',
+    items: [
+      item('C:\\mod\\Mod\\zeta.png'),
+      item('C:\\mod\\Mod\\Art\\..\\zeta.png'),
+      item('C:\\mod\\Mod\\alpha.tga'),
+    ],
+  }));
+
+  assert.equal(plan.kind, 'ready');
+  if (plan.kind !== 'ready') return;
+  // The walked path is the same file, so it never became a second item to collide with.
+  assert.deepEqual(plan.items.map(({ source }) => source), [
+    'C:\\mod\\Mod\\alpha.tga',
+    'C:\\mod\\Mod\\zeta.png',
+  ]);
+  assert.deepEqual(plan.items.map(({ kind }) => kind), ['ready', 'ready']);
+});
+
+test('a selection above the documented job ceiling is refused before an editor offers to run it', () => {
+  const sources = Array.from(
+    { length: BATCH_MAX_JOBS + 1 },
+    (_, at) => `C:\\mod\\Mod\\t${String(at).padStart(4, '0')}.png`,
+  );
+  const primary = sources[0] ?? '';
+  const items = sources.map((source, at) => item(source, {
+    newGuid: at.toString(16).toUpperCase().padStart(16, '0'),
+  }));
+
+  const refused = textureBatchPlanOf(batch({ primary, items }));
+  assert.equal(refused.kind, 'refused');
+  assert.equal(
+    refused.kind === 'refused' && refused.reason,
+    `A conversion batch runs at most ${BATCH_MAX_JOBS} textures at once; this selection has ${BATCH_MAX_JOBS + 1}.`,
+  );
+
+  const ready = textureBatchPlanOf(batch({ primary, items: items.slice(0, BATCH_MAX_JOBS) }));
+  assert.equal(ready.kind, 'ready');
+  assert.equal(ready.kind === 'ready' && ready.jobs.length, BATCH_MAX_JOBS);
 });
 
 function batch(over: Partial<TextureBatchInput> = {}): TextureBatchInput {

@@ -1,4 +1,5 @@
 import { resolveWindows, samePath, windowsFolder } from './paths';
+import { BATCH_MAX_JOBS } from './textureBatchProtocol';
 import {
   DEFAULT_TEXTURE_PROFILE,
   type ArtifactRevision,
@@ -94,7 +95,6 @@ export function textureBatchPlanOf(input: TextureBatchInput): TextureBatchPlan {
     const plan = textureConversionPlanOf({
       source: item.source,
       roots: input.roots,
-      profile,
       sourceRevision: item.sourceRevision,
       outputRevision: item.outputRevision,
       metadata: metadataForBatch(item, profile),
@@ -127,13 +127,14 @@ export function textureBatchPlanOf(input: TextureBatchInput): TextureBatchPlan {
           reason: 'Multiple selected sources resolve to the same EDDS output.',
         }
       : item);
-  return {
-    kind: 'ready',
-    primary: primary.source,
-    profile,
-    items: isolated,
-    jobs: isolated.flatMap((item) => item.kind === 'ready' ? [item.plan] : []),
-  };
+  const jobs = isolated.flatMap((item) => item.kind === 'ready' ? [item.plan] : []);
+  if (jobs.length > BATCH_MAX_JOBS) {
+    return {
+      kind: 'refused',
+      reason: `A conversion batch runs at most ${BATCH_MAX_JOBS} textures at once; this selection has ${jobs.length}.`,
+    };
+  }
+  return { kind: 'ready', primary: primary.source, profile, items: isolated, jobs };
 }
 
 /** Replaces the batch recipe whole; per-source facts and every refusal stay untouched. */

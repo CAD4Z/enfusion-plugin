@@ -59,6 +59,11 @@ jobs:
             > native/.build-sanitize/fuzz-corpus/batch-incompatible
           printf '%s' '{"protocolVersion":1,"kind":"surprise"}' \
             > native/.build-sanitize/fuzz-corpus/batch-unknown
+          printf '%s\n%s\n' '{"protocolVersion":1,"kind":"batch","jobCount":2}' \
+            '{"protocolVersion":1,"kind":"end"}' \
+            > native/.build-sanitize/fuzz-corpus/batch-stream
+          { head -c 300000 /dev/zero | tr '\0' 'x'; printf '\n{}\n'; } \
+            > native/.build-sanitize/fuzz-corpus/batch-oversized-line
       - name: Fuzz EDDS, images, metadata, and batch NDJSON smoke
         run: native/.build-sanitize/edds-fuzz -runs=2000 native/.build-sanitize/fuzz-corpus
 

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     FILE *file = tmpfile();
@@ -32,13 +33,49 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
     edds_default_profile(&profile);
     rewind(file);
-    (void)edds_convert(file, EDDS_SOURCE_PNG, output, &profile, NULL, NULL, &error);
+    (void)edds_convert(file, EDDS_SOURCE_PNG, output, &profile, NULL, NULL, NULL, NULL, &error);
     rewind(file);
     rewind(output);
-    (void)edds_convert(file, EDDS_SOURCE_TGA, output, &profile, NULL, NULL, &error);
+    (void)edds_convert(file, EDDS_SOURCE_TGA, output, &profile, NULL, NULL, NULL, NULL, &error);
     rewind(file);
     (void)edds_metadata_parse(file, &metadata, &error);
     (void)edds_batch_parse_line((const char *)data, size, &batch, &error);
+    /*
+     * The same bytes again as a stream, split where the input itself says to split them, so the
+     * framing boundary sees fragments, oversized lines and records straddling a chunk edge.
+     */
+    {
+        edds_batch_reader *reader = malloc(sizeof *reader);
+        if (reader != NULL) {
+            size_t at = 0;
+            edds_batch_reader_init(reader);
+            while (at < size) {
+                const size_t step = (size_t)(data[at] == 0u ? 1u : data[at]);
+                size_t remaining = size - at < step ? size - at : step;
+                const char *chunk = (const char *)data + at;
+                at += remaining;
+                while (remaining > 0u) {
+                    size_t consumed = 0;
+                    size_t line_size = 0;
+                    const edds_batch_line line =
+                        edds_batch_reader_push(reader, chunk, remaining, &consumed, &line_size);
+                    if (consumed == 0u) break;
+                    chunk += consumed;
+                    remaining -= consumed;
+                    if (line == EDDS_BATCH_LINE_READY) {
+                        (void)edds_batch_parse_line(reader->line, line_size, &batch, &error);
+                    }
+                }
+            }
+            {
+                size_t line_size = 0;
+                if (edds_batch_reader_finish(reader, &line_size) == EDDS_BATCH_LINE_READY) {
+                    (void)edds_batch_parse_line(reader->line, line_size, &batch, &error);
+                }
+            }
+            free(reader);
+        }
+    }
     fclose(file);
     fclose(output);
     return 0;

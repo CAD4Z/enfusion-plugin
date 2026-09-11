@@ -76,7 +76,6 @@ export type ExistingTextureMetadata =
 export interface TextureConversionInput {
   readonly source: string;
   readonly roots: readonly EnfusionRoot[];
-  readonly profile: TextureProfile;
   readonly sourceRevision: ArtifactRevision;
   readonly outputRevision?: ArtifactRevision;
   readonly metadata: ExistingTextureMetadata;

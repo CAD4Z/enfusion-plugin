@@ -4,6 +4,7 @@ import type { TextureBatchEvent } from '../../src/mods/textureBatchProtocol';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
 import {
   EDDS_BATCH_MAX_JOBS,
+  batchFailureRetryable,
   type BatchClock,
   type BatchProcess,
   type BatchProcessRequest,
@@ -126,6 +127,35 @@ test('a crashed or force-killed batch asks the filesystem boundary to clean job 
   ]]);
 });
 
+test('only a death or an internal failure comes back as work worth sending again', async () => {
+  // The converter's own exit categories: 2, 3 and 4 turn this exact input away every time.
+  for (const [code, retryable] of [
+    [2, false], [3, false], [4, false], [6, true], [null, true],
+  ] as const) {
+    const child = new FakeBatchProcess();
+    const running = runEddsBatch(
+      'edds-convert.exe',
+      [plan('alpha', 'C:\\mod\\alpha.png')],
+      () => child,
+      realClock,
+      () => undefined,
+      undefined,
+      () => Promise.resolve(),
+    );
+    child.close(code);
+    const failure = await running.then(() => undefined, (error: unknown) => error);
+    assert.equal(batchFailureRetryable(failure), retryable);
+  }
+
+  const oversized = runEddsBatch(
+    'edds-convert.exe',
+    Array.from({ length: EDDS_BATCH_MAX_JOBS + 1 }, (_, at) => plan(String(at), `C:\\mod\\t${at}.png`)),
+    () => new FakeBatchProcess(),
+    realClock,
+  );
+  assert.equal(batchFailureRetryable(await oversized.catch((error: unknown) => error)), false);
+});
+
 test('completion counters must agree with the per-item results', async () => {
   const child = new FakeBatchProcess();
   const seen: TextureBatchEvent[] = [];
@@ -169,7 +199,7 @@ class FakeBatchProcess implements BatchProcess {
   kill(): void { this.killed += 1; }
   stdout(value: string): void { this.stdoutListener(value); }
   stderr(value: string): void { this.stderrListener(value); }
-  close(code: number): void { this.resolve({ code, signal: null }); }
+  close(code: number | null): void { this.resolve({ code, signal: code === null ? 'SIGKILL' : null }); }
 }
 
 const realClock: BatchClock = {

@@ -67,7 +67,9 @@ test('per-item failures do not stop successes and cancellation preserves complet
     cancelled.state.kind === 'running' && cancelled.state.items.map(({ status }) => status),
     ['Converted', 'Failed'],
   );
-  const stopped = updateTextureBatch(cancelled.state, { kind: 'batch-failed', reason: 'cancelled' });
+  const stopped = updateTextureBatch(cancelled.state, {
+    kind: 'batch-failed', reason: 'cancelled', retryable: true,
+  });
   assert.deepEqual(
     stopped.state.kind === 'result' && stopped.state.items.map(({ status }) => status),
     ['Converted', 'Failed'],
@@ -78,7 +80,9 @@ test('a crashed process makes unfinished work retryable failures', () => {
   const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
   const running = updateTextureBatch(loaded.state, { kind: 'run' });
 
-  const crashed = updateTextureBatch(running.state, { kind: 'batch-failed', reason: 'process crashed' });
+  const crashed = updateTextureBatch(running.state, {
+    kind: 'batch-failed', reason: 'process crashed', retryable: true,
+  });
   assert.deepEqual(
     crashed.state.kind === 'result' && crashed.state.items.map(({ status, retryable }) => [status, retryable]),
     [['Failed', true], ['Failed', true]],
@@ -86,15 +90,40 @@ test('a crashed process makes unfinished work retryable failures', () => {
   const retry = updateTextureBatch(crashed.state, { kind: 'retry-failed' });
   assert.equal(retry.state.kind, 'result');
   assert.equal(retry.effects[0]?.kind, 'refresh-retry');
-  const refreshed = updateTextureBatch(retry.state, { kind: 'retry-refreshed', plan: readyPlan() });
+  const refreshed = updateTextureBatch(retry.state, { kind: 'retry-refreshed', plan: readyPlan(7) });
   assert.equal(refreshed.state.kind, 'running');
   assert.deepEqual(
     refreshed.effects[0]?.kind === 'convert-batch' && refreshed.effects[0].jobs.map(({ id }) => id),
     ['0', '1'],
   );
-  if (crashed.state.kind === 'result' && refreshed.effects[0]?.kind === 'convert-batch') {
-    assert.strictEqual(refreshed.effects[0].jobs[0]?.plan, crashed.state.items[0]?.plan);
-  }
+  // The refresh re-snapshotted revisions, so the retry must run against those, not the stale ones.
+  assert.deepEqual(
+    refreshed.effects[0]?.kind === 'convert-batch' &&
+      refreshed.effects[0].jobs.map(({ plan }) => plan.revisions.source.modified),
+    [7, 2],
+  );
+});
+
+test('a batch the converter refuses identically is not offered as retryable work', () => {
+  const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
+  const running = updateTextureBatch(loaded.state, { kind: 'run' });
+
+  const refused = updateTextureBatch(running.state, {
+    kind: 'batch-failed', reason: 'too many jobs', retryable: false,
+  });
+  assert.deepEqual(
+    refused.state.kind === 'result' && refused.state.items.map(({ status, retryable }) => [status, retryable]),
+    [['Failed', false], ['Failed', false]],
+  );
+
+  const retry = updateTextureBatch(refused.state, { kind: 'retry-failed' });
+  const refreshed = updateTextureBatch(retry.state, { kind: 'retry-refreshed', plan: readyPlan() });
+  assert.equal(refreshed.state.kind, 'result');
+  assert.deepEqual(refreshed.effects, []);
+  assert.equal(
+    refreshed.state.kind === 'result' && refreshed.state.retryReason,
+    'No failed input changed or became retryable.',
+  );
 });
 
 test('Retry Failed creates a new batch from retryable failures only', () => {

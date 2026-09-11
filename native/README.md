@@ -34,14 +34,22 @@ edds-convert convert --machine --protocol 1 --input SOURCE.png --output RESULT.e
 
 Machine output is protocol-versioned JSON on stdout. Batch stdin and stdout are NDJSON: one header,
 1–256 complete job values, and one end record are validated before encoding starts; stdout carries
-start, progress, diagnostic, result, and completion events. The bounded native implementation uses
-one worker, so decoded images cannot accumulate in an unbounded queue and a 100-item batch is
-supported without independent codec thread pools. The extension passes a private cancellation-file
-control to the process; the codec polls it at its existing cancellation points, then the extension
-force-kills only after a grace period and removes any matching sibling transaction temps.
-Diagnostics are also written for a human on
-stderr. Exit categories are stable: `0` success, `2` invalid invocation, `3` invalid
-input, `4` unsupported preview format, `5` cancellation and `6` internal failure.
+start, progress, diagnostic, result, and completion events. Framing is the reader's own: where a
+pipe split the bytes carries no protocol meaning, a line over 256 KiB is refused once rather than
+half-framed, and progress steps below a twentieth are dropped so one shared stdout cannot flood.
+
+One batch is one process over one worker pool: at most eight threads, never more than there are
+jobs or cores, and one shared 512 MiB budget that every image must fit inside before it starts
+decoding. An image charged more than the whole budget runs alone rather than being refused. So a
+hundred-item batch keeps the cores busy without independent codec thread pools, independent memory
+peaks, or a queue of decoded images nobody bounded. `EDDS_CONVERT_WORKERS` pins the worker count
+for a test or a diagnostic run; it is not a protocol field and never a texture-profile one.
+
+The extension passes a private cancellation-file control to the process; the codec polls it at its
+existing cancellation points, then the extension force-kills only after a grace period and removes
+any matching sibling transaction temps. Diagnostics are also written for a human on stderr. Exit
+categories are stable: `0` success, `2` invalid invocation, `3` invalid input, `4` unsupported
+preview format, `5` cancellation and `6` internal failure.
 
 ## Supported slice and hard limits
 

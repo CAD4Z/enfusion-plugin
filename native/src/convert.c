@@ -865,14 +865,22 @@ static uint8_t *lz4_frame(
     return frame;
 }
 
+static void report(edds_progress_fn progress, void *context, double value) {
+    if (progress != NULL) progress(context, value);
+}
+
 static edds_status prepare_storage(
     generated_mip *mips,
     uint32_t count,
     const edds_profile *profile,
+    edds_progress_fn progress,
+    void *progress_context,
     edds_error *error
 ) {
     for (uint32_t at = 0; at < count; ++at) {
         generated_mip *mip = &mips[at];
+        /* Container compression is the long part of a conversion, so it moves the row per mip. */
+        report(progress, progress_context, 0.45 + 0.45 * ((double)at / (double)count));
         mip->container = EDDS_CONTAINER_COPY;
         mip->stored_bytes = mip->bytes;
         mip->stored = mip->bgra;
@@ -1026,6 +1034,8 @@ edds_status edds_convert(
     const edds_profile *profile,
     edds_cancelled_fn cancelled,
     void *cancel_context,
+    edds_progress_fn progress,
+    void *progress_context,
     edds_error *error
 ) {
     decoded_source image = { 0, 0, 0, NULL };
@@ -1053,11 +1063,14 @@ edds_status edds_convert(
     if (status != EDDS_OK) {
         return status;
     }
+    report(progress, progress_context, 0.15);
     status = generate_mips(&image, profile, mips, &count, cancelled, cancel_context, error);
     if (status == EDDS_OK) {
-        status = prepare_storage(mips, count, profile, error);
+        report(progress, progress_context, 0.45);
+        status = prepare_storage(mips, count, profile, progress, progress_context, error);
     }
     if (status == EDDS_OK) {
+        report(progress, progress_context, 0.90);
         status = write_edds(output, &image, mips, count, error);
     }
     free_mips(mips, count);

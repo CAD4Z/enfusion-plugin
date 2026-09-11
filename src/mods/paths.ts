@@ -25,15 +25,38 @@ export function nameOf(path: string): string {
 
 /**
  * A path reduced to what a comparison should look at. Windows tells none of these apart — the
- * case, the separator, a trailing one, the leading slash a `Uri.path` carries in front of a drive
- * letter — so neither does anything here that compares two paths.
+ * case, the separator, a doubled or trailing one, a `.` segment, a `..` the path walks back
+ * through, the leading slash a `Uri.path` carries in front of a drive letter — so neither does
+ * anything here that compares two paths. A root never walks above itself, which is what keeps
+ * `C:\..` and a UNC share whole.
  */
 export function samePath(path: string): string {
-  return path
-    .replace(/\\/g, '/')
-    .replace(/^\/(?=[A-Za-z]:)/, '')
-    .replace(/\/+$/, '')
-    .toLowerCase();
+  const slashed = path.replace(/\\/g, '/').replace(/^\/(?=[A-Za-z]:)/, '');
+  const share = slashed.startsWith('//');
+  const rooted = !share && slashed.startsWith('/');
+  const parts = slashed.split('/').filter((part) => part !== '' && part !== '.');
+  // A root is never walked above: the drive letter, or the server and share naming a UNC root.
+  const root = share ? `//${parts.splice(0, 2).join('/')}`
+    : rooted ? '/'
+    : /^[A-Za-z]:$/.test(parts[0] ?? '') ? parts.shift() ?? ''
+    : '';
+  const segments: string[] = [];
+  for (const part of parts) {
+    if (part !== '..') {
+      segments.push(part);
+    } else if (segments.length > 0 && segments[segments.length - 1] !== '..') {
+      segments.pop();
+    } else if (root === '') {
+      segments.push(part);
+    }
+  }
+
+  const below = segments.join('/');
+  const joined = below === '' ? root
+    : root === '' ? below
+    : root === '/' ? `/${below}`
+    : `${root}/${below}`;
+  return joined.toLowerCase();
 }
 
 /** Either separator, because a path typed into a manifest is typed whichever way. */

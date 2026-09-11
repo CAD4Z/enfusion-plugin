@@ -416,3 +416,65 @@ edds_status edds_batch_parse_line(
 malformed:
     return fail(error, "malformed-batch-record", "A batch input record is incomplete, duplicated, or unsupported.");
 }
+
+void edds_batch_reader_init(edds_batch_reader *reader) {
+    if (reader != NULL) memset(reader, 0, sizeof *reader);
+}
+
+static edds_batch_line finish_line(edds_batch_reader *reader, size_t *size) {
+    if (reader->overflowed) {
+        reader->overflowed = 0;
+        reader->size = 0;
+        *size = 0;
+        return EDDS_BATCH_LINE_OVERFLOW;
+    }
+    if (reader->size > 0u && reader->line[reader->size - 1u] == '\r') --reader->size;
+    reader->line[reader->size] = '\0';
+    *size = reader->size;
+    reader->size = 0;
+    return EDDS_BATCH_LINE_READY;
+}
+
+edds_batch_line edds_batch_reader_push(
+    edds_batch_reader *reader,
+    const char *data,
+    size_t data_size,
+    size_t *consumed,
+    size_t *size
+) {
+    size_t at = 0;
+    if (reader == NULL || consumed == NULL || size == NULL || (data == NULL && data_size != 0u)) {
+        if (consumed != NULL) *consumed = 0;
+        if (size != NULL) *size = 0;
+        return EDDS_BATCH_LINE_PENDING;
+    }
+    *size = 0;
+    while (at < data_size) {
+        const char value = data[at++];
+        if (value == '\n') {
+            *consumed = at;
+            return finish_line(reader, size);
+        }
+        if (reader->size >= EDDS_BATCH_MAX_LINE_BYTES) {
+            /* The rest of an oversized line is swallowed, never framed into half a record. */
+            reader->overflowed = 1;
+            reader->size = 0;
+            continue;
+        }
+        if (!reader->overflowed) reader->line[reader->size++] = value;
+    }
+    *consumed = at;
+    return EDDS_BATCH_LINE_PENDING;
+}
+
+edds_batch_line edds_batch_reader_finish(edds_batch_reader *reader, size_t *size) {
+    if (reader == NULL || size == NULL) return EDDS_BATCH_LINE_PENDING;
+    *size = 0;
+    if (reader->overflowed) {
+        reader->overflowed = 0;
+        reader->size = 0;
+        return EDDS_BATCH_LINE_OVERFLOW;
+    }
+    if (reader->size == 0u) return EDDS_BATCH_LINE_PENDING;
+    return finish_line(reader, size);
+}

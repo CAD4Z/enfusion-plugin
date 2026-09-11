@@ -4,6 +4,7 @@
 
 #include <edds/edds.h>
 #include <edds/batch.h>
+#include <edds/pool.h>
 
 #include <errno.h>
 #include <signal.h>
@@ -22,6 +23,7 @@ typedef wchar_t cli_char;
 #define cli_remove _wremove
 #define cli_rename _wrename
 #define cli_strlen wcslen
+#define cli_strcmp wcscmp
 #define cli_getpid _getpid
 #else
 #include <sys/stat.h>
@@ -31,10 +33,12 @@ typedef char cli_char;
 #define cli_remove remove
 #define cli_rename rename
 #define cli_strlen strlen
+#define cli_strcmp strcmp
 #define cli_getpid getpid
 #endif
 
 enum { EDDS_PROTOCOL_VERSION = 1 };
+#define EDDS_PROTOCOL_TEXT "1"
 #define EDDS_TOOL_VERSION "0.1.0"
 
 static volatile sig_atomic_t interrupted = 0;
@@ -505,20 +509,110 @@ static int ends_with(const cli_char *path, const char *suffix) {
     return 1;
 }
 
-static int same_path(const cli_char *left, const cli_char *right) {
+/**
+ * A destination reduced to what a comparison should look at: case, either separator, a doubled or
+ * trailing one, a `.` segment, and a `..` the path walks back through. A root is never walked
+ * above, so a drive and a UNC share stay whole. Returns a malloc'd normal form, or NULL.
+ */
+static int is_separator(cli_char value) {
+    return value == (cli_char)'/' || value == (cli_char)'\\';
+}
+
+static cli_char *normalized_path(const cli_char *path) {
+    const size_t length = cli_strlen(path);
+    cli_char *result = malloc((length + 2u) * sizeof *result);
+    /* Where each segment that may still be walked off begins; a root segment is never in here. */
+    size_t *marks = malloc((length / 2u + 2u) * sizeof *marks);
+    size_t depth = 0;
+    size_t out = 0;
+    size_t at = 0;
+    size_t prefix;
+    size_t roots;
+    int share;
+    int anchored;
+    if (result == NULL || marks == NULL) {
+        free(result);
+        free(marks);
+        return NULL;
+    }
+    /* A `/C:` the way a Uri.path spells a drive is not a rooted path, it is the drive itself. */
+    if (length >= 3u && is_separator(path[0]) && path[2] == (cli_char)':' &&
+        ascii_lower(path[1]) >= (cli_char)'a' && ascii_lower(path[1]) <= (cli_char)'z') {
+        at = 1u;
+    }
+    share = length >= at + 2u && is_separator(path[at]) && is_separator(path[at + 1u]);
+    if (share) {
+        result[out++] = (cli_char)'/';
+        result[out++] = (cli_char)'/';
+        at += 2u;
+    } else if (at < length && is_separator(path[at])) {
+        result[out++] = (cli_char)'/';
+        ++at;
+    }
+    prefix = out;
+    /* The server and the share name a UNC root; a bare drive letter is a root of its own. */
+    roots = share ? 2u : 0u;
+    anchored = prefix > 0u;
+
+    while (at < length) {
+        const size_t start = at;
+        size_t size;
+        int parent;
+        while (at < length && !is_separator(path[at])) ++at;
+        size = at - start;
+        if (at < length) ++at;
+        if (size == 0u || (size == 1u && path[start] == (cli_char)'.')) continue;
+        parent = size == 2u && path[start] == (cli_char)'.' && path[start + 1u] == (cli_char)'.';
+        if (parent && depth > 0u) {
+            out = marks[--depth];
+            continue;
+        }
+        /* Nothing sits above a root, so the walk a rooted path cannot take is dropped, not kept. */
+        if (parent && anchored) continue;
+        if (out > prefix) result[out++] = (cli_char)'/';
+        /* A root segment and a `..` a relative path kept are both segments nothing walks off. */
+        if (roots > 0u) {
+            --roots;
+        } else if (!parent) {
+            marks[depth++] = out > prefix ? out - 1u : out;
+        }
+        for (size_t copy = 0; copy < size; ++copy) {
+            result[out++] = (cli_char)ascii_lower(path[start + copy]);
+        }
+        if (!anchored && depth == 1u && out == 2u && result[1] == (cli_char)':') {
+            /* That first segment was a drive letter after all: it becomes the root behind us. */
+            depth = 0;
+            anchored = 1;
+        }
+    }
+    result[out] = 0;
+    free(marks);
+    return result;
+}
+
+/** Case and separator only: what a comparison can still say when there is no memory to normalize. */
+static int same_path_literally(const cli_char *left, const cli_char *right) {
     while (*left != 0 && *right != 0) {
-#ifdef _WIN32
-        cli_char a = *left == L'/' ? L'\\' : *left;
-        cli_char b = *right == L'/' ? L'\\' : *right;
-#else
-        cli_char a = *left;
-        cli_char b = *right;
-#endif
-        if (ascii_lower(a) != ascii_lower(b)) return 0;
+        const cli_char a = is_separator(*left) ? (cli_char)'/' : (cli_char)ascii_lower(*left);
+        const cli_char b = is_separator(*right) ? (cli_char)'/' : (cli_char)ascii_lower(*right);
+        if (a != b) return 0;
         ++left;
         ++right;
     }
     return *left == 0 && *right == 0;
+}
+
+static int same_path(const cli_char *left, const cli_char *right) {
+    cli_char *canonical_left = normalized_path(left);
+    cli_char *canonical_right = normalized_path(right);
+    /* Out of memory, the coarser answer is the safe one: a collision missed writes two jobs to
+       one file, while a collision seen twice only refuses work the caller can ask for again. */
+    const int same = canonical_left == NULL || canonical_right == NULL
+        ? same_path_literally(left, right)
+        : cli_strcmp(canonical_left, canonical_right) == 0;
+    free(canonical_left);
+    free(canonical_right);
+    return same;
 }
 
 static cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
@@ -825,6 +919,8 @@ static edds_status validate_previous_metadata(
 static edds_status convert_atomically(
     const parsed_arguments *options,
     const edds_profile *profile,
+    edds_progress_fn progress,
+    void *progress_context,
     edds_error *error
 ) {
     FILE *source = NULL;
@@ -896,7 +992,8 @@ static edds_status convert_atomically(
     }
     status = injected("output-write")
         ? injected_failure(error, "output-write")
-        : edds_convert(source, format, temporary_output, profile, was_cancelled, NULL, error);
+        : edds_convert(source, format, temporary_output, profile, was_cancelled, NULL,
+            progress, progress_context, error);
     if (status == EDDS_OK && !sync_output(temporary_output, "output-flush")) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "temporary-flush-failed");
@@ -975,7 +1072,7 @@ static int convert_command(const parsed_arguments *options) {
     edds_status status = profile_of(options, &profile, &error);
     FILE *output;
     if (status != EDDS_OK) return report_failure(status, &error);
-    status = convert_atomically(options, &profile, &error);
+    status = convert_atomically(options, &profile, NULL, NULL, &error);
     if (status != EDDS_OK) return report_failure(status, &error);
     output = open_input(options->output);
     if (output == NULL) {
@@ -1085,25 +1182,51 @@ static int native_batch_job_of(const edds_batch_job *source, native_batch_job *j
     return 1;
 }
 
+/**
+ * Stdin arrives in whatever sizes the pipe felt like, so framing is the reader's job and this is
+ * only the part that keeps feeding it. 1 is a whole line, 0 is the end of the stream, -1 is a line
+ * the protocol refuses.
+ */
+static struct {
+    edds_batch_reader reader;
+    char chunk[8192];
+    size_t size;
+    size_t at;
+    int ended;
+} batch_stdin;
+
 static int read_batch_line(char *line, size_t capacity, size_t *size, edds_error *error) {
-    size_t at = 0;
-    int value;
-    while ((value = fgetc(stdin)) != EOF && value != '\n') {
-        if (at + 1u >= capacity) {
-            while ((value = fgetc(stdin)) != EOF && value != '\n') {}
+    for (;;) {
+        edds_batch_line framed = EDDS_BATCH_LINE_PENDING;
+        size_t consumed = 0;
+        size_t length = 0;
+        if (batch_stdin.at < batch_stdin.size) {
+            framed = edds_batch_reader_push(&batch_stdin.reader, batch_stdin.chunk + batch_stdin.at,
+                batch_stdin.size - batch_stdin.at, &consumed, &length);
+            batch_stdin.at += consumed;
+        } else if (!batch_stdin.ended) {
+            batch_stdin.size = fread(batch_stdin.chunk, 1, sizeof batch_stdin.chunk, stdin);
+            batch_stdin.at = 0;
+            if (batch_stdin.size == 0u) batch_stdin.ended = 1;
+            continue;
+        } else {
+            framed = edds_batch_reader_finish(&batch_stdin.reader, &length);
+            if (framed == EDDS_BATCH_LINE_PENDING) return 0;
+        }
+        if (framed == EDDS_BATCH_LINE_OVERFLOW || (framed == EDDS_BATCH_LINE_READY &&
+                length + 1u > capacity)) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "batch-line-size");
             (void)snprintf(error->message, sizeof error->message,
                 "A batch NDJSON record exceeds the hard line limit.");
             return -1;
         }
-        line[at++] = (char)value;
+        if (framed == EDDS_BATCH_LINE_READY) {
+            memcpy(line, batch_stdin.reader.line, length + 1u);
+            *size = length;
+            return 1;
+        }
     }
-    if (value == EOF && at == 0u) return 0;
-    if (at > 0u && line[at - 1u] == '\r') --at;
-    line[at] = '\0';
-    *size = at;
-    return 1;
 }
 
 static edds_status read_batch(
@@ -1214,13 +1337,26 @@ static edds_status read_batch(
         free(record);
         return read < 0 ? EDDS_INVALID_INVOCATION : status;
     }
-    for (uint32_t at = 0; at < *count; ++at) {
-        for (uint32_t other = at + 1u; other < *count; ++other) {
-            if (same_path(loaded[at].output, loaded[other].output)) {
-                loaded[at].collision = 1;
-                loaded[other].collision = 1;
+    /* Normalized once each, so comparing every destination against every other stays cheap. */
+    {
+        cli_char **destinations = calloc(*count, sizeof *destinations);
+        for (uint32_t at = 0; destinations != NULL && at < *count; ++at) {
+            destinations[at] = normalized_path(loaded[at].output);
+        }
+        for (uint32_t at = 0; at < *count; ++at) {
+            for (uint32_t other = at + 1u; other < *count; ++other) {
+                const int same = destinations == NULL || destinations[at] == NULL ||
+                    destinations[other] == NULL
+                    ? same_path(loaded[at].output, loaded[other].output)
+                    : cli_strcmp(destinations[at], destinations[other]) == 0;
+                if (same) {
+                    loaded[at].collision = 1;
+                    loaded[other].collision = 1;
+                }
             }
         }
+        for (uint32_t at = 0; destinations != NULL && at < *count; ++at) free(destinations[at]);
+        free(destinations);
     }
     free(line);
     free(record);
@@ -1296,62 +1432,124 @@ static void write_batch_converted(const native_batch_job *job, const edds_info *
         job->options.metadata != NULL ? "true" : "false");
 }
 
-static int batch_command(void) {
-    native_batch_job *jobs = NULL;
-    uint32_t count = 0;
-    uint32_t converted = 0;
-    uint32_t failed = 0;
-    uint32_t cancelled = 0;
+typedef struct batch_run {
+    native_batch_job *jobs;
+    uint32_t converted;
+    uint32_t failed;
+    uint32_t cancelled;
+} batch_run;
+
+typedef struct batch_reporter {
+    const char *id;
+    edds_pool *pool;
+    double reported;
+} batch_reporter;
+
+/**
+ * One row moving while its image converts. Steps below a twentieth are dropped, so a batch of two
+ * hundred images cannot flood the one stdout every worker shares.
+ */
+static void batch_progress(void *context, double progress) {
+    batch_reporter *reporter = (batch_reporter *)context;
+    if (progress < reporter->reported + 0.05 || progress >= 1.0) return;
+    reporter->reported = progress;
+    edds_pool_lock_output(reporter->pool);
+    write_batch_progress(reporter->id, progress);
+    (void)fflush(stdout);
+    edds_pool_unlock_output(reporter->pool);
+}
+
+/** One image, on whichever worker claimed it. Everything shared is touched under a pool lock. */
+static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
+    batch_run *run = (batch_run *)context;
+    native_batch_job *job = &run->jobs[at];
+    batch_reporter reporter = { NULL, NULL, 0.0 };
+    file_revision source_revision;
     edds_error error;
-    edds_status status = read_batch(&jobs, &count, &error);
+    edds_info info;
+    edds_status status;
+    uint64_t charge;
+    reporter.id = job->id;
+    reporter.pool = pool;
+
+    if (was_cancelled(NULL)) {
+        memset(&error, 0, sizeof error);
+        (void)snprintf(error.code, sizeof error.code, "cancelled");
+        (void)snprintf(error.message, sizeof error.message,
+            "The batch was cancelled before this job started.");
+        edds_pool_lock_output(pool);
+        write_batch_failed(job->id, "Cancelled", &error, 0);
+        ++run->cancelled;
+        (void)fflush(stdout);
+        edds_pool_unlock_output(pool);
+        return;
+    }
+    if (job->collision) {
+        memset(&error, 0, sizeof error);
+        (void)snprintf(error.code, sizeof error.code, "output-collision");
+        (void)snprintf(error.message, sizeof error.message,
+            "Multiple batch jobs resolve to the same output; no winner was selected.");
+        edds_pool_lock_output(pool);
+        write_batch_diagnostic(job->id, EDDS_INVALID_INPUT, &error);
+        write_batch_failed(job->id, "Failed", &error, 0);
+        ++run->failed;
+        (void)fflush(stdout);
+        edds_pool_unlock_output(pool);
+        return;
+    }
+
+    edds_pool_lock_output(pool);
+    write_batch_progress(job->id, 0.0);
+    (void)fflush(stdout);
+    edds_pool_unlock_output(pool);
+
+    /* The image only starts decoding once its share of the one memory budget is free. */
+    charge = edds_pool_charge_of(
+        revision_of(job->options.input, &source_revision) && source_revision.exists
+            ? source_revision.size
+            : 0u);
+    edds_pool_reserve(pool, charge);
+    status = convert_atomically(&job->options, &job->profile, batch_progress, &reporter, &error);
+    inject_batch_cancel_after_first_commit(at, status);
+    if (status == EDDS_OK) status = inspect_converted(job, &info, &error);
+    edds_pool_release(pool, charge);
+
+    edds_pool_lock_output(pool);
+    if (status == EDDS_OK) {
+        write_batch_progress(job->id, 1.0);
+        write_batch_converted(job, &info);
+        ++run->converted;
+    } else if (status == EDDS_CANCELLED || was_cancelled(NULL)) {
+        write_batch_diagnostic(job->id, EDDS_CANCELLED, &error);
+        write_batch_failed(job->id, "Cancelled", &error, 0);
+        ++run->cancelled;
+    } else {
+        write_batch_diagnostic(job->id, status, &error);
+        write_batch_failed(job->id, "Failed", &error, status == EDDS_INTERNAL_FAILURE);
+        ++run->failed;
+    }
+    (void)fflush(stdout);
+    edds_pool_unlock_output(pool);
+}
+
+static int batch_command(void) {
+    batch_run run = { NULL, 0, 0, 0 };
+    uint32_t count = 0;
+    edds_error error;
+    edds_status status = read_batch(&run.jobs, &count, &error);
     if (status != EDDS_OK) return report_failure(status, &error);
     (void)printf("{\"protocolVersion\":1,\"kind\":\"batch-started\",\"jobCount\":%u}\n", count);
     (void)fflush(stdout);
-    for (uint32_t at = 0; at < count; ++at) {
-        edds_info info;
-        if (was_cancelled(NULL)) {
-            memset(&error, 0, sizeof error);
-            (void)snprintf(error.code, sizeof error.code, "cancelled");
-            (void)snprintf(error.message, sizeof error.message,
-                "The batch was cancelled before this job started.");
-            write_batch_failed(jobs[at].id, "Cancelled", &error, 0);
-            ++cancelled;
-            continue;
-        }
-        if (jobs[at].collision) {
-            memset(&error, 0, sizeof error);
-            (void)snprintf(error.code, sizeof error.code, "output-collision");
-            (void)snprintf(error.message, sizeof error.message,
-                "Multiple batch jobs resolve to the same output; no winner was selected.");
-            write_batch_diagnostic(jobs[at].id, EDDS_INVALID_INPUT, &error);
-            write_batch_failed(jobs[at].id, "Failed", &error, 0);
-            ++failed;
-            continue;
-        }
-        write_batch_progress(jobs[at].id, 0.0);
-        (void)fflush(stdout);
-        status = convert_atomically(&jobs[at].options, &jobs[at].profile, &error);
-        inject_batch_cancel_after_first_commit(at, status);
-        if (status == EDDS_OK) status = inspect_converted(&jobs[at], &info, &error);
-        if (status == EDDS_OK) {
-            write_batch_progress(jobs[at].id, 1.0);
-            write_batch_converted(&jobs[at], &info);
-            ++converted;
-        } else if (status == EDDS_CANCELLED || was_cancelled(NULL)) {
-            write_batch_diagnostic(jobs[at].id, EDDS_CANCELLED, &error);
-            write_batch_failed(jobs[at].id, "Cancelled", &error, 0);
-            ++cancelled;
-        } else {
-            write_batch_diagnostic(jobs[at].id, status, &error);
-            write_batch_failed(jobs[at].id, "Failed", &error, status == EDDS_INTERNAL_FAILURE);
-            ++failed;
-        }
-        (void)fflush(stdout);
+    status = edds_pool_run(count, EDDS_POOL_MEMORY_BUDGET, batch_job_task, &run, &error);
+    if (status != EDDS_OK) {
+        for (uint32_t at = 0; at < count; ++at) free_batch_job(&run.jobs[at]);
+        free(run.jobs);
+        return report_failure(status, &error);
     }
     (void)printf("{\"protocolVersion\":1,\"kind\":\"complete\",\"converted\":%u,"
-        "\"failed\":%u,\"cancelled\":%u}\n", converted, failed, cancelled);
-    for (uint32_t at = 0; at < count; ++at) free_batch_job(&jobs[at]);
-    free(jobs);
+        "\"failed\":%u,\"cancelled\":%u}\n", run.converted, run.failed, run.cancelled);
+    for (uint32_t at = 0; at < count; ++at) free_batch_job(&run.jobs[at]);
+    free(run.jobs);
     if (ferror(stdout)) return EDDS_INTERNAL_FAILURE;
     return was_cancelled(NULL) ? EDDS_CANCELLED : 0;
 }
@@ -1377,7 +1575,8 @@ int CLI_ENTRY(int argc, cli_char **argv) {
         return 0;
     }
     if ((argc == 5 || argc == 7) && equals(argv[1], "batch") &&
-        equals(argv[2], "--machine") && equals(argv[3], "--protocol") && equals(argv[4], "1") &&
+        equals(argv[2], "--machine") && equals(argv[3], "--protocol") &&
+        equals(argv[4], EDDS_PROTOCOL_TEXT) &&
         (argc == 5 || equals(argv[5], "--cancel-file"))) {
         int result;
         batch_cancel_file = argc == 7 ? argv[6] : NULL;

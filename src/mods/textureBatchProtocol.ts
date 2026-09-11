@@ -3,6 +3,13 @@ import type { EddsConversion, EddsFailureCategory } from './edds';
 export const BATCH_PROTOCOL_VERSION = 1;
 export const BATCH_EVENT_MAX_BYTES = 256 * 1024;
 
+/**
+ * The documented hard ceiling on one batch, well above the hundred-item selection the feature
+ * must support. It lives here so the plan refuses an oversized selection before an editor offers
+ * to run it, and the process boundary refuses the same count before it spawns anything.
+ */
+export const BATCH_MAX_JOBS = 256;
+
 export type TextureBatchEvent =
   | { readonly protocolVersion: 1; readonly kind: 'batch-started'; readonly jobCount: number }
   | { readonly protocolVersion: 1; readonly kind: 'progress'; readonly id: string; readonly progress: number }

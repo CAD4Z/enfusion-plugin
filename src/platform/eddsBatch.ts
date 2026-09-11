@@ -6,14 +6,33 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { TextureBatchEvent } from '../mods/textureBatchProtocol';
 import {
+  BATCH_MAX_JOBS,
   BATCH_PROTOCOL_VERSION,
   TextureBatchProtocolReader,
 } from '../mods/textureBatchProtocol';
 import type { TextureBatchJob } from '../mods/textureBatch';
 
-export const EDDS_BATCH_MAX_JOBS = 256;
+export const EDDS_BATCH_MAX_JOBS = BATCH_MAX_JOBS;
 export const EDDS_BATCH_CANCEL_GRACE_MS = 2_000;
 const STDERR_MAX_BYTES = 1024 * 1024;
+/** The one exit category the converter uses for a failure that was not the input's fault. */
+const EDDS_INTERNAL_FAILURE_EXIT = 6;
+
+/**
+ * A batch that never became per-item results. `retryable` separates a process that died from an
+ * input the converter refuses identically every time, so Retry Failed cannot loop on the latter.
+ */
+export class BatchFailure extends Error {
+  constructor(message: string, readonly retryable: boolean) {
+    super(message);
+    this.name = 'BatchFailure';
+  }
+}
+
+/** A failure the caller did not classify is treated as the input's fault, never as transient. */
+export function batchFailureRetryable(error: unknown): boolean {
+  return error instanceof BatchFailure && error.retryable;
+}
 
 export interface BatchProcessRequest {
   readonly executable: string;
@@ -61,12 +80,15 @@ export async function runEddsBatch(
   cleanup: CleanupBatchTemps = cleanupBatchTemps,
 ): Promise<EddsBatchExecution> {
   if (jobs.length === 0 || jobs.length > EDDS_BATCH_MAX_JOBS) {
-    throw new Error(`A conversion batch must contain at least one and at most ${EDDS_BATCH_MAX_JOBS} jobs.`);
+    throw new BatchFailure(
+      `A conversion batch must contain at least one and at most ${EDDS_BATCH_MAX_JOBS} jobs.`,
+      false,
+    );
   }
   const identifiers = new Set<string>();
   for (const job of jobs) {
     if (job.id.length === 0 || identifiers.has(job.id)) {
-      throw new Error('Every conversion batch job requires a unique non-empty id.');
+      throw new BatchFailure('Every conversion batch job requires a unique non-empty id.', false);
     }
     identifiers.add(job.id);
   }
@@ -86,7 +108,7 @@ export async function runEddsBatch(
   let cleanExit = false;
   const accept = (event: TextureBatchEvent): void => {
     if ('id' in event && !identifiers.has(event.id)) {
-      throw new Error(`The native batch stream named unknown job ${event.id}.`);
+      throw new BatchFailure(`The native batch stream named unknown job ${event.id}.`, false);
     }
     events.push(event);
     if (event.kind !== 'complete') onEvent(event);
@@ -125,16 +147,24 @@ export async function runEddsBatch(
       }
     }
     if (protocolFailure !== undefined) throw errorOf(protocolFailure);
-    if (cancelled) throw new Error('The texture conversion batch was cancelled.');
+    if (cancelled) throw new BatchFailure('The texture conversion batch was cancelled.', false);
     if (exit.code !== 0) {
-      throw new Error(stderr.trim() || `The native batch process exited with code ${String(exit.code)}.`);
+      /*
+       * A process that died, or failed inside itself, is worth the same jobs again. The refusal
+       * categories are not: 2, 3 and 4 are this exact input being turned away, and would land on
+       * the same code every time it was sent back.
+       */
+      throw new BatchFailure(
+        stderr.trim() || `The native batch process exited with code ${String(exit.code)}.`,
+        exit.code === null || exit.code === EDDS_INTERNAL_FAILURE_EXIT,
+      );
     }
     const started = events.filter((event) => event.kind === 'batch-started');
     const complete = events.filter((event) => event.kind === 'complete');
     const completed = complete[0];
     if (started.length !== 1 || started[0]?.jobCount !== jobs.length ||
         complete.length !== 1 || completed === undefined) {
-      throw new Error('The native batch stream ended without one matching start and completion event.');
+      throw new BatchFailure('The native batch stream ended without one matching start and completion event.', false);
     }
     const results = events.filter(
       (event): event is Extract<TextureBatchEvent, { kind: 'result' }> => event.kind === 'result',
@@ -142,19 +172,19 @@ export async function runEddsBatch(
     const resultIds = new Set(results.map(({ id }) => id));
     if (results.length !== jobs.length || resultIds.size !== jobs.length ||
         results.some((result) => !identifiers.has(result.id))) {
-      throw new Error('The native batch stream did not return exactly one result for every job.');
+      throw new BatchFailure('The native batch stream did not return exactly one result for every job.', false);
     }
     const converted = results.filter(({ status }) => status === 'Converted').length;
     const failed = results.filter(({ status }) => status === 'Failed').length;
     const cancelledCount = results.filter(({ status }) => status === 'Cancelled').length;
     if (completed.converted !== converted || completed.failed !== failed ||
         completed.cancelled !== cancelledCount || converted + failed + cancelledCount !== jobs.length) {
-      throw new Error('The native batch completion counts do not match its per-item results.');
+      throw new BatchFailure('The native batch completion counts do not match its per-item results.', false);
     }
     const execution = {
       results: jobs.map((job) => {
         const result = results.find(({ id }) => id === job.id);
-        if (result === undefined) throw new Error(`The native batch omitted job ${job.id}.`);
+        if (result === undefined) throw new BatchFailure(`The native batch omitted job ${job.id}.`, false);
         return result;
       }),
       diagnostics: events.filter(

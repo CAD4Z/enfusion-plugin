@@ -42,9 +42,12 @@ An explicit Explorer multi-selection opens one conversion batch. The file whose 
 used is the primary source image and supplies the one complete profile; selection order does not.
 The editor lists create/reconvert/replace or refusal per item, renders one active viewport, and
 reports per-file and overall progress. Sources sharing a Windows-normalized destination are all
-refused without a winner. One bundled `edds-convert batch` process owns up to 256 jobs (including
-selections of 100), keeps completed outputs on cancellation, and lets retryable failures be retried
-without rerunning successes.
+refused without a winner. A selection above that ceiling is refused before the editor offers to run
+it. One bundled `edds-convert batch` process owns up to 256 jobs (including selections of 100) and
+spreads them over one bounded worker pool with one shared memory budget, so a large selection keeps
+the cores busy without a codec pool or a memory peak per image. It keeps completed outputs on
+cancellation, and lets retryable failures be retried without rerunning successes; an input the
+converter refuses identically every time is not offered as retryable work.
 
 The public native CLI can convert a PNG or TGA to any explicit output path without a project gate.
 It accepts the same stable recipe flags used by the editor; `inspect --metadata PATH` returns the

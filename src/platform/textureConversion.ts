@@ -11,7 +11,6 @@ import {
   textureBatchPlanOf,
 } from '../mods/textureBatch';
 import {
-  DEFAULT_TEXTURE_PROFILE,
   type ArtifactRevision,
   type EnfusionRoot,
   type ExistingTextureMetadata,
@@ -53,19 +52,15 @@ export async function loadTextureConversion(
   const occupiedGuids = await occupiedGuidsOf(roots, converter);
   const newGuid = textureGuidOf(() => randomBytes(8), occupiedGuids);
 
-  const plan = textureConversionPlanOf({
+  return textureConversionPlanOf({
     source: source.fsPath,
     roots,
-    profile: DEFAULT_TEXTURE_PROFILE,
     sourceRevision,
     outputRevision,
     metadata,
     newGuid,
     occupiedGuids,
   });
-  return plan.kind === 'ready' && plan.action === 'reconvert' && metadata.kind === 'valid'
-    ? { ...plan, profile: metadata.value.profile }
-    : plan;
 }
 
 /** Captures one explicit Explorer selection; folders and unsupported items stay as item facts. */

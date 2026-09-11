@@ -52,6 +52,19 @@ foreach(expected IN ITEMS
   endif()
 endforeach()
 
+# A row has to move while its own image converts, not only when the whole file is finished.
+string(REGEX MATCHALL "\"kind\":\"progress\",\"id\":\"png\",\"progress\":[0-9.]+"
+  png_progress "${batch_output}")
+set(png_progress_between 0)
+foreach(reported IN LISTS png_progress)
+  if(NOT reported MATCHES "\"progress\":(0\\.000|1\\.000)$")
+    math(EXPR png_progress_between "${png_progress_between} + 1")
+  endif()
+endforeach()
+if(png_progress_between LESS 1)
+  message(FATAL_ERROR "per-file progress never reported a step between 0 and 1: ${png_progress}")
+endif()
+
 set(collision_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-collision.ndjson")
 set(collision_output "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-collision.edds")
 set(collision_independent "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-independent.edds")
@@ -77,6 +90,37 @@ foreach(expected IN ITEMS
     "\"id\":\"independent\",\"status\":\"Converted\"")
   if(NOT collision_stdout MATCHES "${expected}")
     message(FATAL_ERROR "collision batch omitted per-item status ${expected}: ${collision_stdout}")
+  endif()
+endforeach()
+
+# A destination reached through a dot segment is the same destination, so it is the same group.
+set(walked_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-walked.ndjson")
+set(walked_output "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-walked.edds")
+set(walked_alias "${CMAKE_CURRENT_BINARY_DIR}/sub/../black-box-batch-walked.edds")
+set(walked_independent "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-walked-other.edds")
+file(REMOVE "${walked_output}" "${walked_independent}")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sub")
+file(WRITE "${walked_input}"
+  "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":3}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"plain\",\"input\":\"${png}\",\"output\":\"${walked_output}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"walked\",\"input\":\"${tga}\",\"output\":\"${walked_alias}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"independent\",\"input\":\"${png}\",\"output\":\"${walked_independent}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
+execute_process(
+  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${walked_input}"
+  RESULT_VARIABLE walked_result OUTPUT_VARIABLE walked_stdout ERROR_QUIET
+)
+if(NOT walked_result EQUAL 0 OR EXISTS "${walked_output}" OR
+    NOT EXISTS "${walked_independent}" OR
+    NOT walked_stdout MATCHES "\"converted\":1" OR NOT walked_stdout MATCHES "\"failed\":2")
+  message(FATAL_ERROR "a walked destination was not grouped with the plain one: ${walked_stdout}")
+endif()
+foreach(expected IN ITEMS
+    "\"id\":\"plain\",\"status\":\"Failed\""
+    "\"id\":\"walked\",\"status\":\"Failed\""
+    "\"id\":\"independent\",\"status\":\"Converted\"")
+  if(NOT walked_stdout MATCHES "${expected}")
+    message(FATAL_ERROR "walked collision omitted per-item status ${expected}: ${walked_stdout}")
   endif()
 endforeach()
 
@@ -141,8 +185,10 @@ file(WRITE "${mid_cancel_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"queued-1\",\"input\":\"${tga}\",\"output\":\"${mid_cancel_second}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"queued-2\",\"input\":\"${png}\",\"output\":\"${mid_cancel_third}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
+# Pinned to one worker so "after the first commit" names one job, not whichever finished first.
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env "EDDS_CONVERT_FAIL=batch-cancel-after-first-commit"
+    "EDDS_CONVERT_WORKERS=1"
     "${CLI}" batch --machine --protocol 1 --cancel-file "${mid_cancel_marker}"
   INPUT_FILE "${mid_cancel_input}"
   RESULT_VARIABLE mid_cancel_result OUTPUT_VARIABLE mid_cancel_output ERROR_QUIET

@@ -113,6 +113,12 @@ typedef struct edds_info {
 
 typedef int (*edds_cancelled_fn)(void *context);
 
+/**
+ * How far one conversion has got, from 0 to 1. A batch reports a file this way, so a long image
+ * moves its own row rather than only appearing when it is finished.
+ */
+typedef void (*edds_progress_fn)(void *context, double progress);
+
 edds_status edds_inspect(
     FILE *input,
     edds_info *info,
@@ -141,6 +147,8 @@ edds_status edds_convert(
     const edds_profile *profile,
     edds_cancelled_fn cancelled,
     void *cancel_context,
+    edds_progress_fn progress,
+    void *progress_context,
     edds_error *error
 );
 

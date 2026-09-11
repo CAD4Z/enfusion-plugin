@@ -195,7 +195,6 @@ function input(over: Partial<TextureConversionInput> = {}): TextureConversionInp
   return {
     source: 'C:\\repo\\MyMod\\MyMod\\GUI\\icon.png',
     roots: [{ root: 'C:\\repo\\MyMod', prefixRoot: 'C:\\repo\\MyMod\\MyMod' }],
-    profile: DEFAULT_TEXTURE_PROFILE,
     sourceRevision,
     outputRevision: undefined,
     metadata: { kind: 'missing' },

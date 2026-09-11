@@ -70,7 +70,12 @@ export type TextureBatchAuthoringEvent =
   | { readonly kind: 'item-render-failed'; readonly source: string; readonly revision: number; readonly reason: string }
   | { readonly kind: 'run' }
   | { readonly kind: 'native-event'; readonly event: TextureBatchEvent }
-  | { readonly kind: 'batch-failed'; readonly reason: string }
+  /**
+   * A failure of the batch itself rather than of one job. A process that died mid-flight leaves
+   * work worth retrying; a refused job count, a duplicated id or a broken stream is the same
+   * input every time, so it must not come back as retryable work.
+   */
+  | { readonly kind: 'batch-failed'; readonly reason: string; readonly retryable: boolean }
   | { readonly kind: 'cancel' }
   | { readonly kind: 'retry-failed' }
   | { readonly kind: 'retry-refreshed'; readonly plan: TextureBatchPlan }
@@ -114,7 +119,7 @@ export function updateTextureBatch(
     case 'item-render-failed': return renderFailed(state, event);
     case 'run': return run(state);
     case 'native-event': return nativeEvent(state, event.event);
-    case 'batch-failed': return batchFailed(state, event.reason);
+    case 'batch-failed': return batchFailed(state, event.reason, event.retryable);
     case 'cancel':
       return state.kind === 'running' && !state.cancelling
         ? { state: { ...state, cancelling: true }, effects: [{ kind: 'cancel-batch' }] }
@@ -299,6 +304,7 @@ function nativeEvent(
 function batchFailed(
   state: TextureBatchAuthoringState,
   reason: string,
+  retryable: boolean,
 ): TextureBatchAuthoringUpdate {
   if (state.kind !== 'running') return unchanged(state);
   const cancelled = state.cancelling;
@@ -314,7 +320,7 @@ function batchFailed(
             ...item,
             status: cancelled ? 'Cancelled' : 'Failed',
             reason,
-            retryable: !cancelled,
+            retryable: !cancelled && retryable,
           }
         : item),
       diagnostics: state.diagnostics,
@@ -351,10 +357,10 @@ function retryRefreshed(
     if (current === undefined || (item.retryable !== true && !revisionsChanged(item.plan, current))) {
       return [];
     }
-    const retryPlan = item.retryable === true ? item.plan : current;
+    // The refresh exists to re-snapshot revisions, so a retry runs against what is on disk now.
     return [{
       ...item,
-      plan: retryPlan,
+      plan: current,
       status: 'Queued',
       progress: 0,
       reason: undefined,

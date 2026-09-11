@@ -10,6 +10,7 @@ import {
   updateTextureBatch,
 } from '../mods/textureBatchAuthoring';
 import { loadTextureBatch, renderTextureDraft } from '../platform/textureConversion';
+import { batchFailureRetryable } from '../platform/eddsBatch';
 import type { EddsConverter } from '../platform/eddsConverter';
 import type {
   TextureBatchRequest,
@@ -94,7 +95,11 @@ export class TextureBatchEditor {
           void this.converter.batch(effect.jobs, (event) => apply({ kind: 'native-event', event }), controller.signal).catch(
             (error: unknown) => {
               this.log.error(`Texture batch conversion: ${reasonOf(error)}`);
-              apply({ kind: 'batch-failed', reason: reasonOf(error) });
+              apply({
+                kind: 'batch-failed',
+                reason: reasonOf(error),
+                retryable: batchFailureRetryable(error),
+              });
             },
           ).finally(() => {
             if (batch === controller) batch = undefined;

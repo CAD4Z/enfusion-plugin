@@ -1,5 +1,6 @@
 #include <edds/edds.h>
 #include <edds/batch.h>
+#include <edds/pool.h>
 
 #include "fixture.h"
 
@@ -316,7 +317,7 @@ static int uncompressed_tga_converts_through_the_public_edds_seam(void) {
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
     CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-        never_cancelled, NULL, &error) == EDDS_OK);
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
     CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(info.width == 3 && info.height == 2 && info.mip_count == 2);
@@ -368,7 +369,7 @@ static int rgba_png_converts_with_declared_alpha(void) {
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
     CHECK(edds_convert(source, EDDS_SOURCE_PNG, output, &profile,
-        never_cancelled, NULL, &error) == EDDS_OK);
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
     CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(info.pixel_format == EDDS_PIXEL_BGRA8 && info.mip_count == 2);
@@ -405,7 +406,7 @@ static int png_gamma_is_metadata_not_a_sample_transform(void) {
     profile.format_compress = EDDS_COMPRESS_COPY;
     profile.generate_mips = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_PNG, output, &profile,
-        never_cancelled, NULL, &error) == EDDS_OK);
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
     CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(edds_preview(output, &info, 0, never_cancelled, NULL,
@@ -441,7 +442,7 @@ static int tga_origin_channels_and_declared_alpha_are_normalized(void) {
     profile.format_compress = EDDS_COMPRESS_COPY;
     profile.generate_mips = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-        never_cancelled, NULL, &error) == EDDS_OK);
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
     CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(info.pixel_format == EDDS_PIXEL_BGRA8);
@@ -486,7 +487,7 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
         profile.format_compress = mode;
         profile.compress_threshold = 100;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-            never_cancelled, NULL, &error) == EDDS_OK);
+            never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
         CHECK(fseek(output, 0, SEEK_SET) == 0);
         CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
         CHECK(info.mips[0].container == EDDS_CONTAINER_LZ4);
@@ -512,7 +513,7 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
             profile.format_compress = EDDS_COMPRESS_FASTEST;
             profile.compress_threshold = equality - below;
             CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-                never_cancelled, NULL, &error) == EDDS_OK);
+                never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
             CHECK(fseek(output, 0, SEEK_SET) == 0);
             CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
             CHECK(info.mips[0].container ==
@@ -530,7 +531,7 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
         profile.format_compress = EDDS_COMPRESS_FASTEST;
         profile.compress_threshold = 0;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-            never_cancelled, NULL, &error) == EDDS_OK);
+            never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
         CHECK(fseek(output, 0, SEEK_SET) == 0);
         CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
         CHECK(info.mips[0].container == EDDS_CONTAINER_COPY);
@@ -590,7 +591,7 @@ static int compression_efforts_are_observably_distinct_and_lossless(void) {
         profile.format_compress = mode;
         profile.compress_threshold = 100;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-            never_cancelled, NULL, &error) == EDDS_OK);
+            never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
         CHECK(fseek(output, 0, SEEK_SET) == 0);
         CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
         CHECK(info.mips[0].container == EDDS_CONTAINER_LZ4);
@@ -748,6 +749,148 @@ static int batch_ndjson_parser_has_a_bounded_mutation_corpus(void) {
     return 1;
 }
 
+static int batch_reader_frames_lines_however_a_pipe_split_them(void) {
+    static const char stream[] = "{\"a\":1}\n\r\n{\"b\":2}\r\n{\"c\":3}";
+    const size_t total = sizeof stream - 1u;
+    /* Every split of the same bytes has to frame the same four lines, the blank one included. */
+    for (size_t chunk = 1u; chunk <= total; ++chunk) {
+        edds_batch_reader reader;
+        char framed[8][64];
+        size_t lines = 0;
+        size_t at = 0;
+        edds_batch_reader_init(&reader);
+        while (at < total) {
+            size_t remaining = total - at < chunk ? total - at : chunk;
+            const char *data = stream + at;
+            at += remaining;
+            while (remaining > 0u) {
+                size_t consumed = 0;
+                size_t size = 0;
+                const edds_batch_line line =
+                    edds_batch_reader_push(&reader, data, remaining, &consumed, &size);
+                data += consumed;
+                remaining -= consumed;
+                if (line != EDDS_BATCH_LINE_READY) continue;
+                CHECK(lines < 8u && size < sizeof framed[0]);
+                memcpy(framed[lines++], reader.line, size + 1u);
+            }
+        }
+        {
+            size_t size = 0;
+            CHECK(edds_batch_reader_finish(&reader, &size) == EDDS_BATCH_LINE_READY);
+            CHECK(lines < 8u && size < sizeof framed[0]);
+            memcpy(framed[lines++], reader.line, size + 1u);
+        }
+        CHECK(lines == 4u);
+        CHECK(strcmp(framed[0], "{\"a\":1}") == 0);
+        CHECK(strcmp(framed[1], "") == 0);
+        CHECK(strcmp(framed[2], "{\"b\":2}") == 0);
+        CHECK(strcmp(framed[3], "{\"c\":3}") == 0);
+    }
+    return 1;
+}
+
+static int batch_reader_refuses_an_oversized_line_without_framing_half_of_it(void) {
+    const size_t span = EDDS_BATCH_MAX_LINE_BYTES + 20u;
+    edds_batch_reader reader;
+    char *oversized = malloc(span);
+    size_t consumed = 0;
+    size_t size = 0;
+    edds_batch_line line;
+    CHECK(oversized != NULL);
+    memset(oversized, 'x', EDDS_BATCH_MAX_LINE_BYTES + 16u);
+    oversized[EDDS_BATCH_MAX_LINE_BYTES + 16u] = '\n';
+    memcpy(oversized + EDDS_BATCH_MAX_LINE_BYTES + 17u, "{}\n", 3u);
+    edds_batch_reader_init(&reader);
+    line = edds_batch_reader_push(&reader, oversized, span, &consumed, &size);
+    CHECK(line == EDDS_BATCH_LINE_OVERFLOW);
+    CHECK(consumed == EDDS_BATCH_MAX_LINE_BYTES + 17u);
+    /* The line behind the refused one is still framed whole, not from the middle of it. */
+    line = edds_batch_reader_push(&reader, oversized + consumed, span - consumed, &consumed, &size);
+    CHECK(line == EDDS_BATCH_LINE_READY && size == 2u && strcmp(reader.line, "{}") == 0);
+    free(oversized);
+    return 1;
+}
+
+typedef struct pool_probe {
+    unsigned long ran[512];
+    uint32_t workers;
+    uint32_t live;
+    uint32_t peak;
+} pool_probe;
+
+static void pool_probe_task(void *context, uint32_t index, edds_pool *pool) {
+    pool_probe *probe = (pool_probe *)context;
+    const uint64_t charge = 3u * 1024u * 1024u;
+    edds_pool_reserve(pool, charge);
+    edds_pool_lock_output(pool);
+    probe->workers = edds_pool_workers(pool);
+    probe->ran[index] += 1ul;
+    if (++probe->live > probe->peak) probe->peak = probe->live;
+    edds_pool_unlock_output(pool);
+    edds_pool_lock_output(pool);
+    --probe->live;
+    edds_pool_unlock_output(pool);
+    edds_pool_release(pool, charge);
+}
+
+static int the_pool_runs_every_job_once_inside_one_bounded_budget(void) {
+    pool_probe probe;
+    edds_error error;
+    memset(&probe, 0, sizeof probe);
+    CHECK(edds_pool_run(256u, 8u * 1024u * 1024u, pool_probe_task, &probe, &error) == EDDS_OK);
+    for (uint32_t at = 0; at < 256u; ++at) CHECK(probe.ran[at] == 1ul);
+    for (uint32_t at = 256u; at < 512u; ++at) CHECK(probe.ran[at] == 0ul);
+    /* Eight megabytes of budget admit two three-megabyte images at a time, never a third. */
+    CHECK(probe.peak <= 2u);
+    CHECK(probe.workers >= 1u && probe.workers <= EDDS_POOL_MAX_WORKERS);
+    CHECK(edds_pool_worker_count(1u) == 1u);
+    CHECK(edds_pool_worker_count(0u) >= 1u);
+    memset(&probe, 0, sizeof probe);
+    CHECK(edds_pool_run(0u, 0u, pool_probe_task, &probe, &error) == EDDS_OK);
+    CHECK(probe.ran[0] == 0ul);
+    return 1;
+}
+
+static int an_image_larger_than_the_whole_budget_still_runs_alone(void) {
+    pool_probe probe;
+    edds_error error;
+    memset(&probe, 0, sizeof probe);
+    /* Three megabytes charged against a budget of one: refusing it would strand the image. */
+    CHECK(edds_pool_run(8u, 1024u * 1024u, pool_probe_task, &probe, &error) == EDDS_OK);
+    for (uint32_t at = 0; at < 8u; ++at) CHECK(probe.ran[at] == 1ul);
+    CHECK(probe.peak == 1u);
+    CHECK(edds_pool_charge_of(0u) > 0u);
+    CHECK(edds_pool_charge_of(1024u) > edds_pool_charge_of(0u));
+    CHECK(edds_pool_charge_of(UINT64_MAX) == UINT64_MAX);
+    return 1;
+}
+
+static void pool_mixed_task(void *context, uint32_t index, edds_pool *pool) {
+    pool_probe *probe = (pool_probe *)context;
+    /* Every fourth image needs the whole budget; the rest are small enough to share it. */
+    const uint64_t charge = index % 4u == 0u ? 4u * 1024u * 1024u : 256u * 1024u;
+    edds_pool_reserve(pool, charge);
+    edds_pool_lock_output(pool);
+    probe->ran[index] += 1ul;
+    if (++probe->live > probe->peak) probe->peak = probe->live;
+    edds_pool_unlock_output(pool);
+    edds_pool_lock_output(pool);
+    --probe->live;
+    edds_pool_unlock_output(pool);
+    edds_pool_release(pool, charge);
+}
+
+static int oversized_and_small_images_share_one_budget_without_starving(void) {
+    pool_probe probe;
+    edds_error error;
+    memset(&probe, 0, sizeof probe);
+    /* Images wanting everything and images wanting a little, interleaved: all of them finish. */
+    CHECK(edds_pool_run(128u, 4u * 1024u * 1024u, pool_mixed_task, &probe, &error) == EDDS_OK);
+    for (uint32_t at = 0; at < 128u; ++at) CHECK(probe.ran[at] == 1ul);
+    return 1;
+}
+
 int main(void) {
     const int passed =
         copy_inspection_and_preview() &&
@@ -770,7 +913,12 @@ int main(void) {
         metadata_round_trip_is_canonical_and_preserves_identity() &&
         known_but_unsupported_metadata_is_never_defaulted() &&
         metadata_source_class_must_match_its_extension() &&
-        batch_ndjson_parser_has_a_bounded_mutation_corpus();
+        batch_ndjson_parser_has_a_bounded_mutation_corpus() &&
+        batch_reader_frames_lines_however_a_pipe_split_them() &&
+        batch_reader_refuses_an_oversized_line_without_framing_half_of_it() &&
+        the_pool_runs_every_job_once_inside_one_bounded_budget() &&
+        an_image_larger_than_the_whole_budget_still_runs_alone() &&
+        oversized_and_small_images_share_one_budget_without_starving();
 
     return passed ? 0 : 1;
 }

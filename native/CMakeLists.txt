@@ -24,8 +24,12 @@ function(edds_configure_target target)
   endif()
 endfunction()
 
-add_library(edds_core STATIC src/edds.c src/convert.c src/metadata.c src/batch.c)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+add_library(edds_core STATIC src/edds.c src/convert.c src/metadata.c src/batch.c src/pool.c)
 target_include_directories(edds_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(edds_core PUBLIC Threads::Threads)
 edds_configure_target(edds_core)
 
 add_executable(edds-convert src/cli.c)

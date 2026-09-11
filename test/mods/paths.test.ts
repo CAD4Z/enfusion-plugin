@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveWindows, windowsFolder, windowsName, windowsPath } from '../../src/mods/paths';
+import { resolveWindows, samePath, windowsFolder, windowsName, windowsPath } from '../../src/mods/paths';
 
 test('parts are joined with one separator, however many the parts brought', () => {
   assert.equal(windowsPath('P:', 'temp'), 'P:\\temp');
@@ -64,4 +64,37 @@ test('a path that is already rooted is left where it was typed', () => {
 test('a path nobody typed resolves to nothing, rather than to the folder it was counted from', () => {
   assert.equal(resolveWindows('F:\\Code', ''), '');
   assert.equal(resolveWindows('F:\\Code', '   '), '');
+});
+
+test('a comparison sees past case, separators, doubled ones and a trailing one', () => {
+  assert.equal(samePath('C:\\Mod\\Art\\Icon.png'), samePath('c:/mod/art/icon.png'));
+  assert.equal(samePath('C:\\Mod\\Art\\'), samePath('C:\\Mod\\Art'));
+  assert.equal(samePath('C:\\Mod\\\\Art'), samePath('C:\\Mod\\Art'));
+  // The leading slash a Uri.path carries in front of a drive letter is not part of the path.
+  assert.equal(samePath('/C:/Mod/Art'), samePath('C:\\Mod\\Art'));
+});
+
+test('a comparison walks the dot segments Windows would have walked', () => {
+  assert.equal(samePath('C:\\Mod\\.\\Art\\Icon.png'), samePath('C:\\Mod\\Art\\Icon.png'));
+  assert.equal(samePath('C:\\Mod\\GUI\\..\\Art\\Icon.png'), samePath('C:\\Mod\\Art\\Icon.png'));
+  assert.equal(samePath('C:\\Mod\\Art\\..\\..\\Mod\\Art'), samePath('C:\\Mod\\Art'));
+});
+
+test('no root walks above itself, which is what keeps a drive and a share whole', () => {
+  assert.equal(samePath('C:\\..'), 'c:');
+  assert.equal(samePath('C:\\..\\..\\Mod'), 'c:/mod');
+  // A share is the root of a UNC path, so neither it nor the server above it is walked away.
+  assert.equal(samePath('\\\\build\\share\\..\\..'), '//build/share');
+  assert.equal(samePath('\\\\build\\share\\Mods\\..'), '//build/share');
+  assert.equal(samePath('\\\\build\\share'), '//build/share');
+  assert.equal(samePath('\\\\build\\'), '//build');
+});
+
+test('what a UNC root has under it stays under it, rather than running into the share name', () => {
+  assert.equal(samePath('\\\\srv\\share\\tex\\a.png'), '//srv/share/tex/a.png');
+  assert.equal(samePath('\\\\srv\\share\\tex\\a.png'), samePath('//SRV/Share/./tex/a.png'));
+  // Two different files whose names would touch if the separator went missing.
+  assert.notEqual(samePath('\\\\srv\\share\\ab.png'), samePath('\\\\srv\\shar\\eab.png'));
+  // A relative path has no root to stop at, so the walk it could not take is kept.
+  assert.equal(samePath('..\\Mod'), '../mod');
 });

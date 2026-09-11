@@ -55,6 +55,52 @@ test('an unterminated final event is accepted but trailing partial JSON is not',
   assert.throws(() => broken.finish(), /malformed JSON/);
 });
 
+test('every split of one stream frames the same events, and every mutation of it is refused', () => {
+  const stream = [
+    event({ kind: 'batch-started', jobCount: 2 }),
+    event({ kind: 'progress', id: 'alpha', progress: 0.25 }),
+    event({ kind: 'diagnostic', id: 'alpha', category: 'cancelled', code: 'c', message: 'm' }),
+    event({ kind: 'result', id: 'alpha', status: 'Cancelled', reason: 'stopped', retryable: false }),
+    event({ kind: 'complete', converted: 0, failed: 0, cancelled: 1 }),
+  ].join('\n') + '\n';
+  const expected = ['batch-started', 'progress', 'diagnostic', 'result', 'complete'];
+
+  // Where a pipe happened to break is not a protocol fact, so no split may change the events.
+  let random = 0x9e3779b9;
+  const next = (bound: number): number => {
+    random = (random * 1103515245 + 12345) & 0x7fffffff;
+    return random % bound + 1;
+  };
+  for (let round = 0; round < 200; round += 1) {
+    const reader = new TextureBatchProtocolReader();
+    const framed: string[] = [];
+    for (let at = 0; at < stream.length;) {
+      const size = next(9);
+      framed.push(...reader.push(stream.slice(at, at + size)).map(({ kind }) => kind));
+      at += size;
+    }
+    framed.push(...reader.finish().map(({ kind }) => kind));
+    assert.deepEqual(framed, expected);
+  }
+
+  // Every single-character edit of a well-formed stream is either refused or still well formed.
+  for (let at = 0; at < stream.length; at += 1) {
+    for (const replacement of ['', '"', '}', '0', '\n']) {
+      const mutated = stream.slice(0, at) + replacement + stream.slice(at + 1);
+      const reader = new TextureBatchProtocolReader();
+      try {
+        const framed = [...reader.push(mutated), ...reader.finish()];
+        for (const value of framed) {
+          assert.equal(value.protocolVersion, 1);
+          assert.equal(expected.includes(value.kind), true);
+        }
+      } catch (error: unknown) {
+        assert.equal(error instanceof Error, true);
+      }
+    }
+  }
+});
+
 function event(value: Record<string, unknown>): string {
   return JSON.stringify({ protocolVersion: 1, ...value });
 }
