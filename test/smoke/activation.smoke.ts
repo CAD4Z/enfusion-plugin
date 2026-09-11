@@ -95,21 +95,40 @@ export async function run(): Promise<void> {
     'Explorer multi-select did not open one texture batch editor',
   );
 
+  const jpgSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.jpg');
+  const tiffSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.tiff');
+  await vscode.workspace.fs.writeFile(jpgSource, jpgFixture());
+  await vscode.workspace.fs.writeFile(tiffSource, tiffFixture());
+
   const batchPng = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-png.edds');
   const batchTga = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-tga.edds');
+  const batchJpg = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-jpg.edds');
+  const batchTiff = vscode.Uri.joinPath(workspace.uri, 'packaged-batch-tiff.edds');
   const batch = await executeBatchProcess(executable, batchInput([
     { id: 'png', input: source.fsPath, output: batchPng.fsPath },
     { id: 'tga', input: secondSource.fsPath, output: batchTga.fsPath },
+    { id: 'jpg', input: jpgSource.fsPath, output: batchJpg.fsPath },
+    { id: 'tiff', input: tiffSource.fsPath, output: batchTiff.fsPath },
   ]));
-  assert.deepEqual(batch.filter(({ kind }) => kind === 'result').map(({ id, status }) => [id, status]), [
-    ['png', 'Converted'],
-    ['tga', 'Converted'],
-  ]);
+  // A pool reports a row when its own image finishes, so the set is the fact here, not the order.
+  assert.deepEqual(
+    batch
+      .filter(({ kind }) => kind === 'result')
+      .map(({ id, status }) => [id, status])
+      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
+    [
+      ['jpg', 'Converted'],
+      ['png', 'Converted'],
+      ['tga', 'Converted'],
+      ['tiff', 'Converted'],
+    ],
+  );
   assert.deepEqual(batch.at(-1), {
-    protocolVersion: 1, kind: 'complete', converted: 2, failed: 0, cancelled: 0,
+    protocolVersion: 1, kind: 'complete', converted: 4, failed: 0, cancelled: 0,
   });
-  assert.equal((await vscode.workspace.fs.stat(batchPng)).type, vscode.FileType.File);
-  assert.equal((await vscode.workspace.fs.stat(batchTga)).type, vscode.FileType.File);
+  for (const output of [batchPng, batchTga, batchJpg, batchTiff]) {
+    assert.equal((await vscode.workspace.fs.stat(output)).type, vscode.FileType.File);
+  }
 
   const converted = vscode.Uri.joinPath(workspace.uri, 'packaged-conversion.edds');
   const conversion = await executeFile(
@@ -230,6 +249,29 @@ function tgaFixture(): Uint8Array {
     1, 0, 1, 0, 24, 0x20,
     30, 20, 10,
   ]);
+}
+
+/**
+ * The same two sources the native suite owns, carried here as bytes: what this smoke proves is
+ * that the packaged executable has their codecs, not that the fixtures can be built again in
+ * TypeScript. 16x8 baseline YCbCr, and 3x2 uncompressed RGB.
+ */
+function jpgFixture(): Uint8Array {
+  return Buffer.from(
+    '/9j/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB' +
+      'AQEBAQEBAQEBAQH/wAARCAAIABADAREAAhEAAxEA/8QAFgABAgAAAAAAAAAAAAAAAAAAAAkK/8QAFBAB' +
+      'AAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACAAMAAD8AjeDyAH//2Q==',
+    'base64',
+  );
+}
+
+function tiffFixture(): Uint8Array {
+  return Buffer.from(
+    'SUkqAAgAAAAJAAABAwABAAAAAwAAAAEBAwABAAAAAgAAAAIBAwADAAAAegAAAAMBAwABAAAAAQAAAAYB' +
+      'AwABAAAAAgAAABEBBAABAAAAgAAAABUBAwABAAAAAwAAABYBAwABAAAAAgAAABcBBAABAAAAEgAAAAAA' +
+      'AAAIAAgACAAKFB4oMjxGUFpkbniCjJagqrQ=',
+    'base64',
+  );
 }
 
 function pngChunk(name: string, body: Uint8Array): Uint8Array {

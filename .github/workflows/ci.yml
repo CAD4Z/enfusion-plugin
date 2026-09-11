@@ -50,7 +50,9 @@ jobs:
             native/.build-sanitize/fuzz-corpus/odd-fourcc \
             native/.build-sanitize/fuzz-corpus/integer-overflow \
             native/.build-sanitize/fuzz-corpus/source.png \
-            native/.build-sanitize/fuzz-corpus/source.tga
+            native/.build-sanitize/fuzz-corpus/source.tga \
+            native/.build-sanitize/fuzz-corpus/source.jpg \
+            native/.build-sanitize/fuzz-corpus/source.tiff
           cp native/.build-sanitize/black-box-png-result.edds.meta \
             native/.build-sanitize/fuzz-corpus/metadata
           printf '%s' '{"protocolVersion":1,"kind":"batch","jobCount":100}' \

@@ -64,7 +64,15 @@ mips to 64 MiB, LZ4 streams to 1024 blocks and each stored LZ4 block to 1 MiB. E
 is checked before reads or allocation; trailing bytes, malformed final-block markers and decoded
 size mismatches are invalid input.
 
-Conversion accepts non-interlaced 8-bit RGB/RGBA PNG and uncompressed true-color 24/32-bit TGA.
+Conversion accepts the four source resource classes DayZ Workbench registers, by the one extension
+that names each: non-interlaced 8-bit RGB/RGBA `.png`; uncompressed true-color 24/32-bit `.tga`;
+baseline sequential 8-bit Huffman `.jpg`, greyscale or YCbCr, one scan, luma 1x1/2x1/1x2/2x2 over
+1x1 chroma; and single-page 8-bit chunky `.tiff` in strips, uncompressed or LZW/Deflate/PackBits,
+greyscale BlackIsZero or RGB with an optional unassociated alpha extra sample. Any other subtype is
+refused by its own code rather than decoded on a guess, and an extension outside that set — `.jpeg`
+and `.tif` included, which Workbench does not register — is `unsupported-source-extension` before
+anything is read. JPEG carries no alpha; TIFF alpha comes from the file, never from the profile.
+
 It writes BGRX/BGRA EnfusionDDS with a floor-halved NPOT Box mip chain. `Copy` always uses `COPY`;
 `Fastest`, `Medium` and `Best` select lossless `COPY` or independent-block `LZ4` per mip using the
 declared `CompressTreshold` percentage (equality selects LZ4). Unsupported known profile values are

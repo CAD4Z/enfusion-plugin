@@ -204,6 +204,23 @@ static int selected_mip(
     return decode_lz4(file->data + selected_payload, selected_size, decoded);
 }
 
+/**
+ * JPEG is lossy, so its contract is a bounded difference rather than equal bytes. Everything else
+ * this reader checks is lossless and is compared exactly.
+ */
+static int within(const bytes *decoded, const uint8_t *expected, size_t size, int tolerance) {
+    if (decoded->size != size) {
+        return 0;
+    }
+    for (size_t at = 0; at < size; ++at) {
+        const int difference = (int)decoded->data[at] - (int)expected[at];
+        if (difference > tolerance || difference < -tolerance) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(int argc, char **argv) {
     static const uint8_t copy_expected[] = { 30, 20, 10, 40 };
     static const uint8_t lz4_expected[] = { 3, 2, 1, 0, 6, 5, 4, 17 };
@@ -212,9 +229,11 @@ int main(int argc, char **argv) {
     bytes decoded = { NULL, 0 };
     bytes png = { NULL, 0 };
     bytes tga = { NULL, 0 };
+    bytes jpg = { NULL, 0 };
+    bytes tiff = { NULL, 0 };
     int ok;
-    if (argc != 3 && argc != 5) {
-        fputs("usage: edds-reference-reader COPY_PATH LZ4_PATH [PNG_RESULT TGA_RESULT]\n", stderr);
+    if (argc != 3 && argc != 7) {
+        fputs("usage: edds-reference-reader COPY LZ4 [PNG_RESULT TGA_RESULT JPG_RESULT TIFF_RESULT]\n", stderr);
         return 2;
     }
     if (!load(argv[1], &copy) || !load(argv[2], &lz4)) {
@@ -234,13 +253,13 @@ int main(int argc, char **argv) {
     free(decoded.data);
     decoded.data = NULL;
     decoded.size = 0;
-    if (argc == 5) {
+    if (argc == 7) {
         static const uint8_t png_level_zero[] = {
             30, 20, 10, 40, 70, 60, 50, 80, 110, 100, 90, 120,
             130, 120, 110, 140, 170, 160, 150, 180, 210, 200, 190, 220
         };
         static const uint8_t png_level_one[] = { 100, 90, 80, 110 };
-        static const uint8_t tga_level_zero[] = {
+        static const uint8_t three_by_two_level_zero[] = {
             30, 20, 10, 255, 60, 50, 40, 255, 90, 80, 70, 255,
             120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
         };
@@ -259,14 +278,50 @@ int main(int argc, char **argv) {
         decoded.data = NULL;
         decoded.size = 0;
         ok = ok && selected_mip(&tga, 0, 3, 2, 1, "COPY", &decoded) &&
-            decoded.size == sizeof tga_level_zero &&
-            memcmp(decoded.data, tga_level_zero, sizeof tga_level_zero) == 0;
+            decoded.size == sizeof three_by_two_level_zero &&
+            memcmp(decoded.data, three_by_two_level_zero, sizeof three_by_two_level_zero) == 0;
+        free(decoded.data);
+        decoded.data = NULL;
+        decoded.size = 0;
+
+        /*
+         * The JPEG fixture is two flat DC-only halves, so its full level is grey 78 beside grey
+         * 178 and the last mip of the box chain is their average. Both are judged within a bound.
+         */
+        {
+            uint8_t jpeg_level_zero[16 * 8 * 4];
+            static const uint8_t jpeg_smallest[] = { 128, 128, 128, 255 };
+            for (size_t pixel = 0; pixel < 16u * 8u; ++pixel) {
+                const uint8_t grey = pixel % 16u < 8u ? 78u : 178u;
+                jpeg_level_zero[pixel * 4u] = grey;
+                jpeg_level_zero[pixel * 4u + 1u] = grey;
+                jpeg_level_zero[pixel * 4u + 2u] = grey;
+                jpeg_level_zero[pixel * 4u + 3u] = 255u;
+            }
+            ok = ok && load(argv[5], &jpg) && load(argv[6], &tiff) &&
+                u32le(jpg.data + 80) == 0x40u && u32le(tiff.data + 80) == 0x40u &&
+                selected_mip(&jpg, 0, 16, 8, 5, "COPY", &decoded) &&
+                within(&decoded, jpeg_level_zero, sizeof jpeg_level_zero, 2);
+            free(decoded.data);
+            decoded.data = NULL;
+            decoded.size = 0;
+            ok = ok && selected_mip(&jpg, 4, 16, 8, 5, "COPY", &decoded) &&
+                within(&decoded, jpeg_smallest, sizeof jpeg_smallest, 2);
+            free(decoded.data);
+            decoded.data = NULL;
+            decoded.size = 0;
+        }
+        ok = ok && selected_mip(&tiff, 0, 3, 2, 1, "COPY", &decoded) &&
+            decoded.size == sizeof three_by_two_level_zero &&
+            memcmp(decoded.data, three_by_two_level_zero, sizeof three_by_two_level_zero) == 0;
         free(decoded.data);
     }
     free(copy.data);
     free(lz4.data);
     free(png.data);
     free(tga.data);
+    free(jpg.data);
+    free(tiff.data);
     if (!ok) {
         fputs("independent EDDS reference reader disagreed with the fixture\n", stderr);
     }

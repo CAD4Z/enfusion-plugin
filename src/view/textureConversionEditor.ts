@@ -12,6 +12,11 @@ import {
 } from '../mods/textureAuthoring';
 import { textureScopeOf } from '../mods/textureConversion';
 import {
+  TEXTURE_SOURCES,
+  TEXTURE_SOURCE_EXTENSIONS_EITHER,
+  isTextureSourcePath,
+} from '../mods/textureSources';
+import {
   commitTextureConversion,
   loadTextureConversion,
   renderTextureDraft,
@@ -215,8 +220,10 @@ export function registerTextureConversionEditor(
       }
       const uri = selected ?? (await chooseSource());
       if (uri === undefined) return;
-      if (uri.scheme !== 'file' || !/\.(?:png|tga)$/i.test(uri.fsPath)) {
-        await vscode.window.showErrorMessage('Choose one local .png or .tga source image.');
+      if (uri.scheme !== 'file' || !isTextureSourcePath(uri.fsPath)) {
+        await vscode.window.showErrorMessage(
+          `Choose one local ${TEXTURE_SOURCE_EXTENSIONS_EITHER} source image.`,
+        );
         return;
       }
       const roots = rootsOf(await findMods());
@@ -327,7 +334,7 @@ async function chooseSource(): Promise<vscode.Uri | undefined> {
       canSelectFiles: true,
       canSelectFolders: false,
       canSelectMany: false,
-      filters: { 'PNG or TGA source image': ['png', 'tga'] },
+      filters: { 'Source image': TEXTURE_SOURCES.map((source) => source.extension) },
       title: 'Convert Texture',
     })
   )?.[0];

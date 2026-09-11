@@ -5,12 +5,18 @@ set(odd_fourcc "${CMAKE_CURRENT_BINARY_DIR}/black-box-odd-fourcc.edds")
 set(overflow "${CMAKE_CURRENT_BINARY_DIR}/black-box-overflow.edds")
 set(png "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.png")
 set(tga "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.tga")
+set(jpg_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.jpg")
+set(tiff_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.tiff")
 set(png_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-png-result.edds")
 set(tga_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-tga-result.edds")
+set(jpg_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-jpg-result.edds")
+set(tiff_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-tiff-result.edds")
 set(png_metadata "${png_result}.meta")
+set(jpg_metadata "${jpg_result}.meta")
 
 execute_process(
-  COMMAND "${FIXTURE}" "${copy}" "${lz4}" "${dxt1}" "${odd_fourcc}" "${overflow}" "${png}" "${tga}"
+  COMMAND "${FIXTURE}" "${copy}" "${lz4}" "${dxt1}" "${odd_fourcc}" "${overflow}"
+    "${png}" "${tga}" "${jpg_source}" "${tiff_source}"
   RESULT_VARIABLE fixture_result
   ERROR_VARIABLE fixture_error
 )
@@ -378,8 +384,131 @@ if(NOT detached_fault_exit EQUAL 6 OR NOT detached_fault_hash STREQUAL detached_
   message(FATAL_ERROR "detached rollback changed EDDS or authored metadata")
 endif()
 
+# JPG and TIFF reach conversion, metadata and preview through the same contract as PNG and TGA.
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${jpg_source}" --output "${jpg_result}"
+    --metadata "${jpg_metadata}" --resource-name Probe/black-box-jpg-result.edds
+    --source-file black-box-source.jpg --guid 00112233445566AA
+    --target-format enfusion-dds --format-compress copy --compress-threshold 80
+    --conversion none --conversion-quality 1 --swizzling none
+    --generate-mips true --mipmap-function filter --mipmap-filter box --tiled-texture true
+  RESULT_VARIABLE jpg_convert_result
+  OUTPUT_VARIABLE jpg_convert_output
+  ERROR_VARIABLE jpg_convert_error
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT jpg_convert_result EQUAL 0)
+  message(FATAL_ERROR "JPG conversion failed with ${jpg_convert_result}: ${jpg_convert_error}")
+endif()
+string(JSON jpg_convert_format GET "${jpg_convert_output}" pixelFormat)
+string(JSON jpg_convert_mips GET "${jpg_convert_output}" mipCount)
+if(NOT jpg_convert_format STREQUAL "BGRX8" OR NOT jpg_convert_mips EQUAL 5)
+  message(FATAL_ERROR "unexpected JPG conversion result: ${jpg_convert_output}")
+endif()
+file(READ "${jpg_metadata}" jpg_metadata_text)
+if(NOT jpg_metadata_text MATCHES "JPGResourceClass PC")
+  message(FATAL_ERROR "JPG metadata did not name its Workbench resource class: ${jpg_metadata_text}")
+endif()
+execute_process(
+  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${jpg_result}" --metadata "${jpg_metadata}"
+  RESULT_VARIABLE jpg_inspect_result OUTPUT_VARIABLE jpg_inspect_output ERROR_QUIET
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(JSON jpg_inspect_format GET "${jpg_inspect_output}" metadata identity sourceFormat)
+if(NOT jpg_inspect_result EQUAL 0 OR NOT jpg_inspect_format STREQUAL "jpg")
+  message(FATAL_ERROR "JPG metadata did not round-trip its source format: ${jpg_inspect_output}")
+endif()
+
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${tiff_source}" --output "${tiff_result}"
+    --target-format enfusion-dds --format-compress fastest --compress-threshold 80
+    --conversion none --conversion-quality 1 --swizzling none
+    --generate-mips false --mipmap-function filter --mipmap-filter box --tiled-texture true
+  RESULT_VARIABLE tiff_convert_result
+  OUTPUT_VARIABLE tiff_convert_output
+  ERROR_VARIABLE tiff_convert_error
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT tiff_convert_result EQUAL 0)
+  message(FATAL_ERROR "TIFF conversion failed with ${tiff_convert_result}: ${tiff_convert_error}")
+endif()
+string(JSON tiff_convert_format GET "${tiff_convert_output}" pixelFormat)
+string(JSON tiff_convert_mips GET "${tiff_convert_output}" mipCount)
+if(NOT tiff_convert_format STREQUAL "BGRX8" OR NOT tiff_convert_mips EQUAL 1)
+  message(FATAL_ERROR "unexpected TIFF conversion result: ${tiff_convert_output}")
+endif()
+
+# An alias extension is not a registered resource class, so it is refused before anything is written.
+foreach(alias IN ITEMS jpeg tif)
+  set(alias_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-alias.${alias}")
+  set(alias_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-alias-${alias}.edds")
+  file(REMOVE "${alias_result}")
+  if(alias STREQUAL "jpeg")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E copy "${jpg_source}" "${alias_source}")
+  else()
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E copy "${tiff_source}" "${alias_source}")
+  endif()
+  execute_process(
+    COMMAND "${CLI}" convert --machine --protocol 1 --input "${alias_source}" --output "${alias_result}"
+    RESULT_VARIABLE alias_exit OUTPUT_VARIABLE alias_output ERROR_QUIET
+  )
+  if(NOT alias_exit EQUAL 4 OR EXISTS "${alias_result}")
+    message(FATAL_ERROR ".${alias} was not refused before writing: ${alias_exit} ${alias_output}")
+  endif()
+  string(JSON alias_code GET "${alias_output}" error code)
+  if(NOT alias_code STREQUAL "unsupported-source-extension")
+    message(FATAL_ERROR ".${alias} returned the wrong refusal: ${alias_output}")
+  endif()
+endforeach()
+
+# A damaged source is one item's failure; the pair already on disk is not touched by it.
+set(damaged "${CMAKE_CURRENT_BINARY_DIR}/black-box-damaged.jpg")
+file(WRITE "${damaged}" "not a JPEG at all, only bytes that end in .jpg")
+file(SHA256 "${jpg_result}" intact_jpg_hash)
+file(SHA256 "${jpg_metadata}" intact_jpg_metadata_hash)
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${damaged}"
+    --output "${jpg_result}" --metadata "${jpg_metadata}"
+    --resource-name Probe/black-box-jpg-result.edds --source-file black-box-damaged.jpg
+    --guid 00112233445566AA
+  RESULT_VARIABLE damaged_exit OUTPUT_VARIABLE damaged_output ERROR_QUIET
+)
+file(SHA256 "${jpg_result}" after_jpg_hash)
+file(SHA256 "${jpg_metadata}" after_jpg_metadata_hash)
+if(NOT damaged_exit EQUAL 3 OR NOT after_jpg_hash STREQUAL intact_jpg_hash OR
+    NOT after_jpg_metadata_hash STREQUAL intact_jpg_metadata_hash)
+  message(FATAL_ERROR "a refused JPG source changed the existing pair: ${damaged_exit} ${damaged_output}")
+endif()
+
+# A mixed batch keeps a bad TIFF to itself while the JPG beside it converts.
+set(source_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-sources.ndjson")
+set(source_batch_jpg "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-source-jpg.edds")
+set(source_batch_tiff "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-source-tiff.edds")
+set(source_batch_bad "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-source-bad.edds")
+file(REMOVE "${source_batch_jpg}" "${source_batch_tiff}" "${source_batch_bad}")
+file(WRITE "${source_batch_input}"
+  "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":3}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"jpg\",\"input\":\"${jpg_source}\",\"output\":\"${source_batch_jpg}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"broken\",\"input\":\"${damaged}\",\"output\":\"${source_batch_bad}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"tiff\",\"input\":\"${tiff_source}\",\"output\":\"${source_batch_tiff}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
+execute_process(
+  COMMAND "${CLI}" batch --machine --protocol 1
+  INPUT_FILE "${source_batch_input}"
+  RESULT_VARIABLE source_batch_result OUTPUT_VARIABLE source_batch_output ERROR_QUIET
+)
+if(NOT source_batch_result EQUAL 0 OR NOT EXISTS "${source_batch_jpg}" OR
+    NOT EXISTS "${source_batch_tiff}" OR EXISTS "${source_batch_bad}" OR
+    NOT source_batch_output MATCHES "\"converted\":2" OR
+    NOT source_batch_output MATCHES "\"failed\":1")
+  message(FATAL_ERROR "a batch of JPG and TIFF did not isolate its one bad item: ${source_batch_output}")
+endif()
+
 execute_process(
   COMMAND "${REFERENCE_READER}" "${copy}" "${lz4}" "${png_result}" "${tga_result}"
+    "${jpg_result}" "${tiff_result}"
   RESULT_VARIABLE converted_reference_result
   ERROR_VARIABLE converted_reference_error
 )

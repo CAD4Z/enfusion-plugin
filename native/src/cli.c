@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -291,7 +292,11 @@ static void write_inspection(
         fputs(",\"sourceFile\":", stdout);
         json_string(metadata->source_file);
         fputs(",\"sourceFormat\":", stdout);
-        json_string(metadata->source_format == EDDS_SOURCE_PNG ? "png" : "tga");
+        {
+            const edds_source_capability *capability =
+                edds_source_capability_of_format(metadata->source_format);
+            json_string(capability == NULL ? "" : capability->wire_name);
+        }
         fputs("},\"recipe\":{\"TargetFormat\":\"EnfusionDDS\",\"FormatCompress\":", stdout);
         json_string(metadata_compress(metadata->profile.format_compress));
         (void)printf(
@@ -838,22 +843,53 @@ static void cleanup_artifact(cli_artifact *artifact, int success) {
     artifact->backup = NULL;
 }
 
+/**
+ * Appends to a refusal message and hands back the new end. A truncating or failing `snprintf`
+ * parks the cursor at the end of the buffer rather than walking past it, so the message is short
+ * rather than wrong.
+ */
+static size_t append_message(edds_error *error, size_t at, const char *format, ...) {
+    va_list arguments;
+    int written;
+    if (at >= sizeof error->message) {
+        return sizeof error->message;
+    }
+    va_start(arguments, format);
+    written = vsnprintf(error->message + at, sizeof error->message - at, format, arguments);
+    va_end(arguments);
+    if (written < 0 || (size_t)written >= sizeof error->message - at) {
+        return sizeof error->message;
+    }
+    return at + (size_t)written;
+}
+
 static edds_status source_format_of(
     const cli_char *path,
     edds_source_format *format,
     edds_error *error
 ) {
-    if (ends_with(path, ".png")) {
-        *format = EDDS_SOURCE_PNG;
-        return EDDS_OK;
+    size_t count = 0;
+    const edds_source_capability *capabilities = edds_source_capabilities(&count);
+    size_t written = 0;
+    for (size_t at = 0; at < count; ++at) {
+        if (ends_with(path, capabilities[at].extension)) {
+            *format = capabilities[at].format;
+            return EDDS_OK;
+        }
     }
-    if (ends_with(path, ".tga")) {
-        *format = EDDS_SOURCE_TGA;
-        return EDDS_OK;
-    }
+    /*
+     * The message names the contract rather than a remembered list, so an extension that merely
+     * looks like a supported one — `.jpeg` for `.jpg`, `.tif` for `.tiff` — is refused against the
+     * same set the editor and the metadata writer use.
+     */
     memset(error, 0, sizeof *error);
     (void)snprintf(error->code, sizeof error->code, "unsupported-source-extension");
-    (void)snprintf(error->message, sizeof error->message, "Only .png and .tga source paths are supported.");
+    written = append_message(error, 0, "Only");
+    for (size_t at = 0; at < count; ++at) {
+        written = append_message(error, written, "%s %s",
+            at == 0 ? "" : (at + 1u == count ? " and" : ","), capabilities[at].extension);
+    }
+    (void)append_message(error, written, " source paths are supported.");
     return EDDS_UNSUPPORTED_FORMAT;
 }
 

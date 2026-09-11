@@ -1,6 +1,11 @@
 import { resolveWindows, samePath, windowsFolder, windowsName } from './paths';
+import {
+  TEXTURE_SOURCE_REFUSAL,
+  type TextureSourceFormat,
+  textureSourceFormatOf,
+} from './textureSources';
 
-export type TextureSourceFormat = 'PNG' | 'TGA';
+export type { TextureSourceFormat };
 export type TextureCompression = 'Copy' | 'Fastest' | 'Medium' | 'Best';
 
 /** The entire supported first-slice Workbench recipe. There are no implicit preset fields. */
@@ -112,9 +117,9 @@ export type TextureConversionPlan =
  * starts. The platform layer supplies filesystem facts; this function neither reads nor writes.
  */
 export function textureConversionPlanOf(input: TextureConversionInput): TextureConversionPlan {
-  const sourceFormat = sourceFormatOf(input.source);
+  const sourceFormat = textureSourceFormatOf(input.source);
   if (sourceFormat === undefined) {
-    return { kind: 'refused', reason: 'Only .png and .tga source images are supported.' };
+    return { kind: 'refused', reason: TEXTURE_SOURCE_REFUSAL };
   }
 
   const root = authoritativeRootOf(input.source, input.roots);
@@ -240,11 +245,6 @@ export function textureGuidOf(
   }
 
   throw new Error('Could not generate a unique texture GUID.');
-}
-
-function sourceFormatOf(path: string): TextureSourceFormat | undefined {
-  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-  return extension === 'png' ? 'PNG' : extension === 'tga' ? 'TGA' : undefined;
 }
 
 function authoritativeRootOf(

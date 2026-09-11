@@ -19,6 +19,11 @@ import {
   textureGuidOf,
   textureScopeOf,
 } from '../mods/textureConversion';
+import {
+  TEXTURE_PRIMARY_REFUSAL,
+  TEXTURE_SOURCE_EXTENSIONS_EITHER,
+  isTextureSourcePath,
+} from '../mods/textureSources';
 import { folderOf } from '../mods/paths';
 import { type Discovery, findMods } from './workspace';
 import { EddsConverterError, type EddsConverter } from './eddsConverter';
@@ -73,8 +78,8 @@ export async function loadTextureBatch(
   if (primary.scheme !== 'file' || textureScopeOf(primary.fsPath, roots) === undefined) {
     return { kind: 'refused', reason: 'The primary source is outside every discovered Enfusion root.' };
   }
-  if (!/\.(?:png|tga)$/i.test(primary.fsPath)) {
-    return { kind: 'refused', reason: 'The primary source must be a PNG or TGA image.' };
+  if (!isTextureSourcePath(primary.fsPath)) {
+    return { kind: 'refused', reason: TEXTURE_PRIMARY_REFUSAL };
   }
 
   const captured = [primary, ...selected].filter(
@@ -113,7 +118,7 @@ export async function loadTextureBatch(
     }
     const newGuid = textureGuidOf(() => randomBytes(8), allocated);
     allocated.push(newGuid);
-    if (uri.scheme !== 'file' || !/\.(?:png|tga)$/i.test(source)) {
+    if (uri.scheme !== 'file' || !isTextureSourcePath(source)) {
       items.push({
         source,
         kind: 'file',
@@ -153,10 +158,13 @@ export async function reconvertSourceOf(
       return { kind: 'refused', reason: 'Native inspection returned no texture metadata.' };
     }
     const sourcePath = path.resolve(path.dirname(output.fsPath), inspection.metadata.sourceFile);
-    if (!/\.(?:png|tga)$/i.test(sourcePath) || (await optionalRevision(vscode.Uri.file(sourcePath))) === undefined) {
+    if (
+      !isTextureSourcePath(sourcePath) ||
+      (await optionalRevision(vscode.Uri.file(sourcePath))) === undefined
+    ) {
       return {
         kind: 'refused',
-        reason: 'The validated metadata source is missing or is not a supported PNG/TGA image.',
+        reason: `The validated metadata source is missing or is not a supported ${TEXTURE_SOURCE_EXTENSIONS_EITHER} image.`,
       };
     }
     const plan = await loadTextureConversion(vscode.Uri.file(sourcePath), converter);

@@ -20,6 +20,11 @@ static void put_u32be(uint8_t *at, uint32_t value) {
     at[3] = (uint8_t)value;
 }
 
+static void put_u16be(uint8_t *at, uint16_t value) {
+    at[0] = (uint8_t)(value >> 8);
+    at[1] = (uint8_t)value;
+}
+
 static uint32_t crc32(const uint8_t *bytes, size_t size) {
     uint32_t crc = 0xffffffffu;
     for (size_t at = 0; at < size; ++at) {
@@ -304,6 +309,218 @@ test_bytes fixture_tga_bgrx(void) {
     test_bytes fixture = allocated(sizeof source);
     if (fixture.data != NULL) {
         memcpy(fixture.data, source, sizeof source);
+    }
+    return fixture;
+}
+
+size_t fixture_tiff_ifd_end(size_t tag_count) {
+    return 8u + 2u + tag_count * 12u + 4u;
+}
+
+size_t fixture_tiff_build(
+    uint8_t *output,
+    size_t capacity,
+    int big_endian,
+    const fixture_tiff_tag *tags,
+    size_t tag_count,
+    const uint8_t *trailing,
+    size_t trailing_size
+) {
+    const size_t ifd_end = fixture_tiff_ifd_end(tag_count);
+    const size_t total = ifd_end + trailing_size;
+    size_t at;
+    if (output == NULL || capacity < total) {
+        return 0;
+    }
+    memset(output, 0, total);
+    memcpy(output, big_endian ? "MM\0\x2a" : "II\x2a\0", 4);
+    if (big_endian) {
+        put_u32be(output + 4, 8);
+        output[8] = (uint8_t)(tag_count >> 8);
+        output[9] = (uint8_t)tag_count;
+    } else {
+        put_u32(output + 4, 8);
+        output[8] = (uint8_t)tag_count;
+        output[9] = (uint8_t)(tag_count >> 8);
+    }
+    for (at = 0; at < tag_count; ++at) {
+        uint8_t *entry = output + 10u + at * 12u;
+        const uint32_t element = tags[at].type == 1u || tags[at].type == 2u ? 1u
+            : tags[at].type == 3u ? 2u : 4u;
+        const int inline_short = tags[at].count == 1u && element == 2u;
+        if (big_endian) {
+            entry[0] = (uint8_t)(tags[at].tag >> 8);
+            entry[1] = (uint8_t)tags[at].tag;
+            entry[2] = (uint8_t)(tags[at].type >> 8);
+            entry[3] = (uint8_t)tags[at].type;
+            put_u32be(entry + 4, tags[at].count);
+            if (inline_short) {
+                entry[8] = (uint8_t)(tags[at].value >> 8);
+                entry[9] = (uint8_t)tags[at].value;
+            } else {
+                put_u32be(entry + 8, tags[at].value);
+            }
+        } else {
+            entry[0] = (uint8_t)tags[at].tag;
+            entry[1] = (uint8_t)(tags[at].tag >> 8);
+            entry[2] = (uint8_t)tags[at].type;
+            entry[3] = (uint8_t)(tags[at].type >> 8);
+            put_u32(entry + 4, tags[at].count);
+            put_u32(entry + 8, tags[at].value);
+        }
+    }
+    if (trailing_size != 0) {
+        memcpy(output + ifd_end, trailing, trailing_size);
+    }
+    return total;
+}
+
+size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_spec *spec) {
+    /*
+     * Every quantisation entry is one and both Huffman tables are three symbols wide, so a DC-only
+     * block decodes to a flat sample a test can predict exactly: coefficient / 8 + 128.
+     */
+    static const uint8_t quantisation[65] = { 0 };
+    static const uint8_t dc_table[20] = {
+        0x00, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x09, 0x0a
+    };
+    static const uint8_t ac_table[18] = {
+        0x10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00
+    };
+    const uint8_t components = spec->component_count;
+    size_t at = 0;
+    if (output == NULL || components == 0u || components > 3u) {
+        return 0;
+    }
+    if (capacity < 256u + spec->exif_size + spec->entropy_size) {
+        return 0;
+    }
+    output[at++] = 0xff;
+    output[at++] = 0xd8;
+    if (spec->exif_size != 0) {
+        output[at++] = 0xff;
+        output[at++] = 0xe1;
+        put_u16be(output + at, (uint16_t)(spec->exif_size + 2u));
+        at += 2;
+        memcpy(output + at, spec->exif, spec->exif_size);
+        at += spec->exif_size;
+    }
+    output[at++] = 0xff;
+    output[at++] = 0xdb;
+    put_u16be(output + at, 67);
+    at += 2;
+    memcpy(output + at, quantisation, sizeof quantisation);
+    for (size_t entry = 1; entry <= 64u; ++entry) {
+        output[at + entry] = 1;
+    }
+    at += sizeof quantisation;
+    output[at++] = 0xff;
+    output[at++] = spec->frame_marker;
+    put_u16be(output + at, (uint16_t)(8u + (size_t)components * 3u));
+    at += 2;
+    output[at++] = spec->precision;
+    put_u16be(output + at, spec->height);
+    at += 2;
+    put_u16be(output + at, spec->width);
+    at += 2;
+    output[at++] = components;
+    for (uint8_t component = 0; component < components; ++component) {
+        output[at++] = (uint8_t)(component + 1u);
+        output[at++] = component == 0u ? spec->luma_sampling : 0x11u;
+        output[at++] = 0x00;
+    }
+    output[at++] = 0xff;
+    output[at++] = 0xc4;
+    put_u16be(output + at, (uint16_t)(sizeof dc_table + 2u));
+    at += 2;
+    memcpy(output + at, dc_table, sizeof dc_table);
+    at += sizeof dc_table;
+    output[at++] = 0xff;
+    output[at++] = 0xc4;
+    put_u16be(output + at, (uint16_t)(sizeof ac_table + 2u));
+    at += 2;
+    memcpy(output + at, ac_table, sizeof ac_table);
+    at += sizeof ac_table;
+    if (spec->restart_interval != 0u) {
+        output[at++] = 0xff;
+        output[at++] = 0xdd;
+        put_u16be(output + at, 4);
+        at += 2;
+        put_u16be(output + at, spec->restart_interval);
+        at += 2;
+    }
+    output[at++] = 0xff;
+    output[at++] = 0xda;
+    put_u16be(output + at, (uint16_t)(6u + (size_t)components * 2u));
+    at += 2;
+    output[at++] = components;
+    for (uint8_t component = 0; component < components; ++component) {
+        output[at++] = (uint8_t)(component + 1u);
+        output[at++] = 0x00;
+    }
+    output[at++] = 0x00;
+    output[at++] = 0x3f;
+    output[at++] = 0x00;
+    memcpy(output + at, spec->entropy, spec->entropy_size);
+    at += spec->entropy_size;
+    if (!spec->omit_end_of_image) {
+        output[at++] = 0xff;
+        output[at++] = 0xd9;
+    }
+    return at;
+}
+
+/** 16x8 in two flat DC-only MCUs: grey 78 on the left, grey 178 on the right. */
+test_bytes fixture_jpeg_ycbcr(void) {
+    static const uint8_t entropy[] = { 0x8d, 0xe0, 0xf2, 0x00, 0x7f };
+    fixture_jpeg_spec spec = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8,
+          .component_count = 3, .luma_sampling = 0x11,
+          .entropy = entropy, .entropy_size = sizeof entropy };
+    test_bytes fixture = allocated(512);
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    fixture.size = fixture_jpeg_build(fixture.data, 512, &spec);
+    if (fixture.size == 0) {
+        fixture_free(fixture);
+        return (test_bytes){ NULL, 0 };
+    }
+    return fixture;
+}
+
+/** 3x2 uncompressed RGB, the same pixels the TGA fixture carries, so both agree on the result. */
+test_bytes fixture_tiff_rgb(void) {
+    static const uint8_t pixels[] = {
+        10, 20, 30, 40, 50, 60, 70, 80, 90,
+        100, 110, 120, 130, 140, 150, 160, 170, 180
+    };
+    const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(9);
+    const uint32_t pixels_at = bits_at + 6u;
+    const fixture_tiff_tag tags[9] = {
+        { 256, 3, 1, 3 },
+        { 257, 3, 1, 2 },
+        { 258, 3, 3, bits_at },
+        { 259, 3, 1, 1 },
+        { 262, 3, 1, 2 },
+        { 273, 4, 1, pixels_at },
+        { 277, 3, 1, 3 },
+        { 278, 3, 1, 2 },
+        { 279, 4, 1, (uint32_t)sizeof pixels }
+    };
+    uint8_t trailing[6 + sizeof pixels];
+    test_bytes fixture = allocated(pixels_at + sizeof pixels);
+    memset(trailing, 0, sizeof trailing);
+    trailing[0] = 8;
+    trailing[2] = 8;
+    trailing[4] = 8;
+    memcpy(trailing + 6, pixels, sizeof pixels);
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    fixture.size = fixture_tiff_build(fixture.data, fixture.size, 0, tags, 9, trailing, sizeof trailing);
+    if (fixture.size == 0) {
+        fixture_free(fixture);
+        return (test_bytes){ NULL, 0 };
     }
     return fixture;
 }

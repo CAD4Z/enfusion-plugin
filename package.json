@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "Mods are discovered by reading mod.enf, workspace.enf, and config.cpp; none of them is executed. EDDS preview and PNG/TGA preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed; draft previews write only under extension storage. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
+      "description": "Mods are discovered by reading mod.enf, workspace.enf, and config.cpp; none of them is executed. EDDS preview and source-image preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed; draft previews write only under extension storage. Finding the DayZ installation and mounting the work drive run reg and subst, neither of which takes an argument from the workspace; linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building and launching are the two things that put a path out of a mod.enf on a command line, so they are the two that wait for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -168,7 +168,7 @@
         },
         {
           "command": "enfusion.texture.convert",
-          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga)$/i",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff)$/i",
           "group": "navigation@20"
         }
       ]

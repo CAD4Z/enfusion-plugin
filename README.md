@@ -15,16 +15,40 @@ channels, with an alpha checkerboard, mip selection, zoom and pan.
 Formats whose pixel decoder is not available are still inspected, but are labelled
 `unsupported-format` and are never represented by source pixels or a plausible placeholder.
 Standalone preview is read-only. Reconvert becomes available only when the native metadata codec
-validates the sibling `.edds.meta`, its declared PNG/TGA source exists inside the discovered
-Enfusion scope, and that relation owns this exact EDDS. A same-stem image is never guessed as the
-source.
+validates the sibling `.edds.meta`, its declared source exists inside the discovered Enfusion
+scope, and that relation owns this exact EDDS. A same-stem image is never guessed as the source.
 
-## PNG/TGA conversion
+## Texture conversion
 
-On Windows x64, **Enfusion: Convert Texture to EDDS** is available on local `.png` and `.tga`
-files when the window contains a discovered `mod.enf` or `workspace.enf`. The editor opens before
-anything in the project is written. It shows the decoded source beside a result decoded back from
-a temporary native EDDS, with shared channel, alpha checkerboard, mip, zoom and pan controls.
+On Windows x64, **Enfusion: Convert Texture to EDDS** is available on local `.png`, `.tga`, `.jpg`
+and `.tiff` files when the window contains a discovered `mod.enf` or `workspace.enf`. Those four
+are the texture resource classes DayZ Workbench registers, and they are matched however the
+extension was typed. `.jpeg` and `.tif` are deliberately not among them: Workbench does not
+register those spellings, so a file under one is refused rather than converted into an EDDS this
+editor would call registered and Workbench would see no source for.
+
+Each format is accepted in a stated subtype, and refused by name outside it, rather than decoded
+on a guess:
+
+| Format | Accepted | Refused by name |
+| --- | --- | --- |
+| PNG | Non-interlaced 8-bit RGB and RGBA | Every other IHDR, unknown critical chunks |
+| TGA | Colour-map type 0, uncompressed true-colour type 2, 24 or 32-bit | RLE, palettes, other descriptors |
+| JPG | Baseline sequential (SOF0), 8-bit, Huffman, one scan, greyscale or YCbCr at 1x1, 2x1, 1x2 or 2x2 luma over 1x1 chroma | Progressive, arithmetic, lossless, 12-bit, CMYK/YCCK, an Adobe transform other than YCbCr, a non-identity EXIF orientation |
+| TIFF | One page, either byte order, 8-bit samples, chunky, top-left, no predictor, strips, and no/LZW/Deflate/PackBits compression; greyscale BlackIsZero, RGB, or RGB plus one unassociated alpha | Tiles, planar separation, palette, WhiteIsZero, CMYK, YCbCr, 16-bit, predictors, premultiplied alpha, further pages |
+
+Samples are taken as the file stores them. No colour management is applied to any of the four: a
+PNG `gAMA`, a JPEG ICC profile and a TIFF ICC profile are all read past, exactly as the first
+slice already treated `gAMA`. JPEG's three components are converted with the full-range JFIF
+YCbCr matrix and its chroma is upsampled by replication.
+
+JPEG carries no alpha, so it always produces an opaque surface; TIFF alpha comes from the file's
+own unassociated extra sample and is never a conversion setting. JPEG is lossy, so its result is
+held to the channel mapping, mip behaviour and a bounded difference rather than to equal bytes.
+
+The editor opens before anything in the project is written. It shows the decoded source beside a
+result decoded back from a temporary native EDDS, with shared channel, alpha checkerboard, mip,
+zoom and pan controls.
 Changing `FormatCompress`, `CompressTreshold` or `GenerateMips` rebuilds only that temporary
 preview; the other visible Workbench fields show the exact fixed first-slice values and explain why
 they are locked.
@@ -49,7 +73,8 @@ the cores busy without a codec pool or a memory peak per image. It keeps complet
 cancellation, and lets retryable failures be retried without rerunning successes; an input the
 converter refuses identically every time is not offered as retryable work.
 
-The public native CLI can convert a PNG or TGA to any explicit output path without a project gate.
+The public native CLI can convert any of those four formats to any explicit output path without a
+project gate; an unregistered extension is refused there too, with a stable `unsupported-source-extension`.
 It accepts the same stable recipe flags used by the editor; `inspect --metadata PATH` returns the
 metadata identity and recipe as versioned structured JSON through the same native codec.
 

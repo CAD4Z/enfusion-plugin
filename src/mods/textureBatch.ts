@@ -1,4 +1,9 @@
 import { resolveWindows, samePath, windowsFolder } from './paths';
+import {
+  TEXTURE_PRIMARY_REFUSAL,
+  isTextureSourcePath,
+  textureSourceFormatOf,
+} from './textureSources';
 import { BATCH_MAX_JOBS } from './textureBatchProtocol';
 import {
   DEFAULT_TEXTURE_PROFILE,
@@ -70,8 +75,8 @@ export function textureBatchPlanOf(input: TextureBatchInput): TextureBatchPlan {
   if (textureScopeOf(primary.source, input.roots) === undefined) {
     return { kind: 'refused', reason: 'The primary source is outside every discovered Enfusion root.' };
   }
-  if (!/\.(?:png|tga)$/i.test(primary.source)) {
-    return { kind: 'refused', reason: 'The primary source must be a PNG or TGA image.' };
+  if (!isTextureSourcePath(primary.source)) {
+    return { kind: 'refused', reason: TEXTURE_PRIMARY_REFUSAL };
   }
   if (primary.metadata.kind === 'invalid' ||
       (primary.metadata.kind === 'unsupported' && metadataOwnsSource(primary))) {
@@ -173,7 +178,7 @@ function collisionDestinationOf(
   roots: readonly EnfusionRoot[],
 ): string | undefined {
   return item.kind === 'file' && item.sourceRevision !== undefined &&
-      /\.(?:png|tga)$/i.test(item.source) && textureScopeOf(item.source, roots) !== undefined
+      isTextureSourcePath(item.source) && textureScopeOf(item.source, roots) !== undefined
     ? samePath(item.source.slice(0, item.source.lastIndexOf('.')) + '.edds')
     : undefined;
 }
@@ -182,7 +187,8 @@ function metadataForBatch(
   item: TextureBatchItemInput,
   profile: TextureProfile,
 ): ExistingTextureMetadata {
-  if (item.metadata.kind !== 'unsupported') {
+  const sourceFormat = textureSourceFormatOf(item.source);
+  if (item.metadata.kind !== 'unsupported' || sourceFormat === undefined) {
     return item.metadata;
   }
   return {
@@ -190,7 +196,7 @@ function metadataForBatch(
     revision: item.metadata.revision,
     value: {
       ...item.metadata.identity,
-      sourceFormat: item.source.toLowerCase().endsWith('.png') ? 'PNG' : 'TGA',
+      sourceFormat,
       profile,
     },
   };

@@ -94,6 +94,59 @@ test('inspect accepts only the structured supported metadata recipe', () => {
   );
 });
 
+test('every source format in the contract crosses the process boundary, and no alias does', () => {
+  for (const [wire, format] of [['jpg', 'JPG'], ['tiff', 'TIFF']] as const) {
+    const inspection = inspectionOf(
+      JSON.stringify({
+        ...inspectMessage({}),
+        metadata: {
+          schemaVersion: 1,
+          identity: {
+            guid: 'aBcDeF0123456789',
+            name: 'MyMod/GUI/icon.edds',
+            sourceFile: `icon.${wire}`,
+            sourceFormat: wire,
+          },
+          recipe: {
+            TargetFormat: 'EnfusionDDS',
+            FormatCompress: 'Fastest',
+            CompressTreshold: 80,
+            Conversion: 'None',
+            ConversionQuality: 1,
+            Swizzling: 'None',
+            GenerateMips: true,
+            MipMapFunction: 'Filter',
+            MipMapFilter: 'Box',
+            TiledTexture: true,
+          },
+        },
+      }),
+    );
+    assert.equal(inspection.metadata?.sourceFormat, format);
+  }
+  for (const alias of ['jpeg', 'tif']) {
+    assert.throws(
+      () =>
+        inspectionOf(
+          JSON.stringify({
+            ...inspectMessage({}),
+            metadata: {
+              schemaVersion: 1,
+              identity: {
+                guid: 'aBcDeF0123456789',
+                name: 'x.edds',
+                sourceFile: `x.${alias}`,
+                sourceFormat: alias,
+              },
+              recipe: {},
+            },
+          }),
+        ),
+      /sourceFormat/,
+    );
+  }
+});
+
 test('identity-only inspect keeps a valid GUID when the old recipe is unsupported', () => {
   const value = inspectionOf(JSON.stringify({
     ...inspectMessage({}),

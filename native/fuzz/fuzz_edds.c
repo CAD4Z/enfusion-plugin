@@ -31,12 +31,21 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         (void)edds_preview(file, &info, 0, NULL, NULL, &rgba, &rgba_size, &error);
         edds_free(rgba);
     }
+    /*
+     * The same bytes as every source format in the contract, so a corpus entry that is a truncated
+     * PNG is also a malformed JPEG and an oversized TIFF directory to the decoder beside it.
+     */
     edds_default_profile(&profile);
-    rewind(file);
-    (void)edds_convert(file, EDDS_SOURCE_PNG, output, &profile, NULL, NULL, NULL, NULL, &error);
-    rewind(file);
-    rewind(output);
-    (void)edds_convert(file, EDDS_SOURCE_TGA, output, &profile, NULL, NULL, NULL, NULL, &error);
+    {
+        size_t formats = 0;
+        const edds_source_capability *capabilities = edds_source_capabilities(&formats);
+        for (size_t at = 0; at < formats; ++at) {
+            rewind(file);
+            rewind(output);
+            (void)edds_convert(file, capabilities[at].format, output, &profile,
+                NULL, NULL, NULL, NULL, &error);
+        }
+    }
     rewind(file);
     (void)edds_metadata_parse(file, &metadata, &error);
     (void)edds_batch_parse_line((const char *)data, size, &batch, &error);

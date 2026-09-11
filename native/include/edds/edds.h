@@ -41,8 +41,29 @@ typedef enum edds_pixel_format {
 
 typedef enum edds_source_format {
     EDDS_SOURCE_PNG,
-    EDDS_SOURCE_TGA
+    EDDS_SOURCE_TGA,
+    EDDS_SOURCE_JPG,
+    EDDS_SOURCE_TIFF
 } edds_source_format;
+
+/**
+ * One row of the source contract: a DayZ Workbench texture resource class, the single extension
+ * that names it, and the wire name the machine protocol reports for it. Extensions that only alias
+ * a format are absent on purpose — Workbench registers `.jpg` and `.tiff`, not `.jpeg` and `.tif`,
+ * so a file under an alias would convert into an EDDS the editor calls registered and Workbench
+ * does not see a source for. Everything in the converter that has to know which inputs exist —
+ * the CLI extension check, the metadata resource class, the decoder dispatch — reads this table.
+ */
+typedef struct edds_source_capability {
+    edds_source_format format;
+    const char *extension;
+    const char *wire_name;
+    const char *resource_class;
+} edds_source_capability;
+
+const edds_source_capability *edds_source_capabilities(size_t *count);
+const edds_source_capability *edds_source_capability_of_format(edds_source_format format);
+const edds_source_capability *edds_source_capability_of_resource_class(const char *resource_class);
 
 typedef enum edds_format_compress {
     EDDS_COMPRESS_COPY,

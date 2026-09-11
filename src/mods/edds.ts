@@ -6,6 +6,7 @@
  */
 
 import type { TextureIdentity, TextureMetadata, TextureProfile } from './textureConversion';
+import { TEXTURE_SOURCES, textureSourceFormatOfWire } from './textureSources';
 
 export const EDDS_PROTOCOL_VERSION = 1;
 export const EDDS_MAX_DIMENSION = 32_768;
@@ -316,16 +317,17 @@ function metadataOf(source: unknown): TextureMetadata {
   if (!/^[0-9A-Fa-f]{16}$/.test(guid)) {
     throw new Error('metadata.identity.guid must be 64-bit hexadecimal.');
   }
-  const sourceFormat = stringOf(identity, 'sourceFormat');
-  if (sourceFormat !== 'png' && sourceFormat !== 'tga') {
-    throw new Error('metadata.identity.sourceFormat must be png or tga.');
+  const sourceFormat = textureSourceFormatOfWire(stringOf(identity, 'sourceFormat'));
+  if (sourceFormat === undefined) {
+    const wires = TEXTURE_SOURCES.map((source) => source.wire).join(', ');
+    throw new Error(`metadata.identity.sourceFormat must be one of ${wires}.`);
   }
 
   return {
     guid,
     name: stringOf(identity, 'name'),
     sourceFile: stringOf(identity, 'sourceFile'),
-    sourceFormat: sourceFormat === 'png' ? 'PNG' : 'TGA',
+    sourceFormat,
     profile: profileOf(recipe),
   };
 }

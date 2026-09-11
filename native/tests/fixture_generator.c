@@ -3,42 +3,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+enum { EDDS_FIXTURES = 5, SOURCE_FIXTURES = 4 };
+
 int main(int argc, char **argv) {
-    test_bytes copy;
-    test_bytes lz4;
-    test_bytes dxt1;
-    test_bytes odd_fourcc;
-    test_bytes overflow;
-    test_bytes png = { NULL, 0 };
-    test_bytes tga = { NULL, 0 };
+    test_bytes fixtures[EDDS_FIXTURES + SOURCE_FIXTURES];
+    const int argc_without_sources = 1 + EDDS_FIXTURES;
+    const int argc_with_sources = argc_without_sources + SOURCE_FIXTURES;
+    int produced;
     int ok;
-    if (argc != 6 && argc != 8) {
-        fputs("usage: edds-fixture COPY_PATH LZ4_PATH DXT1_PATH ODD_FOURCC_PATH OVERFLOW_PATH [PNG_PATH TGA_PATH]\n", stderr);
+    if (argc != argc_without_sources && argc != argc_with_sources) {
+        fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF]\n", stderr);
         return 2;
     }
 
-    copy = fixture_copy_bgra();
-    lz4 = fixture_lz4_bgrx();
-    dxt1 = fixture_dxt1();
-    odd_fourcc = fixture_odd_fourcc();
-    overflow = fixture_integer_overflow();
-    if (argc == 8) {
-        png = fixture_png_rgba();
-        tga = fixture_tga_bgrx();
+    fixtures[0] = fixture_copy_bgra();
+    fixtures[1] = fixture_lz4_bgrx();
+    fixtures[2] = fixture_dxt1();
+    fixtures[3] = fixture_odd_fourcc();
+    fixtures[4] = fixture_integer_overflow();
+    produced = EDDS_FIXTURES;
+    if (argc == argc_with_sources) {
+        fixtures[5] = fixture_png_rgba();
+        fixtures[6] = fixture_tga_bgrx();
+        fixtures[7] = fixture_jpeg_ycbcr();
+        fixtures[8] = fixture_tiff_rgb();
+        produced = EDDS_FIXTURES + SOURCE_FIXTURES;
     }
-    ok = copy.data != NULL && lz4.data != NULL && dxt1.data != NULL &&
-        odd_fourcc.data != NULL && overflow.data != NULL &&
-        fixture_write(argv[1], copy) && fixture_write(argv[2], lz4) &&
-        fixture_write(argv[3], dxt1) && fixture_write(argv[4], odd_fourcc) &&
-        fixture_write(argv[5], overflow) &&
-        (argc == 6 || (png.data != NULL && tga.data != NULL &&
-            fixture_write(argv[6], png) && fixture_write(argv[7], tga)));
-    fixture_free(copy);
-    fixture_free(lz4);
-    fixture_free(dxt1);
-    fixture_free(odd_fourcc);
-    fixture_free(overflow);
-    fixture_free(png);
-    fixture_free(tga);
+    ok = 1;
+    for (int at = 0; at < produced; ++at) {
+        ok = ok && fixtures[at].data != NULL && fixture_write(argv[at + 1], fixtures[at]);
+    }
+    for (int at = 0; at < produced; ++at) {
+        fixture_free(fixtures[at]);
+    }
     return ok ? 0 : 1;
 }

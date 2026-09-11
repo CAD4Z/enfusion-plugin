@@ -7,6 +7,11 @@ import {
   withTextureBatchProfile,
 } from '../../src/mods/textureBatch';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import {
+  TEXTURE_PRIMARY_REFUSAL,
+  TEXTURE_SOURCE_REFUSAL,
+  textureSourceFormatOf,
+} from '../../src/mods/textureSources';
 import { BATCH_MAX_JOBS } from '../../src/mods/textureBatchProtocol';
 
 const revision = { size: 91, modified: 1_725_000_000_000 };
@@ -271,6 +276,45 @@ function batch(over: Partial<TextureBatchInput> = {}): TextureBatchInput {
   };
 }
 
+test('a batch mixes every supported source and keeps an alias out of the jobs', () => {
+  const plan = textureBatchPlanOf(batch({
+    primary: 'C:\\mod\\Mod\\photo.jpg',
+    items: [
+      item('C:\\mod\\Mod\\photo.jpg'),
+      item('C:\\mod\\Mod\\scan.tiff'),
+      item('C:\\mod\\Mod\\zeta.png'),
+      item('C:\\mod\\Mod\\alias.jpeg'),
+    ],
+  }));
+
+  assert.equal(plan.kind, 'ready');
+  assert.deepEqual(
+    plan.kind === 'ready' &&
+      plan.items.map((entry) => [
+        entry.source,
+        entry.kind,
+        entry.kind === 'ready' ? entry.plan.sourceFormat : entry.reason,
+      ]),
+    [
+      ['C:\\mod\\Mod\\alias.jpeg', 'refused', TEXTURE_SOURCE_REFUSAL],
+      ['C:\\mod\\Mod\\photo.jpg', 'ready', 'JPG'],
+      ['C:\\mod\\Mod\\scan.tiff', 'ready', 'TIFF'],
+      ['C:\\mod\\Mod\\zeta.png', 'ready', 'PNG'],
+    ],
+  );
+  assert.equal(plan.kind === 'ready' && plan.jobs.length, 3);
+});
+
+test('an alias cannot be the primary source of a batch', () => {
+  assert.deepEqual(
+    textureBatchPlanOf(batch({
+      primary: 'C:\\mod\\Mod\\alias.tif',
+      items: [item('C:\\mod\\Mod\\alias.tif')],
+    })),
+    { kind: 'refused', reason: TEXTURE_PRIMARY_REFUSAL },
+  );
+});
+
 function item(
   source: string,
   over: Partial<TextureBatchItemInput> = {},
@@ -300,7 +344,7 @@ function metadata(
     guid,
     name: 'Mod/texture.edds',
     sourceFile,
-    sourceFormat: sourceFile.toLowerCase().endsWith('.png') ? 'PNG' as const : 'TGA' as const,
+    sourceFormat: textureSourceFormatOf(sourceFile) ?? 'PNG',
     profile,
   };
 }

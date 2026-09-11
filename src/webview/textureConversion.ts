@@ -1,4 +1,4 @@
-/** Browser-only rendering for PNG/TGA authoring. Every write remains an explicit host request. */
+/** Browser-only rendering for source-image authoring. Every write remains an explicit host request. */
 
 import type { EddsPreview } from '../mods/edds';
 import { TEXTURE_PROFILE_FIELDS, type TextureAuthoringState } from '../mods/textureAuthoring';

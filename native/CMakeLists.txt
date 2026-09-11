@@ -27,7 +27,18 @@ endfunction()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-add_library(edds_core STATIC src/edds.c src/convert.c src/metadata.c src/batch.c src/pool.c)
+add_library(edds_core STATIC
+  src/edds.c
+  src/image.c
+  src/sources.c
+  src/decode_png.c
+  src/decode_tga.c
+  src/decode_jpeg.c
+  src/decode_tiff.c
+  src/convert.c
+  src/metadata.c
+  src/batch.c
+  src/pool.c)
 target_include_directories(edds_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(edds_core PUBLIC Threads::Threads)
 edds_configure_target(edds_core)

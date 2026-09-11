@@ -362,7 +362,7 @@ static edds_status parse_configurations(
         token resource = next_token(scan);
         token platform;
         token next;
-        int recognized;
+        const edds_source_capability *recognized;
         if (resource.kind == TOKEN_CLOSE) {
             if (pending != EDDS_OK) *error = pending_error;
             return pending;
@@ -376,17 +376,16 @@ static edds_status parse_configurations(
             next = next_token(scan);
         }
         if (next.kind != TOKEN_OPEN) goto malformed;
-        recognized = strcmp(resource.text, "PNGResourceClass") == 0 ||
-            strcmp(resource.text, "TGAResourceClass") == 0;
-        if (recognized && strcmp(platform.text, "PC") == 0) {
+        recognized = edds_source_capability_of_resource_class(resource.text);
+        if (recognized != NULL && strcmp(platform.text, "PC") == 0) {
             edds_status status;
             if (*found_pc) {
-                fail(error, "duplicate-pc-recipe", "Metadata contains more than one PNG/TGA PC recipe.");
+                fail(error, "duplicate-pc-recipe",
+                    "Metadata contains more than one source-image PC recipe.");
                 return EDDS_INVALID_INPUT;
             }
             *found_pc = 1;
-            metadata->source_format = strcmp(resource.text, "PNGResourceClass") == 0
-                ? EDDS_SOURCE_PNG : EDDS_SOURCE_TGA;
+            metadata->source_format = recognized->format;
             status = parse_recipe(scan, metadata, error);
             if (status == EDDS_UNSUPPORTED_FORMAT) {
                 if (pending == EDDS_OK) pending_error = *error;
@@ -490,13 +489,17 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
         }
     }
     if (next_token(&scan).kind != TOKEN_END || !found_name || !found_configurations || !found_pc) {
-        fail(error, "incomplete-metadata", "Metadata requires Name and one PNG/TGA PC recipe.");
+        fail(error, "incomplete-metadata", "Metadata requires Name and one source-image PC recipe.");
         goto done;
     }
-    if ((metadata->source_format == EDDS_SOURCE_PNG && !extension_is(metadata->source_file, ".png")) ||
-        (metadata->source_format == EDDS_SOURCE_TGA && !extension_is(metadata->source_file, ".tga"))) {
-        fail(error, "source-format-mismatch", "The PC resource class must match the SourceFile extension.");
-        goto done;
+    {
+        const edds_source_capability *capability =
+            edds_source_capability_of_format(metadata->source_format);
+        if (capability == NULL || !extension_is(metadata->source_file, capability->extension)) {
+            fail(error, "source-format-mismatch",
+                "The PC resource class must match the SourceFile extension.");
+            goto done;
+        }
     }
     status = pending;
     if (pending != EDDS_OK) *error = pending_error;
@@ -533,8 +536,11 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         fail(error, "invalid-api-argument", "The metadata value and output are required.");
         return EDDS_INTERNAL_FAILURE;
     }
-    resource = metadata->source_format == EDDS_SOURCE_PNG ? "PNGResourceClass" :
-        (metadata->source_format == EDDS_SOURCE_TGA ? "TGAResourceClass" : NULL);
+    {
+        const edds_source_capability *capability =
+            edds_source_capability_of_format(metadata->source_format);
+        resource = capability == NULL ? NULL : capability->resource_class;
+    }
     compress = compress_name(metadata->profile.format_compress);
     if (resource == NULL || compress == NULL || strlen(metadata->guid) != 16u ||
         !safe_string(metadata->name) || !safe_string(metadata->source_file) ||

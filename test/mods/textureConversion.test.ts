@@ -6,6 +6,7 @@ import {
   textureConversionPlanOf,
   textureGuidOf,
 } from '../../src/mods/textureConversion';
+import { TEXTURE_SOURCE_REFUSAL } from '../../src/mods/textureSources';
 
 const sourceRevision = { size: 91, modified: 1_725_000_000_000 };
 const outputRevision = { size: 412, modified: 1_725_000_001_000 };
@@ -180,6 +181,32 @@ test('malformed metadata is refused before preview or write', () => {
       reason: 'The existing metadata is not safe to replace: Conversion DXT5 is not supported.',
     },
   );
+});
+
+test('a JPG and a TIFF are planned exactly like a PNG, down to the sibling EDDS', () => {
+  for (const [name, format] of [['photo.jpg', 'JPG'], ['scan.tiff', 'TIFF']] as const) {
+    const plan = textureConversionPlanOf(
+      input({ source: `C:\\repo\\MyMod\\MyMod\\GUI\\${name}` }),
+    );
+
+    assert.equal(plan.kind, 'ready');
+    assert.equal(plan.kind === 'ready' && plan.sourceFormat, format);
+    assert.equal(plan.kind === 'ready' && plan.scope, 'registered');
+    assert.equal(
+      plan.kind === 'ready' && plan.output,
+      `C:\\repo\\MyMod\\MyMod\\GUI\\${name.slice(0, name.lastIndexOf('.'))}.edds`,
+    );
+    assert.equal(plan.kind === 'ready' && plan.identity?.sourceFile, name);
+  }
+});
+
+test('an alias extension is refused before any write, not registered under its format', () => {
+  for (const alias of ['photo.jpeg', 'scan.tif']) {
+    assert.deepEqual(
+      textureConversionPlanOf(input({ source: `C:\\repo\\MyMod\\MyMod\\GUI\\${alias}` })),
+      { kind: 'refused', reason: TEXTURE_SOURCE_REFUSAL },
+    );
+  }
 });
 
 test('a generated GUID retries collisions and is uppercase 64-bit hexadecimal', () => {
