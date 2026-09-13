@@ -15,6 +15,13 @@ test_bytes fixture_lz4_streaming_bgrx(void);
 test_bytes fixture_dx10_bgrx(void);
 test_bytes fixture_dxt1(void);
 test_bytes fixture_odd_fourcc(void);
+
+/**
+ * A DXT5 whose colour endpoints are in the order BC1 would read as its punch-through layout. BC3
+ * has no such layout — the alpha block beside it carries the alpha — so this is a legal texture
+ * whose fourth colour a BC1 decoder would turn into a hole.
+ */
+test_bytes fixture_dxt5_low_endpoints(void);
 test_bytes fixture_integer_overflow(void);
 test_bytes fixture_png_rgba(void);
 test_bytes fixture_png_rgba_gamma(void);

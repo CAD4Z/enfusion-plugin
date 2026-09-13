@@ -117,7 +117,20 @@ static uint8_t mix(int low, int high, int low_parts, int high_parts, int total) 
     return (uint8_t)((low * low_parts + high * high_parts + total / 2) / total);
 }
 
-static void bc1_palette(uint16_t first, uint16_t second, uint8_t palette[4][4]) {
+/**
+ * The four colours of a block. Standing alone as BC1, the order of the endpoints chooses the
+ * layout: `c0 > c1` is four colours, and otherwise the fourth entry is a transparent black rather
+ * than a colour. Inside BC3 the same eight bytes are always four colours, because the alpha block
+ * beside them already carries the alpha and the endpoint order means nothing — so a DXT5 written
+ * with `c0 <= c1` decodes to colours, not to holes.
+ */
+static void bc1_palette(
+    uint16_t first,
+    uint16_t second,
+    int always_four_colours,
+    uint8_t palette[4][4]
+) {
+    const int four_colours = always_four_colours || first > second;
     uint8_t low[3];
     uint8_t high[3];
     from_565(first, low);
@@ -125,7 +138,7 @@ static void bc1_palette(uint16_t first, uint16_t second, uint8_t palette[4][4]) 
     for (unsigned channel = 0; channel < 3; ++channel) {
         palette[0][channel] = low[channel];
         palette[1][channel] = high[channel];
-        if (first > second) {
+        if (four_colours) {
             palette[2][channel] = mix(low[channel], high[channel], 2, 1, 3);
             palette[3][channel] = mix(low[channel], high[channel], 1, 2, 3);
         } else {
@@ -136,8 +149,7 @@ static void bc1_palette(uint16_t first, uint16_t second, uint8_t palette[4][4]) 
     palette[0][3] = 255u;
     palette[1][3] = 255u;
     palette[2][3] = 255u;
-    /* The three-colour layout spends its fourth entry on a transparent black instead of a colour. */
-    palette[3][3] = first > second ? 255u : 0u;
+    palette[3][3] = four_colours ? 255u : 0u;
 }
 
 static uint32_t bc1_indices(
@@ -235,7 +247,7 @@ static void bc1_encode_block(
             first = second;
             second = kept;
         }
-        bc1_palette(first, second, palette);
+        bc1_palette(first, second, 0, palette);
         if (first == second) {
             /*
              * Equal endpoints are the three-colour layout, and its fourth entry is a transparent
@@ -274,9 +286,13 @@ static void bc1_encode_block(
     }
 }
 
-static void bc1_decode_block(const uint8_t block[8], uint8_t rgba[BLOCK_PIXELS * 4]) {
+static void bc1_decode_block(
+    const uint8_t block[8],
+    int always_four_colours,
+    uint8_t rgba[BLOCK_PIXELS * 4]
+) {
     uint8_t palette[4][4];
-    bc1_palette(u16le(block), u16le(block + 2), palette);
+    bc1_palette(u16le(block), u16le(block + 2), always_four_colours, palette);
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         const unsigned index = (block[4 + pixel / 4u] >> ((pixel % 4u) * 2u)) & 3u;
         memcpy(rgba + pixel * 4u, palette[index], 4);
@@ -578,10 +594,10 @@ int edds_gpu_decode(
                 uint8_t second[BLOCK_PIXELS];
                 switch (format) {
                     case EDDS_PIXEL_DXT1:
-                        bc1_decode_block(block, decoded);
+                        bc1_decode_block(block, 0, decoded);
                         break;
                     case EDDS_PIXEL_DXT5:
-                        bc1_decode_block(block + 8, decoded);
+                        bc1_decode_block(block + 8, 1, decoded);
                         bc4_decode_block(block, channel);
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             decoded[pixel * 4u + 3u] = channel[pixel];

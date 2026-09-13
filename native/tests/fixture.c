@@ -224,6 +224,23 @@ test_bytes fixture_dxt1(void) {
     return fixture;
 }
 
+test_bytes fixture_dxt5_low_endpoints(void) {
+    /* Opaque alpha, then black and red endpoints in the low-to-high order, every index the last. */
+    static const uint8_t blocks[16] = {
+        255, 255, 0, 0, 0, 0, 0, 0,
+        0x00, 0x00, 0x00, 0xf8, 0xff, 0xff, 0xff, 0xff
+    };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + 8u + sizeof blocks);
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    header(fixture.data, 4, 4, 1, "DXT5", 0u);
+    memcpy(fixture.data + 128, "COPY", 4);
+    put_u32(fixture.data + 132, (uint32_t)sizeof blocks);
+    memcpy(fixture.data + 136, blocks, sizeof blocks);
+    return fixture;
+}
+
 test_bytes fixture_odd_fourcc(void) {
     static const char odd_fourcc[4] = { 'Q', '"', '\\', '\1' };
     static const uint8_t block[8] = { 0 };

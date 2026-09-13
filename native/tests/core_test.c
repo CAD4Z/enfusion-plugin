@@ -2171,6 +2171,33 @@ static int a_stored_dxt1_block_decodes_to_its_pixels(void) {
     return 1;
 }
 
+/**
+ * A BC3 colour block is always four colours. Reading it as BC1 would turn its fourth entry into a
+ * transparent black, so a texture another tool wrote with the endpoints the other way round would
+ * preview with holes in it where the engine shows colour.
+ */
+static int a_dxt5_colour_block_is_never_read_as_punch_through(void) {
+    test_bytes fixture = fixture_dxt5_low_endpoints();
+    FILE *file = stream_of(fixture.data, fixture.size);
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t size = 0;
+
+    CHECK(fixture.data != NULL && file != NULL);
+    CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.pixel_format == EDDS_PIXEL_DXT5);
+    CHECK(edds_preview(file, &info, 0, never_cancelled, NULL, &rgba, &size, &error) == EDDS_OK);
+    CHECK(size == 4u * 4u * 4u);
+    /* Black and red endpoints, every index the last one: a third of the way from red to black. */
+    CHECK(every_pixel_is(rgba, size, 170, 0, 0));
+
+    edds_free(rgba);
+    fclose(file);
+    fixture_free(fixture);
+    return 1;
+}
+
 int main(void) {
     const int passed =
         copy_inspection_and_preview() &&
@@ -2227,7 +2254,8 @@ int main(void) {
         truncated_gpu_blocks_are_refused() &&
         every_conversion_round_trips_through_metadata() &&
         metadata_quality_text_is_exact_or_refused() &&
-        a_stored_dxt1_block_decodes_to_its_pixels();
+        a_stored_dxt1_block_decodes_to_its_pixels() &&
+        a_dxt5_colour_block_is_never_read_as_punch_through();
 
     return passed ? 0 : 1;
 }

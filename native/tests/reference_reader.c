@@ -277,9 +277,11 @@ static uint8_t blend(uint32_t low, uint32_t high, uint32_t low_parts, uint32_t h
     return (uint8_t)((low * low_parts + high * high_parts + total / 2u) / total);
 }
 
-static void decode_bc1(const uint8_t block[8], uint8_t rgba[64]) {
+/* Standing alone the endpoint order picks the layout; inside BC3 it is always four colours. */
+static void decode_bc1(const uint8_t block[8], int always_four_colours, uint8_t rgba[64]) {
     const uint32_t first = (uint32_t)block[0] | ((uint32_t)block[1] << 8);
     const uint32_t second = (uint32_t)block[2] | ((uint32_t)block[3] << 8);
+    const int four_colours = always_four_colours || first > second;
     uint8_t palette[4][4];
     for (unsigned entry = 0; entry < 2; ++entry) {
         const uint32_t value = entry == 0 ? first : second;
@@ -289,7 +291,7 @@ static void decode_bc1(const uint8_t block[8], uint8_t rgba[64]) {
         palette[entry][3] = 255u;
     }
     for (unsigned channel = 0; channel < 3; ++channel) {
-        if (first > second) {
+        if (four_colours) {
             palette[2][channel] = blend(palette[0][channel], palette[1][channel], 2, 1, 3);
             palette[3][channel] = blend(palette[0][channel], palette[1][channel], 1, 2, 3);
         } else {
@@ -298,7 +300,7 @@ static void decode_bc1(const uint8_t block[8], uint8_t rgba[64]) {
         }
     }
     palette[2][3] = 255u;
-    palette[3][3] = first > second ? 255u : 0u;
+    palette[3][3] = four_colours ? 255u : 0u;
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
         const unsigned index = (block[4u + pixel / 4u] >> ((pixel % 4u) * 2u)) & 3u;
         memcpy(rgba + pixel * 4u, palette[index], 4);
@@ -529,9 +531,9 @@ static int decode_gpu_mip(
             uint8_t second[16];
             memset(decoded, 0, sizeof decoded);
             if (strcmp(format->name, "DXT1") == 0) {
-                decode_bc1(block, decoded);
+                decode_bc1(block, 0, decoded);
             } else if (strcmp(format->name, "DXT5") == 0) {
-                decode_bc1(block + 8, decoded);
+                decode_bc1(block + 8, 1, decoded);
                 decode_bc4(block, channel);
                 for (unsigned pixel = 0; pixel < 16; ++pixel) {
                     decoded[pixel * 4u + 3u] = channel[pixel];
