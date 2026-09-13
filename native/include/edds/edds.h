@@ -33,11 +33,20 @@ typedef enum edds_container {
 typedef enum edds_pixel_format {
     EDDS_PIXEL_BGRA8,
     EDDS_PIXEL_BGRX8,
+    EDDS_PIXEL_R8,
+    EDDS_PIXEL_RG8,
     EDDS_PIXEL_DXT1,
     EDDS_PIXEL_DXT5,
+    EDDS_PIXEL_BC4,
+    EDDS_PIXEL_BC5,
+    EDDS_PIXEL_BC7,
     EDDS_PIXEL_DXGI,
     EDDS_PIXEL_UNKNOWN
 } edds_pixel_format;
+
+/** The wire name of a runtime format, and the channels a decode of it actually carries. */
+const char *edds_pixel_format_name(edds_pixel_format format);
+const char *edds_pixel_format_channels(edds_pixel_format format);
 
 typedef enum edds_source_format {
     EDDS_SOURCE_PNG,
@@ -72,10 +81,53 @@ typedef enum edds_format_compress {
     EDDS_COMPRESS_BEST
 } edds_format_compress;
 
+/** Workbench `Conversion`: which GPU format the RGBA samples are turned into. */
+typedef enum edds_conversion {
+    EDDS_CONVERSION_NONE,
+    EDDS_CONVERSION_DXT,
+    EDDS_CONVERSION_RED,
+    EDDS_CONVERSION_RED_HQ,
+    EDDS_CONVERSION_RED_GREEN,
+    EDDS_CONVERSION_RED_GREEN_HQ,
+    EDDS_CONVERSION_COLOR_HQ,
+    EDDS_CONVERSION_HDR
+} edds_conversion;
+
+/**
+ * `ConversionQuality` is a fraction of one, and DayZ's own metadata writes it to three decimals
+ * (`0.026`, `0.403`, `0.497`, `1`). Carrying it as thousandths keeps every value the corpus uses
+ * exact through the CLI, the batch protocol and the metadata text, where a binary fraction would
+ * have to be rounded on the way out and would no longer be the value that came in.
+ */
+#define EDDS_QUALITY_SCALE 1000u
+
+/**
+ * One row of the conversion contract: the Workbench enum, the wire name the CLI and the machine
+ * protocol use for it, whether this converter implements it, and whether `ConversionQuality`
+ * reaches its encoder at all — Workbench itself describes the field as "Conversion quality for
+ * compressed formats", so an uncompressed conversion refuses a quality other than the default
+ * rather than accepting a number that would change nothing.
+ */
+typedef struct edds_conversion_capability {
+    edds_conversion conversion;
+    const char *workbench_name;
+    const char *wire_name;
+    int supported;
+    int uses_quality;
+} edds_conversion_capability;
+
+const edds_conversion_capability *edds_conversions(size_t *count);
+const edds_conversion_capability *edds_conversion_capability_of(edds_conversion conversion);
+const edds_conversion_capability *edds_conversion_of_workbench_name(const char *name);
+const edds_conversion_capability *edds_conversion_of_wire_name(const char *name);
+
 /** The exact supported Workbench slice. Values outside it are refused, never substituted. */
 typedef struct edds_profile {
     edds_format_compress format_compress;
     uint32_t compress_threshold;
+    edds_conversion conversion;
+    /** Thousandths of one, so 1000 is Workbench's default `ConversionQuality 1`. */
+    uint32_t conversion_quality;
     int generate_mips;
 } edds_profile;
 
@@ -160,6 +212,19 @@ edds_status edds_preview(
 );
 
 void edds_default_profile(edds_profile *profile);
+
+/** Whether a profile is inside this converter's slice, with the refusal when it is not. */
+edds_status edds_profile_check(const edds_profile *profile, edds_error *error);
+
+/** How much alpha one source image actually carries, which is not the same as declaring one. */
+typedef enum edds_source_alpha {
+    EDDS_ALPHA_ABSENT,
+    EDDS_ALPHA_OPAQUE,
+    EDDS_ALPHA_USED
+} edds_source_alpha;
+
+/** The runtime format a profile produces for a source carrying that much alpha. */
+edds_pixel_format edds_profile_pixel_format(const edds_profile *profile, edds_source_alpha alpha);
 
 edds_status edds_convert(
     FILE *source,

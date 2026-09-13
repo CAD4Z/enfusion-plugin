@@ -14,9 +14,12 @@ set(tiff_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-tiff-result.edds")
 set(png_metadata "${png_result}.meta")
 set(jpg_metadata "${jpg_result}.meta")
 
+set(gpu_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-source.tga")
+set(gpu_flat "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-flat.tga")
+
 execute_process(
   COMMAND "${FIXTURE}" "${copy}" "${lz4}" "${dxt1}" "${odd_fourcc}" "${overflow}"
-    "${png}" "${tga}" "${jpg_source}" "${tiff_source}"
+    "${png}" "${tga}" "${jpg_source}" "${tiff_source}" "${gpu_source}" "${gpu_flat}"
   RESULT_VARIABLE fixture_result
   ERROR_VARIABLE fixture_error
 )
@@ -327,7 +330,7 @@ if(NOT metadata_schema EQUAL 1 OR NOT metadata_guid STREQUAL "0123456789ABCDEF" 
 endif()
 set(unsupported_metadata "${CMAKE_CURRENT_BINARY_DIR}/black-box-unsupported.edds.meta")
 file(READ "${png_metadata}" unsupported_metadata_text)
-string(REPLACE "Conversion None" "Conversion DXTCompression"
+string(REPLACE "Conversion None" "Conversion HDRCompression"
   unsupported_metadata_text "${unsupported_metadata_text}")
 file(WRITE "${unsupported_metadata}" "${unsupported_metadata_text}")
 execute_process(
@@ -581,16 +584,17 @@ endif()
 
 execute_process(
   COMMAND "${CLI}" inspect --machine --protocol 1 --input "${dxt1}"
-  RESULT_VARIABLE unsupported_inspect_result
-  OUTPUT_VARIABLE unsupported_inspect_output
+  RESULT_VARIABLE dxt1_inspect_result
+  OUTPUT_VARIABLE dxt1_inspect_output
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-if(NOT unsupported_inspect_result EQUAL 0)
-  message(FATAL_ERROR "unsupported pixels must remain inspectable")
+if(NOT dxt1_inspect_result EQUAL 0)
+  message(FATAL_ERROR "a stored DXT1 texture must remain inspectable")
 endif()
-string(JSON preview_supported GET "${unsupported_inspect_output}" previewSupported)
-if(preview_supported)
-  message(FATAL_ERROR "DXT1 was represented as previewable: ${unsupported_inspect_output}")
+string(JSON dxt1_preview_supported GET "${dxt1_inspect_output}" previewSupported)
+string(JSON dxt1_channels GET "${dxt1_inspect_output}" channels)
+if(NOT dxt1_preview_supported OR NOT dxt1_channels STREQUAL "RGB")
+  message(FATAL_ERROR "DXT1 was not reported as decodable RGB: ${dxt1_inspect_output}")
 endif()
 
 execute_process(
@@ -602,6 +606,10 @@ execute_process(
 )
 if(NOT odd_fourcc_result EQUAL 0)
   message(FATAL_ERROR "odd FourCC inspection failed with ${odd_fourcc_result}: ${odd_fourcc_error}")
+endif()
+string(JSON odd_fourcc_preview GET "${odd_fourcc_output}" previewSupported)
+if(odd_fourcc_preview)
+  message(FATAL_ERROR "an unknown FourCC was represented as previewable: ${odd_fourcc_output}")
 endif()
 string(JSON odd_fourcc_value GET "${odd_fourcc_output}" dds fourCC)
 if(NOT odd_fourcc_value STREQUAL [=[Q"\?]=])
@@ -619,13 +627,31 @@ if(NOT overflow_result EQUAL 3)
 endif()
 
 execute_process(
-  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${dxt1}"
+  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${odd_fourcc}"
   RESULT_VARIABLE unsupported_preview_result
   OUTPUT_VARIABLE unsupported_preview_output
   ERROR_VARIABLE unsupported_preview_error
 )
 if(NOT unsupported_preview_result EQUAL 4)
   message(FATAL_ERROR "unsupported preview exit was ${unsupported_preview_result}, expected 4")
+endif()
+
+# The same block, decoded: a DXT1 texture is sixteen opaque black pixels, not a refusal.
+execute_process(
+  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${dxt1}"
+  RESULT_VARIABLE dxt1_preview_result
+  OUTPUT_VARIABLE dxt1_preview_output
+  ERROR_VARIABLE dxt1_preview_error
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT dxt1_preview_result EQUAL 0)
+  message(FATAL_ERROR "DXT1 preview failed with ${dxt1_preview_result}: ${dxt1_preview_error}")
+endif()
+string(JSON dxt1_preview_length GET "${dxt1_preview_output}" byteLength)
+string(JSON dxt1_preview_pixels GET "${dxt1_preview_output}" pixelsBase64)
+if(NOT dxt1_preview_length EQUAL 64 OR
+   NOT dxt1_preview_pixels STREQUAL "AAAA/wAAAP8AAAD/AAAA/wAAAP8AAAD/AAAA/wAAAP8AAAD/AAAA/wAAAP8AAAD/AAAA/wAAAP8AAAD/AAAA/w==")
+  message(FATAL_ERROR "DXT1 pixels were not independently expected: ${dxt1_preview_output}")
 endif()
 
 execute_process(COMMAND "${CLI}" inspect --machine --protocol 2 --input "${copy}"
@@ -654,4 +680,261 @@ string(JSON first_command GET "${output}" commands 0)
 string(JSON second_command GET "${output}" commands 1)
 if(NOT first_command STREQUAL "inspect" OR NOT second_command STREQUAL "preview")
   message(FATAL_ERROR "bad command list: ${output}")
+endif()
+
+# ---------------------------------------------------------------------------------------------
+# Every GPU conversion, end to end through the CLI, then read back by the independent reader: the
+# header it wrote, the blocks it padded, the channels it really carries and how far the lossy ones
+# drifted from the source. The reader shares no code with the converter.
+# ---------------------------------------------------------------------------------------------
+
+foreach(row IN ITEMS
+    "none|BGRA8|RGBA|0"
+    "dxt-compression|DXT5|RGBA|20"
+    "red|R8|R|0"
+    "red-hq-compression|BC4|R|10"
+    "red-green|RG8|RG|0"
+    "red-green-hq-compression|BC5|RG|10"
+    "color-hq-compression|BC7|RGBA|20")
+  string(REPLACE "|" ";" fields "${row}")
+  list(GET fields 0 wire)
+  list(GET fields 1 runtime)
+  list(GET fields 2 channels)
+  list(GET fields 3 bound)
+  set(gpu_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-${wire}.edds")
+  file(REMOVE "${gpu_result}")
+  execute_process(
+    COMMAND "${CLI}" convert --machine --protocol 1
+      --input "${gpu_source}" --output "${gpu_result}"
+      --target-format enfusion-dds --format-compress fastest --compress-threshold 80
+      --conversion "${wire}" --swizzling none
+      --generate-mips true --mipmap-function filter --mipmap-filter box --tiled-texture true
+    RESULT_VARIABLE gpu_convert_result
+    OUTPUT_VARIABLE gpu_convert_output
+    ERROR_VARIABLE gpu_convert_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(NOT gpu_convert_result EQUAL 0)
+    message(FATAL_ERROR "${wire} conversion failed with ${gpu_convert_result}: ${gpu_convert_error}")
+  endif()
+  string(JSON gpu_convert_format GET "${gpu_convert_output}" pixelFormat)
+  if(NOT gpu_convert_format STREQUAL "${runtime}")
+    message(FATAL_ERROR "${wire} did not report ${runtime}: ${gpu_convert_output}")
+  endif()
+
+  execute_process(
+    COMMAND "${CLI}" inspect --machine --protocol 1 --input "${gpu_result}"
+    RESULT_VARIABLE gpu_inspect_result
+    OUTPUT_VARIABLE gpu_inspect_output
+    ERROR_VARIABLE gpu_inspect_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(NOT gpu_inspect_result EQUAL 0)
+    message(FATAL_ERROR "${wire} inspection failed with ${gpu_inspect_result}: ${gpu_inspect_error}")
+  endif()
+  string(JSON gpu_inspect_format GET "${gpu_inspect_output}" pixelFormat)
+  string(JSON gpu_inspect_channels GET "${gpu_inspect_output}" channels)
+  string(JSON gpu_inspect_preview GET "${gpu_inspect_output}" previewSupported)
+  string(JSON gpu_inspect_mips GET "${gpu_inspect_output}" mipCount)
+  if(NOT gpu_inspect_format STREQUAL "${runtime}" OR
+     NOT gpu_inspect_channels STREQUAL "${channels}" OR
+     NOT gpu_inspect_preview OR NOT gpu_inspect_mips EQUAL 4)
+    message(FATAL_ERROR "${wire} was not inspected as ${runtime}/${channels}: ${gpu_inspect_output}")
+  endif()
+
+  # The smallest mip of the chain is one pixel inside one block, and it still previews.
+  execute_process(
+    COMMAND "${CLI}" preview --machine --protocol 1 --mip 3 --input "${gpu_result}"
+    RESULT_VARIABLE gpu_preview_result
+    OUTPUT_VARIABLE gpu_preview_output
+    ERROR_VARIABLE gpu_preview_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(NOT gpu_preview_result EQUAL 0)
+    message(FATAL_ERROR "${wire} smallest-mip preview failed: ${gpu_preview_error}")
+  endif()
+  string(JSON gpu_preview_length GET "${gpu_preview_output}" byteLength)
+  if(NOT gpu_preview_length EQUAL 4)
+    message(FATAL_ERROR "${wire} smallest mip is not one pixel: ${gpu_preview_output}")
+  endif()
+
+  execute_process(
+    COMMAND "${REFERENCE_READER}" --gpu "${gpu_source}" "${gpu_result}" "${runtime}" "${bound}"
+    RESULT_VARIABLE gpu_reference_result
+    ERROR_VARIABLE gpu_reference_error
+  )
+  if(NOT gpu_reference_result EQUAL 0)
+    message(FATAL_ERROR "${wire} failed independent verification: ${gpu_reference_error}")
+  endif()
+endforeach()
+
+# A batch is the same job contract, so a GPU profile goes through it with no encoder path of its own.
+set(gpu_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-batch.ndjson")
+set(gpu_batch_output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-batch.edds")
+set(gpu_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"Conversion":"ColorHQCompression","ConversionQuality":0.5,"Swizzling":"None","GenerateMips":true,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
+file(REMOVE "${gpu_batch_output}")
+file(WRITE "${gpu_batch_input}"
+  "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}
+"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"bc7\",\"input\":\"${gpu_source}\",\"output\":\"${gpu_batch_output}\",\"metadata\":null,\"identity\":null,\"profile\":${gpu_batch_profile},\"expected\":null}
+"
+  "{\"protocolVersion\":1,\"kind\":\"end\"}
+")
+execute_process(
+  COMMAND "${CLI}" batch --machine --protocol 1
+  INPUT_FILE "${gpu_batch_input}"
+  RESULT_VARIABLE gpu_batch_result OUTPUT_VARIABLE gpu_batch_stdout ERROR_VARIABLE gpu_batch_error
+)
+if(NOT gpu_batch_result EQUAL 0 OR NOT gpu_batch_stdout MATCHES "\"converted\":1")
+  message(FATAL_ERROR "a GPU profile did not survive the batch contract: ${gpu_batch_error}
+${gpu_batch_stdout}")
+endif()
+execute_process(
+  COMMAND "${REFERENCE_READER}" --gpu "${gpu_source}" "${gpu_batch_output}" "BC7" "20"
+  RESULT_VARIABLE gpu_batch_reference ERROR_VARIABLE gpu_batch_reference_error
+)
+if(NOT gpu_batch_reference EQUAL 0)
+  message(FATAL_ERROR "the batch result failed independent verification: ${gpu_batch_reference_error}")
+endif()
+
+# A quality no conversion can use is refused by the batch parser, before any job starts.
+set(dead_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dead-quality.ndjson")
+set(dead_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"Conversion":"None","ConversionQuality":0.5,"Swizzling":"None","GenerateMips":true,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
+file(WRITE "${dead_batch_input}"
+  "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}
+"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"dead\",\"input\":\"${gpu_source}\",\"output\":\"${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dead.edds\",\"metadata\":null,\"identity\":null,\"profile\":${dead_batch_profile},\"expected\":null}
+"
+  "{\"protocolVersion\":1,\"kind\":\"end\"}
+")
+execute_process(
+  COMMAND "${CLI}" batch --machine --protocol 1
+  INPUT_FILE "${dead_batch_input}"
+  RESULT_VARIABLE dead_batch_result OUTPUT_VARIABLE dead_batch_stdout ERROR_QUIET
+)
+if(dead_batch_result EQUAL 0 OR EXISTS "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dead.edds")
+  message(FATAL_ERROR "the batch accepted a quality nothing would read: ${dead_batch_stdout}")
+endif()
+
+# The other DXT branch, on a source that declares no alpha at all: BC1, verified the same way.
+set(dxt1_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dxt1-branch.edds")
+file(REMOVE "${dxt1_result}")
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${tga}" --output "${dxt1_result}" --conversion dxt-compression
+  RESULT_VARIABLE dxt1_branch_result
+  OUTPUT_VARIABLE dxt1_branch_output
+  ERROR_VARIABLE dxt1_branch_error
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT dxt1_branch_result EQUAL 0)
+  message(FATAL_ERROR "the BC1 branch failed with ${dxt1_branch_result}: ${dxt1_branch_error}")
+endif()
+string(JSON dxt1_branch_format GET "${dxt1_branch_output}" pixelFormat)
+if(NOT dxt1_branch_format STREQUAL "DXT1")
+  message(FATAL_ERROR "a source without alpha did not take the BC1 branch: ${dxt1_branch_output}")
+endif()
+execute_process(
+  COMMAND "${REFERENCE_READER}" --gpu "${tga}" "${dxt1_result}" "DXT1" "20"
+  RESULT_VARIABLE dxt1_reference_result ERROR_VARIABLE dxt1_reference_error
+)
+if(NOT dxt1_reference_result EQUAL 0)
+  message(FATAL_ERROR "the BC1 branch failed independent verification: ${dxt1_reference_error}")
+endif()
+
+# HDRCompression is recognized and refused, never replaced with the nearest LDR format.
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${gpu_source}" --output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-hdr.edds"
+    --conversion hdr-compression
+  RESULT_VARIABLE hdr_result OUTPUT_VARIABLE hdr_output ERROR_QUIET
+)
+if(NOT hdr_result EQUAL 4 OR EXISTS "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-hdr.edds")
+  message(FATAL_ERROR "HDRCompression was not refused as unsupported: ${hdr_output}")
+endif()
+string(JSON hdr_code GET "${hdr_output}" error code)
+if(NOT hdr_code STREQUAL "unsupported-setting")
+  message(FATAL_ERROR "HDRCompression refusal changed shape: ${hdr_output}")
+endif()
+
+# Quality is a fraction that round-trips exactly, and only where a compressed encoder reads it.
+set(quality_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-quality.edds")
+set(quality_metadata "${quality_result}.meta")
+file(REMOVE "${quality_result}" "${quality_metadata}")
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${gpu_source}" --output "${quality_result}"
+    --conversion color-hq-compression --conversion-quality 0.403
+    --metadata "${quality_metadata}" --resource-name "Probe/gpu.edds"
+    --source-file "black-box-gpu-source.tga" --guid "0123456789ABCDEF"
+  RESULT_VARIABLE quality_convert_result ERROR_VARIABLE quality_convert_error
+  OUTPUT_QUIET
+)
+if(NOT quality_convert_result EQUAL 0)
+  message(FATAL_ERROR "fractional quality was refused: ${quality_convert_error}")
+endif()
+file(READ "${quality_metadata}" quality_metadata_text)
+if(NOT quality_metadata_text MATCHES "Conversion ColorHQCompression" OR
+   NOT quality_metadata_text MATCHES "ConversionQuality 0\\.403")
+  message(FATAL_ERROR "the recipe did not record its own conversion: ${quality_metadata_text}")
+endif()
+execute_process(
+  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${quality_result}"
+    --metadata "${quality_metadata}"
+  RESULT_VARIABLE quality_inspect_result OUTPUT_VARIABLE quality_inspect_output
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(JSON quality_conversion GET "${quality_inspect_output}" metadata recipe Conversion)
+string(JSON quality_value GET "${quality_inspect_output}" metadata recipe ConversionQuality)
+if(NOT quality_inspect_result EQUAL 0 OR
+   NOT quality_conversion STREQUAL "ColorHQCompression" OR NOT quality_value EQUAL 0.403)
+  message(FATAL_ERROR "the recipe did not round-trip its conversion: ${quality_inspect_output}")
+endif()
+
+foreach(refused IN ITEMS "none;0.5" "red;0.5" "red-green;0.5" "color-hq-compression;1.5"
+    "color-hq-compression;0.4031")
+  list(GET refused 0 refused_conversion)
+  list(GET refused 1 refused_quality)
+  execute_process(
+    COMMAND "${CLI}" convert --machine --protocol 1
+      --input "${gpu_source}" --output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-refused.edds"
+      --conversion "${refused_conversion}" --conversion-quality "${refused_quality}"
+    RESULT_VARIABLE refused_result OUTPUT_VARIABLE refused_output ERROR_QUIET
+  )
+  if(refused_result EQUAL 0 OR
+     EXISTS "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-refused.edds")
+    message(FATAL_ERROR
+      "${refused_conversion} accepted quality ${refused_quality}: ${refused_output}")
+  endif()
+endforeach()
+
+# The container is not the conversion: COPY and LZ4 owe the same decoded pixels.
+set(copy_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-copy.edds")
+set(lz4_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-lz4.edds")
+foreach(pair IN ITEMS "copy;80;${copy_result}" "best;100;${lz4_result}")
+  list(GET pair 0 compress)
+  list(GET pair 1 threshold)
+  list(GET pair 2 destination)
+  execute_process(
+    COMMAND "${CLI}" convert --machine --protocol 1
+      --input "${gpu_flat}" --output "${destination}"
+      --format-compress "${compress}" --compress-threshold "${threshold}"
+      --conversion color-hq-compression
+    RESULT_VARIABLE container_result ERROR_VARIABLE container_error OUTPUT_QUIET
+  )
+  if(NOT container_result EQUAL 0)
+    message(FATAL_ERROR "${compress} conversion failed: ${container_error}")
+  endif()
+endforeach()
+execute_process(COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${copy_result}"
+  OUTPUT_VARIABLE copy_pixels OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${lz4_result}"
+  OUTPUT_VARIABLE lz4_pixels_output OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(JSON copy_pixel_data GET "${copy_pixels}" pixelsBase64)
+string(JSON lz4_pixel_data GET "${lz4_pixels_output}" pixelsBase64)
+execute_process(COMMAND "${CLI}" inspect --machine --protocol 1 --input "${lz4_result}"
+  OUTPUT_VARIABLE lz4_inspect OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(JSON lz4_container GET "${lz4_inspect}" mips 0 container)
+if(NOT copy_pixel_data STREQUAL "${lz4_pixel_data}" OR NOT lz4_container STREQUAL "LZ4")
+  message(FATAL_ERROR "the container changed the pixels or was never used: ${lz4_inspect}")
 endif()

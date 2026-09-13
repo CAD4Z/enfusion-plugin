@@ -1,7 +1,9 @@
 /** Browser-only rendering for source-image authoring. Every write remains an explicit host request. */
 
 import type { EddsPreview } from '../mods/edds';
-import { TEXTURE_PROFILE_FIELDS, type TextureAuthoringState } from '../mods/textureAuthoring';
+import type { TextureAuthoringState } from '../mods/textureAuthoring';
+import { profileFormControls } from './profileForm';
+import { textureChannelViewsOf } from '../mods/textureConversions';
 import type { TextureProfile } from '../mods/textureConversion';
 import type {
   TextureAuthoringRequest,
@@ -116,14 +118,15 @@ function toolbar(
   mip.addEventListener('change', () => host.postMessage({ type: 'select-mip', mip: Number(mip.value) }));
 
   const channels = element('div', 'button-row');
-  for (const [value, title] of [
-    ['rgba', 'RGBA'], ['red', 'R'], ['green', 'G'], ['blue', 'B'], ['alpha', 'A'],
-  ] as const) {
-    const button = buttonOf(title, () => {
-      channel = value;
+  const rendered = current.kind === 'authoring'
+    ? (current.preview.kind === 'ready' ? current.preview.rendered : undefined)
+    : current.rendered;
+  for (const { view, label } of textureChannelViewsOf(rendered?.inspection.channels ?? 'RGBA')) {
+    const button = buttonOf(label, () => {
+      channel = view;
       if (state !== undefined) render(state);
     });
-    button.classList.toggle('active', value === channel);
+    button.classList.toggle('active', view === channel);
     channels.append(button);
   }
   const zooms = element('div', 'button-row');
@@ -141,50 +144,13 @@ function toolbar(
 
 function profileForm(profile: TextureProfile, locked: boolean): HTMLElement {
   const form = element('div', 'profile-form');
-  for (const field of TEXTURE_PROFILE_FIELDS) {
-    let control: HTMLInputElement | HTMLSelectElement;
-    if (field.key === 'FormatCompress') {
-      const select = document.createElement('select');
-      for (const value of ['Copy', 'Fastest', 'Medium', 'Best'] as const) {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = value;
-        option.selected = value === profile.FormatCompress;
-        select.append(option);
-      }
-      select.addEventListener('change', () => {
-        const value = select.value;
-        if (value === 'Copy' || value === 'Fastest' || value === 'Medium' || value === 'Best') {
-          host.postMessage({ type: 'change-compression', value });
-        }
-      });
-      control = select;
-    } else {
-      const input = document.createElement('input');
-      if (field.key === 'GenerateMips' || field.key === 'TiledTexture') {
-        input.type = 'checkbox';
-        input.checked = Boolean(profile[field.key]);
-        if (field.key === 'GenerateMips') {
-          input.addEventListener('change', () => host.postMessage({ type: 'change-mips', value: input.checked }));
-        }
-      } else if (field.key === 'CompressTreshold') {
-        input.type = 'number';
-        input.min = '0';
-        input.max = '100';
-        input.value = String(profile.CompressTreshold);
-        input.addEventListener('change', () => host.postMessage({ type: 'change-threshold', value: Number(input.value) }));
-      } else {
-        input.type = 'text';
-        input.value = String(profile[field.key]);
-      }
-      control = input;
-    }
-    control.disabled = locked || !field.editable;
-    control.title = locked
-      ? `${field.key}: properties are locked while or after this immutable run.`
-      : `${field.key}${field.reason === undefined ? '' : `: ${field.reason}`}`;
-    form.append(labelled(field.key, control));
-  }
+  form.append(...profileFormControls(profile, locked, {
+    compression: (value) => host.postMessage({ type: 'change-compression', value }),
+    threshold: (value) => host.postMessage({ type: 'change-threshold', value }),
+    mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
+    quality: (value) => host.postMessage({ type: 'change-quality', value }),
+  }));
   return form;
 }
 

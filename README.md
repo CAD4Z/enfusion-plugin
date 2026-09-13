@@ -10,7 +10,11 @@ same command is available from the Explorer context menu. It does not require an
 workspace, a source image, sibling metadata or DayZ Tools. The editor reports the DDS and `ENF1`
 container properties and every mip level it actually finds. Modern 32-bit BGRX/BGRA textures can
 also be viewed from their real `COPY` or `LZ4` payload as RGBA or as individual R, G, B and A
-channels, with an alpha checkerboard, mip selection, zoom and pan.
+channels, with an alpha checkerboard, mip selection, zoom and pan. So can every GPU format this
+converter produces: R8, R8G8, DXT1, DXT5, BC4, BC5 and BC7, including block padding on a texture
+whose size is not a multiple of four and on the small mips at the end of a chain. The channel
+buttons follow what the file holds rather than what it was made from, so a single-channel texture
+offers R and no G, B or A to look at.
 
 Formats whose pixel decoder is not available are still inspected, but are labelled
 `unsupported-format` and are never represented by source pixels or a plausible placeholder.
@@ -49,9 +53,41 @@ held to the channel mapping, mip behaviour and a bounded difference rather than 
 The editor opens before anything in the project is written. It shows the decoded source beside a
 result decoded back from a temporary native EDDS, with shared channel, alpha checkerboard, mip,
 zoom and pan controls.
-Changing `FormatCompress`, `CompressTreshold` or `GenerateMips` rebuilds only that temporary
-preview; the other visible Workbench fields show the exact fixed first-slice values and explain why
-they are locked.
+Changing `Conversion`, `ConversionQuality`, `FormatCompress`, `CompressTreshold` or `GenerateMips`
+rebuilds only that temporary preview; the other visible Workbench fields show the exact fixed
+values of this slice and explain why they are locked. The left pane always shows the source as it
+is, so a GPU conversion has something to be compared against.
+
+`Conversion` turns the decoded RGBA into a runtime format. Which format each value produces is read
+off DayZ's own textures, where a `.edds.meta` recipe sits beside the `.edds` Workbench wrote from
+it:
+
+| `Conversion` | Runtime format | Channels decoded back | `ConversionQuality` |
+| --- | --- | --- | --- |
+| `None` | 32-bit BGRX or BGRA | RGB or RGBA | fixed at 1 |
+| `DXTCompression` | BC1 (`DXT1`) or BC3 (`DXT5`) | RGB or RGBA | active |
+| `Red` | `R8_UNORM` | R | fixed at 1 |
+| `RedHQCompression` | BC4 (`BC4_UNORM`) | R | active |
+| `RedGreen` | `R8G8_UNORM` | RG | fixed at 1 |
+| `RedGreenHQCompression` | BC5 (`BC5_UNORM`) | RG | active |
+| `ColorHQCompression` | BC7 (`BC7_UNORM`) | RGBA | active |
+| `HDRCompression` | — | — | refused as unsupported |
+
+`None` and `DXTCompression` each have two branches, and the branch is read off one source image's
+own samples rather than off the batch it was selected with. `None` keeps whichever channel layout
+the source declared. `DXTCompression` writes BC3 only when a sample is actually below fully opaque:
+a source with no alpha channel and a source whose alpha is opaque throughout both become BC1,
+because BC3 is twice the size and spends all of it on an alpha block.
+
+`ConversionQuality` is a fraction of one, to three decimals, and defaults to 1. Workbench calls it
+the quality of a *compressed* conversion, so an uncompressed one takes the default and refuses any
+other value before a preview or a write rather than accepting a number that would change nothing.
+Where it is active it buys encoder search: at 1 the block encoders refit their endpoints and BC7
+also fits the best of the sixty-four two-subset partitions, and at 0 they take their first fit.
+`FormatCompress` is a container and never changes a decoded pixel of the result: the same profile
+stored as `COPY` and as `LZ4` decodes to the same bytes.
+
+`HDRCompression` is recognized and refused. It is never replaced with the nearest LDR format.
 
 The primary action says **Convert**, **Reconvert** or **Replace** from the validated ownership
 state. It always targets the sibling `.edds`. Inside a prefix root it also writes canonical sibling

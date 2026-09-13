@@ -27,18 +27,35 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return 0;
     }
     rewind(file);
+    /* Every mip, not only the first: the smallest ones are where a block format is one padded block. */
     if (edds_inspect(file, &info, NULL, NULL, &error) == EDDS_OK && info.mip_count != 0) {
-        (void)edds_preview(file, &info, 0, NULL, NULL, &rgba, &rgba_size, &error);
-        edds_free(rgba);
+        for (uint32_t level = 0; level < info.mip_count; ++level) {
+            rgba = NULL;
+            rgba_size = 0;
+            (void)edds_preview(file, &info, level, NULL, NULL, &rgba, &rgba_size, &error);
+            edds_free(rgba);
+        }
     }
     /*
      * The same bytes as every source format in the contract, so a corpus entry that is a truncated
-     * PNG is also a malformed JPEG and an oversized TIFF directory to the decoder beside it.
+     * PNG is also a malformed JPEG and an oversized TIFF directory to the decoder beside it. The
+     * corpus picks the conversion and its quality, so an entry that decodes reaches one GPU encoder
+     * rather than all of them, and a campaign reaches every one.
      */
     edds_default_profile(&profile);
     {
         size_t formats = 0;
+        size_t conversions = 0;
         const edds_source_capability *capabilities = edds_source_capabilities(&formats);
+        const edds_conversion_capability *encoders = edds_conversions(&conversions);
+        const edds_conversion_capability *chosen =
+            &encoders[size == 0 ? 0u : (size_t)data[0] % conversions];
+        if (chosen->supported) {
+            profile.conversion = chosen->conversion;
+            profile.conversion_quality = chosen->uses_quality && size > 1u
+                ? (uint32_t)data[1] * EDDS_QUALITY_SCALE / 255u
+                : EDDS_QUALITY_SCALE;
+        }
         for (size_t at = 0; at < formats; ++at) {
             rewind(file);
             rewind(output);

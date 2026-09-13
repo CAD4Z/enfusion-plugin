@@ -7,6 +7,11 @@ import {
 } from './textureBatch';
 import type { TextureBatchEvent } from './textureBatchProtocol';
 import type { ArtifactRevision, TextureCompression, TextureProfile } from './textureConversion';
+import {
+  type TextureConversion,
+  isTextureQuality,
+  textureConversionCapabilityOf,
+} from './textureConversions';
 import { samePath } from './paths';
 
 type ReadyBatch = Extract<TextureBatchPlan, { kind: 'ready' }>;
@@ -66,6 +71,8 @@ export type TextureBatchAuthoringEvent =
   | { readonly kind: 'change-profile'; readonly field: 'FormatCompress'; readonly value: TextureCompression }
   | { readonly kind: 'change-profile'; readonly field: 'CompressTreshold'; readonly value: number }
   | { readonly kind: 'change-profile'; readonly field: 'GenerateMips'; readonly value: boolean }
+  | { readonly kind: 'change-profile'; readonly field: 'Conversion'; readonly value: TextureConversion }
+  | { readonly kind: 'change-profile'; readonly field: 'ConversionQuality'; readonly value: number }
   | { readonly kind: 'item-rendered'; readonly source: string; readonly revision: number; readonly rendered: TextureRendering }
   | { readonly kind: 'item-render-failed'; readonly source: string; readonly revision: number; readonly reason: string }
   | { readonly kind: 'run' }
@@ -183,11 +190,25 @@ function changed(
   state: TextureBatchAuthoringState,
   event: Extract<TextureBatchAuthoringEvent, { kind: 'change-profile' }>,
 ): TextureBatchAuthoringUpdate {
-  if (state.kind !== 'authoring' || state.draft[event.field] === event.value ||
-      (event.field === 'CompressTreshold' && (event.value < 0 || event.value > 100))) {
+  if (state.kind !== 'authoring') {
     return unchanged(state);
   }
-  const draft: TextureProfile = { ...state.draft, [event.field]: event.value };
+  const capability = textureConversionCapabilityOf(
+    event.field === 'Conversion' ? event.value : state.draft.Conversion,
+  );
+  if (state.draft[event.field] === event.value ||
+      (event.field === 'CompressTreshold' && (event.value < 0 || event.value > 100)) ||
+      (event.field === 'ConversionQuality' && !isTextureQuality(event.value)) ||
+      capability === undefined || !capability.supported ||
+      (event.field === 'ConversionQuality' && !capability.usesQuality && event.value !== 1)) {
+    return unchanged(state);
+  }
+  const draft: TextureProfile = {
+    ...state.draft,
+    [event.field]: event.value,
+    /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
+    ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
+  };
   const plan = withTextureBatchProfile(state.plan, draft);
   const revision = state.revision + 1;
   const active = readyItem(plan, state.activeSource);

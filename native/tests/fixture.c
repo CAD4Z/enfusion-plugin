@@ -313,6 +313,84 @@ test_bytes fixture_tga_bgrx(void) {
     return fixture;
 }
 
+test_bytes fixture_tga_gpu_gradient(void) {
+    enum { WIDTH = 9, HEIGHT = 5 };
+    uint8_t bgra[WIDTH * HEIGHT * 4];
+    test_bytes fixture = allocated(18u + sizeof bgra);
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    for (uint32_t y = 0; y < HEIGHT; ++y) {
+        for (uint32_t x = 0; x < WIDTH; ++x) {
+            uint8_t *pixel = bgra + ((size_t)y * WIDTH + x) * 4u;
+            const uint8_t red = (uint8_t)((x * 255u) / (WIDTH - 1u));
+            pixel[0] = (uint8_t)(255u - red);
+            pixel[1] = (uint8_t)((y * 255u) / (HEIGHT - 1u));
+            pixel[2] = red;
+            pixel[3] = (uint8_t)(((x + y) * 255u) / (WIDTH + HEIGHT - 2u));
+        }
+    }
+    fixture.size = fixture_tga_build(fixture.data, fixture.size, WIDTH, HEIGHT, 1, bgra);
+    return fixture;
+}
+
+test_bytes fixture_tga_gpu_flat(void) {
+    enum { SIDE = 16 };
+    uint8_t bgra[SIDE * SIDE * 4];
+    test_bytes fixture = allocated(18u + sizeof bgra);
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    for (uint32_t y = 0; y < SIDE; ++y) {
+        for (uint32_t x = 0; x < SIDE; ++x) {
+            uint8_t *pixel = bgra + ((size_t)y * SIDE + x) * 4u;
+            const uint32_t quadrant = (x < SIDE / 2u ? 0u : 1u) + (y < SIDE / 2u ? 0u : 2u);
+            pixel[0] = (uint8_t)(30u + quadrant * 60u);
+            pixel[1] = (uint8_t)(200u - quadrant * 50u);
+            pixel[2] = (uint8_t)(80u + quadrant * 40u);
+            pixel[3] = (uint8_t)(255u - quadrant * 30u);
+        }
+    }
+    fixture.size = fixture_tga_build(fixture.data, fixture.size, SIDE, SIDE, 1, bgra);
+    return fixture;
+}
+
+size_t fixture_tga_bytes(uint32_t width, uint32_t height, int with_alpha) {
+    return 18u + (size_t)width * height * (with_alpha ? 4u : 3u);
+}
+
+size_t fixture_tga_build(
+    uint8_t *output,
+    size_t capacity,
+    uint32_t width,
+    uint32_t height,
+    int with_alpha,
+    const uint8_t *bgra
+) {
+    const size_t total = fixture_tga_bytes(width, height, with_alpha);
+    if (output == NULL || capacity < total) {
+        return 0;
+    }
+    memset(output, 0, 18);
+    output[2] = 2;
+    output[12] = (uint8_t)(width & 0xffu);
+    output[13] = (uint8_t)(width >> 8);
+    output[14] = (uint8_t)(height & 0xffu);
+    output[15] = (uint8_t)(height >> 8);
+    output[16] = with_alpha ? 32u : 24u;
+    /* Bit five is a top-left origin; the low nibble counts the attribute bits alpha occupies. */
+    output[17] = (uint8_t)(0x20u | (with_alpha ? 8u : 0u));
+    for (size_t pixel = 0; pixel < (size_t)width * height; ++pixel) {
+        output[18u + pixel * (with_alpha ? 4u : 3u)] = bgra[pixel * 4u];
+        output[19u + pixel * (with_alpha ? 4u : 3u)] = bgra[pixel * 4u + 1u];
+        output[20u + pixel * (with_alpha ? 4u : 3u)] = bgra[pixel * 4u + 2u];
+        if (with_alpha) {
+            output[21u + pixel * 4u] = bgra[pixel * 4u + 3u];
+        }
+    }
+    return total;
+}
+
 size_t fixture_tiff_ifd_end(size_t tag_count) {
     return 8u + 2u + tag_count * 12u + 4u;
 }

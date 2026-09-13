@@ -1,5 +1,7 @@
 #include <edds/edds.h>
 
+#include "gpu.h"
+
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -101,13 +103,16 @@ static edds_pixel_format classify(const edds_info *info) {
             return EDDS_PIXEL_DXT5;
         }
         if (strcmp(info->four_cc, "DX10") == 0) {
-            if (info->dxgi_format == 87 || info->dxgi_format == 91) {
-                return EDDS_PIXEL_BGRA8;
+            switch (info->dxgi_format) {
+                case 87: case 91: return EDDS_PIXEL_BGRA8;
+                case 88: case 93: return EDDS_PIXEL_BGRX8;
+                case 61: return EDDS_PIXEL_R8;
+                case 49: return EDDS_PIXEL_RG8;
+                case 80: return EDDS_PIXEL_BC4;
+                case 83: return EDDS_PIXEL_BC5;
+                case 98: return EDDS_PIXEL_BC7;
+                default: return EDDS_PIXEL_DXGI;
             }
-            if (info->dxgi_format == 88 || info->dxgi_format == 93) {
-                return EDDS_PIXEL_BGRX8;
-            }
-            return EDDS_PIXEL_DXGI;
         }
         return EDDS_PIXEL_UNKNOWN;
     }
@@ -308,9 +313,13 @@ edds_status edds_inspect(
     info->mip_count = mip_count;
     info->header_bytes = header_bytes;
     info->pixel_format = classify(info);
-    info->preview_supported =
-        (info->pixel_format == EDDS_PIXEL_BGRA8 || info->pixel_format == EDDS_PIXEL_BGRX8) &&
-        topology_is_previewable(info);
+    {
+        uint32_t previewed_bytes = 0;
+        info->preview_supported =
+            edds_gpu_mip_bytes(info->pixel_format, info->width, info->height) != 0 &&
+            expected_rgba_bytes(info->width, info->height, &previewed_bytes) &&
+            topology_is_previewable(info);
+    }
 
     if (size < (uint64_t)header_bytes + (uint64_t)mip_count * 8u) {
         fail(error, "truncated-mip-table", "The ENF1 mip table is truncated.");
@@ -365,9 +374,9 @@ edds_status edds_inspect(
             stored[stored_index].decoded_bytes = stored[stored_index].stored_bytes;
         }
         if (info->preview_supported) {
-            if (!expected_rgba_bytes(mip_dimension(info->width, level),
-                    mip_dimension(info->height, level), &expected) ||
-                stored[stored_index].decoded_bytes != expected) {
+            expected = edds_gpu_mip_bytes(info->pixel_format, mip_dimension(info->width, level),
+                mip_dimension(info->height, level));
+            if (expected == 0 || stored[stored_index].decoded_bytes != expected) {
                 fail(error, "unexpected-mip-size", "Mip %u decodes to %u bytes; its dimensions require %u.",
                     level, stored[stored_index].decoded_bytes, expected);
                 return EDDS_INVALID_INPUT;
@@ -546,6 +555,7 @@ edds_status edds_preview(
     const edds_mip *mip;
     uint8_t *raw;
     uint8_t *pixels;
+    uint32_t decoded_bytes = 0;
     edds_status status = EDDS_OK;
     if (rgba != NULL) {
         *rgba = NULL;
@@ -569,8 +579,12 @@ edds_status edds_preview(
         return EDDS_CANCELLED;
     }
     mip = &info->mips[level];
+    if (!expected_rgba_bytes(mip->width, mip->height, &decoded_bytes)) {
+        fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.", level);
+        return EDDS_INVALID_INPUT;
+    }
     raw = malloc(mip->decoded_bytes);
-    pixels = malloc(mip->decoded_bytes);
+    pixels = malloc(decoded_bytes);
     if (raw == NULL || pixels == NULL) {
         free(raw);
         free(pixels);
@@ -586,15 +600,17 @@ edds_status edds_preview(
         status = decode_lz4(input, mip, cancel, cancel_context, raw, error);
     }
     if (status == EDDS_OK) {
-        for (size_t at = 0; at < mip->decoded_bytes; at += 4u) {
-            pixels[at] = raw[at + 2u];
-            pixels[at + 1u] = raw[at + 1u];
-            pixels[at + 2u] = raw[at];
-            pixels[at + 3u] = info->pixel_format == EDDS_PIXEL_BGRX8 ? 255u : raw[at + 3u];
+        if (!edds_gpu_decode(info->pixel_format, raw, mip->decoded_bytes,
+                mip->width, mip->height, pixels)) {
+            fail(error, "invalid-gpu-payload",
+                "Mip %u does not hold whole %s blocks for its dimensions.",
+                level, edds_pixel_format_name(info->pixel_format));
+            status = EDDS_INVALID_INPUT;
+        } else {
+            *rgba = pixels;
+            *rgba_size = decoded_bytes;
+            pixels = NULL;
         }
-        *rgba = pixels;
-        *rgba_size = mip->decoded_bytes;
-        pixels = NULL;
     }
     free(raw);
     free(pixels);

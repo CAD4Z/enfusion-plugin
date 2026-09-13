@@ -92,12 +92,18 @@ test('taking an owned EDDS over from another source is an explicit replacement w
 });
 
 test('filename suffixes never select a hidden profile', () => {
-  for (const suffix of ['_ca', '_nohq', '_smdi']) {
+  /*
+   * A DayZ suffix says what a texture is for, and every one of them names a GPU conversion an
+   * author might have chosen. None of them chooses it: the default recipe is the same recipe.
+   */
+  for (const suffix of ['_ca', '_nohq', '_smdi', '_co', '_nomo', '_as', '_gs', '_hdr']) {
     const plan = textureConversionPlanOf(
       input({ source: `C:\\repo\\MyMod\\MyMod\\GUI\\icon${suffix}.png` }),
     );
     assert.equal(plan.kind, 'ready');
     assert.deepEqual(plan.kind === 'ready' && plan.profile, DEFAULT_TEXTURE_PROFILE);
+    assert.equal(plan.kind === 'ready' && plan.profile.Conversion, 'None');
+    assert.equal(plan.kind === 'ready' && plan.profile.ConversionQuality, 1);
   }
 });
 

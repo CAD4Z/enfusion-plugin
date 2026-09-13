@@ -140,7 +140,7 @@ static int dx10_bgrx_is_a_single_surface_preview(void) {
 }
 
 static int unsupported_pixels_keep_the_inspection(void) {
-    test_bytes fixture = fixture_dxt1();
+    test_bytes fixture = fixture_odd_fourcc();
     FILE *file = stream_of(fixture.data, fixture.size);
     edds_info info;
     edds_error error;
@@ -149,7 +149,7 @@ static int unsupported_pixels_keep_the_inspection(void) {
 
     CHECK(fixture.data != NULL && file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
-    CHECK(info.pixel_format == EDDS_PIXEL_DXT1 && info.mips[0].stored_bytes == 8);
+    CHECK(info.pixel_format == EDDS_PIXEL_UNKNOWN && info.mips[0].stored_bytes == 8);
     CHECK(edds_preview(file, &info, 0, never_cancelled, NULL, &rgba, &size, &error) == EDDS_UNSUPPORTED_FORMAT);
     CHECK(rgba == NULL && strstr(error.code, "unsupported") != NULL);
 
@@ -689,7 +689,7 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
 static int known_but_unsupported_metadata_is_never_defaulted(void) {
     static const char source[] =
         "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
-        "TGAResourceClass PC { SourceFile \"a.tga\" Conversion DXTCompression } } }";
+        "TGAResourceClass PC { SourceFile \"a.tga\" Conversion HDRCompression } } }";
     FILE *input = stream_of((const uint8_t *)source, strlen(source));
     edds_metadata metadata;
     edds_error error;
@@ -1463,6 +1463,714 @@ static int the_source_contract_names_only_registered_resource_classes(void) {
     CHECK(edds_source_capability_of_format((edds_source_format)99) == NULL);
     return 1;
 }
+
+/*
+ * The GPU conversions. Each one is checked against the header facts DayZ's own textures carry,
+ * against pixels decoded back out of the result, and against the rule that decides its alpha
+ * branch. The sources are built here rather than recorded, so what every test is about is visible.
+ */
+
+enum {
+    GRADIENT_WIDTH = 9,
+    GRADIENT_HEIGHT = 5,
+    GRADIENT_PIXELS = GRADIENT_WIDTH * GRADIENT_HEIGHT
+};
+
+typedef enum source_alpha_shape {
+    SOURCE_NO_ALPHA_CHANNEL,
+    SOURCE_FULLY_OPAQUE_ALPHA,
+    SOURCE_ONE_SAMPLE_BELOW_OPAQUE,
+    SOURCE_ALPHA_RAMP
+} source_alpha_shape;
+
+/** A colour ramp wide enough for three block columns, with one bright sample off the ramp. */
+static void gradient_bgra(uint8_t bgra[GRADIENT_PIXELS * 4], source_alpha_shape alpha) {
+    for (uint32_t y = 0; y < GRADIENT_HEIGHT; ++y) {
+        for (uint32_t x = 0; x < GRADIENT_WIDTH; ++x) {
+            uint8_t *pixel = bgra + ((size_t)y * GRADIENT_WIDTH + x) * 4u;
+            const uint8_t red = (uint8_t)((x * 255u) / (GRADIENT_WIDTH - 1u));
+            const uint8_t green = (uint8_t)((y * 255u) / (GRADIENT_HEIGHT - 1u));
+            pixel[0] = (uint8_t)(255u - red);
+            pixel[1] = green;
+            pixel[2] = red;
+            pixel[3] = 255u;
+            if (alpha == SOURCE_ALPHA_RAMP) {
+                pixel[3] = (uint8_t)(((x + y) * 255u) / (GRADIENT_WIDTH + GRADIENT_HEIGHT - 2u));
+            }
+        }
+    }
+    if (alpha == SOURCE_ONE_SAMPLE_BELOW_OPAQUE) {
+        /* One sample one step off opaque is still alpha this result has to carry. */
+        bgra[(2u * GRADIENT_WIDTH + 4u) * 4u + 3u] = 254u;
+    }
+}
+
+enum { SMOOTH_SIDE = 16, SMOOTH_PIXELS = SMOOTH_SIDE * SMOOTH_SIDE };
+
+/**
+ * A gentle blend, which is what a texture usually is. The error bounds are claimed against this
+ * rather than against the ramp above: a ramp that moves a quarter of the range inside one block
+ * measures how a single line through colour space fails, not how well the encoder finds it.
+ */
+static void smooth_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
+    for (uint32_t y = 0; y < SMOOTH_SIDE; ++y) {
+        for (uint32_t x = 0; x < SMOOTH_SIDE; ++x) {
+            uint8_t *pixel = bgra + ((size_t)y * SMOOTH_SIDE + x) * 4u;
+            pixel[0] = (uint8_t)(180u - x * 3u);
+            pixel[1] = (uint8_t)(60u + y * 5u);
+            pixel[2] = (uint8_t)(40u + x * 6u);
+            pixel[3] = (uint8_t)(255u - y * 4u);
+        }
+    }
+}
+
+/** Four flat quadrants, so the same block repeats and the container has something to compress. */
+static void quadrant_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
+    for (uint32_t y = 0; y < SMOOTH_SIDE; ++y) {
+        for (uint32_t x = 0; x < SMOOTH_SIDE; ++x) {
+            uint8_t *pixel = bgra + ((size_t)y * SMOOTH_SIDE + x) * 4u;
+            const unsigned quadrant = (x < SMOOTH_SIDE / 2u ? 0u : 1u) +
+                (y < SMOOTH_SIDE / 2u ? 0u : 2u);
+            pixel[0] = (uint8_t)(30u + quadrant * 60u);
+            pixel[1] = (uint8_t)(200u - quadrant * 50u);
+            pixel[2] = (uint8_t)(80u + quadrant * 40u);
+            pixel[3] = (uint8_t)(255u - quadrant * 30u);
+        }
+    }
+}
+
+/** Converts a synthetic TGA and hands back the inspection plus one decoded mip. */
+static int converted_source(
+    const uint8_t *bgra,
+    uint32_t width,
+    uint32_t height,
+    int with_alpha,
+    const edds_profile *profile,
+    uint32_t level,
+    edds_info *info,
+    uint8_t **rgba,
+    size_t *rgba_size
+) {
+    uint8_t tga[18u + 64u * 64u * 4u];
+    const size_t size = fixture_tga_build(tga, sizeof tga, width, height, with_alpha, bgra);
+    FILE *source = size == 0 ? NULL : stream_of(tga, size);
+    FILE *output = temporary();
+    edds_error error;
+    int ok;
+    if (source == NULL || output == NULL) {
+        if (source != NULL) fclose(source);
+        if (output != NULL) fclose(output);
+        return 0;
+    }
+    ok = edds_convert(source, EDDS_SOURCE_TGA, output, profile,
+            never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK &&
+        fseek(output, 0, SEEK_SET) == 0 &&
+        edds_inspect(output, info, never_cancelled, NULL, &error) == EDDS_OK &&
+        (rgba == NULL ||
+            edds_preview(output, info, level, never_cancelled, NULL, rgba, rgba_size, &error) == EDDS_OK);
+    fclose(source);
+    fclose(output);
+    return ok;
+}
+
+static edds_status refused_profile(const edds_profile *profile, edds_error *error) {
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    uint8_t tga[18u + GRADIENT_PIXELS * 4u];
+    FILE *source;
+    FILE *output = temporary();
+    edds_status status;
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+    source = stream_of(tga,
+        fixture_tga_build(tga, sizeof tga, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, bgra));
+    if (source == NULL || output == NULL) {
+        if (source != NULL) fclose(source);
+        if (output != NULL) fclose(output);
+        return EDDS_OK;
+    }
+    status = edds_convert(source, EDDS_SOURCE_TGA, output, profile,
+        never_cancelled, NULL, NULL, NULL, error);
+    fclose(source);
+    fclose(output);
+    return status;
+}
+
+/** Blocks a mip of this size needs, which is the rule the padding exists to satisfy. */
+static uint32_t block_count_of(uint32_t width, uint32_t height) {
+    return ((width + 3u) / 4u) * ((height + 3u) / 4u);
+}
+
+static double mean_channel_error(
+    const uint8_t *decoded,
+    const uint8_t *expected,
+    size_t pixels,
+    const unsigned *channels,
+    unsigned channel_count
+) {
+    double total = 0;
+    for (size_t pixel = 0; pixel < pixels; ++pixel) {
+        for (unsigned at = 0; at < channel_count; ++at) {
+            const int difference = (int)decoded[pixel * 4u + channels[at]] -
+                (int)expected[pixel * 4u + channels[at]];
+            total += difference < 0 ? -difference : difference;
+        }
+    }
+    return total / (double)(pixels * channel_count);
+}
+
+/** The gradient as straight RGBA, which is what a decode of a lossless result must equal. */
+static void gradient_rgba(const uint8_t *bgra, uint8_t *rgba, size_t pixels) {
+    for (size_t pixel = 0; pixel < pixels; ++pixel) {
+        rgba[pixel * 4u] = bgra[pixel * 4u + 2u];
+        rgba[pixel * 4u + 1u] = bgra[pixel * 4u + 1u];
+        rgba[pixel * 4u + 2u] = bgra[pixel * 4u];
+        rgba[pixel * 4u + 3u] = bgra[pixel * 4u + 3u];
+    }
+}
+
+static int every_conversion_stores_its_proven_runtime_format(void) {
+    static const struct {
+        edds_conversion conversion;
+        edds_pixel_format format;
+        const char *four_cc;
+        uint32_t dxgi;
+        uint32_t block_bytes;
+        uint32_t pixel_bytes;
+        const char *channels;
+    } expected[] = {
+        { EDDS_CONVERSION_NONE, EDDS_PIXEL_BGRA8, "NONE", 0, 0, 4, "RGBA" },
+        { EDDS_CONVERSION_DXT, EDDS_PIXEL_DXT5, "DXT5", 0, 16, 0, "RGBA" },
+        { EDDS_CONVERSION_RED, EDDS_PIXEL_R8, "DX10", 61, 0, 1, "R" },
+        { EDDS_CONVERSION_RED_HQ, EDDS_PIXEL_BC4, "DX10", 80, 8, 0, "R" },
+        { EDDS_CONVERSION_RED_GREEN, EDDS_PIXEL_RG8, "DX10", 49, 0, 2, "RG" },
+        { EDDS_CONVERSION_RED_GREEN_HQ, EDDS_PIXEL_BC5, "DX10", 83, 16, 0, "RG" },
+        { EDDS_CONVERSION_COLOR_HQ, EDDS_PIXEL_BC7, "DX10", 98, 16, 0, "RGBA" }
+    };
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+
+    for (size_t at = 0; at < sizeof expected / sizeof expected[0]; ++at) {
+        edds_profile profile;
+        edds_info info;
+        edds_default_profile(&profile);
+        profile.conversion = expected[at].conversion;
+        profile.format_compress = EDDS_COMPRESS_COPY;
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+            &info, NULL, NULL));
+        CHECK(info.pixel_format == expected[at].format);
+        CHECK(strcmp(info.four_cc, expected[at].four_cc) == 0);
+        CHECK(info.dxgi_format == expected[at].dxgi);
+        CHECK(strcmp(edds_pixel_format_channels(info.pixel_format), expected[at].channels) == 0);
+        CHECK(info.preview_supported);
+        /* Five mips: 9x5, 4x2, 2x1, 1x1 is four, and the chain ends at one by one. */
+        CHECK(info.mip_count == 4u);
+        for (uint32_t level = 0; level < info.mip_count; ++level) {
+            const uint32_t width = info.mips[level].width;
+            const uint32_t height = info.mips[level].height;
+            const uint32_t bytes = expected[at].block_bytes != 0
+                ? block_count_of(width, height) * expected[at].block_bytes
+                : width * height * expected[at].pixel_bytes;
+            CHECK(info.mips[level].decoded_bytes == bytes);
+            CHECK(info.mips[level].container == EDDS_CONTAINER_COPY);
+        }
+        /* A block format declares its top mip as a linear size; an uncompressed one as a pitch. */
+        CHECK(info.pitch_or_linear_size == (expected[at].block_bytes != 0
+            ? block_count_of(GRADIENT_WIDTH, GRADIENT_HEIGHT) * expected[at].block_bytes
+            : GRADIENT_WIDTH * expected[at].pixel_bytes));
+    }
+    return 1;
+}
+
+static int the_alpha_branch_is_read_off_each_source(void) {
+    static const struct {
+        source_alpha_shape shape;
+        int with_alpha;
+        edds_pixel_format uncompressed;
+        edds_pixel_format compressed;
+    } cases[] = {
+        { SOURCE_NO_ALPHA_CHANNEL, 0, EDDS_PIXEL_BGRX8, EDDS_PIXEL_DXT1 },
+        { SOURCE_FULLY_OPAQUE_ALPHA, 1, EDDS_PIXEL_BGRA8, EDDS_PIXEL_DXT1 },
+        { SOURCE_ONE_SAMPLE_BELOW_OPAQUE, 1, EDDS_PIXEL_BGRA8, EDDS_PIXEL_DXT5 },
+        { SOURCE_ALPHA_RAMP, 1, EDDS_PIXEL_BGRA8, EDDS_PIXEL_DXT5 }
+    };
+    for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
+        uint8_t bgra[GRADIENT_PIXELS * 4];
+        edds_profile profile;
+        edds_info info;
+        gradient_bgra(bgra, cases[at].shape);
+        edds_default_profile(&profile);
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, cases[at].with_alpha,
+            &profile, 0, &info, NULL, NULL));
+        CHECK(info.pixel_format == cases[at].uncompressed);
+        profile.conversion = EDDS_CONVERSION_DXT;
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, cases[at].with_alpha,
+            &profile, 0, &info, NULL, NULL));
+        CHECK(info.pixel_format == cases[at].compressed);
+    }
+    return 1;
+}
+
+/** Two sources in one batch each keep their own branch; nothing about it is shared. */
+static int two_sources_under_one_profile_keep_their_own_alpha_branch(void) {
+    uint8_t opaque[GRADIENT_PIXELS * 4];
+    uint8_t translucent[GRADIENT_PIXELS * 4];
+    edds_profile profile;
+    edds_info first;
+    edds_info second;
+    gradient_bgra(opaque, SOURCE_FULLY_OPAQUE_ALPHA);
+    gradient_bgra(translucent, SOURCE_ALPHA_RAMP);
+    edds_default_profile(&profile);
+    profile.conversion = EDDS_CONVERSION_DXT;
+    CHECK(converted_source(opaque, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+        &first, NULL, NULL));
+    CHECK(converted_source(translucent, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+        &second, NULL, NULL));
+    CHECK(first.pixel_format == EDDS_PIXEL_DXT1 && second.pixel_format == EDDS_PIXEL_DXT5);
+    return 1;
+}
+
+/** Red and RedGreen store the source channels themselves, so their decode is exact. */
+static int the_uncompressed_channel_formats_are_lossless(void) {
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    uint8_t expected[GRADIENT_PIXELS * 4];
+    edds_profile profile;
+    edds_info info;
+    uint8_t *rgba = NULL;
+    size_t size = 0;
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+    gradient_rgba(bgra, expected, GRADIENT_PIXELS);
+
+    edds_default_profile(&profile);
+    profile.conversion = EDDS_CONVERSION_RED;
+    CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+        &info, &rgba, &size));
+    CHECK(size == GRADIENT_PIXELS * 4u);
+    for (size_t pixel = 0; pixel < GRADIENT_PIXELS; ++pixel) {
+        /* What the file holds, not what the source had: green and blue are simply not there. */
+        CHECK(rgba[pixel * 4u] == expected[pixel * 4u]);
+        CHECK(rgba[pixel * 4u + 1u] == 0 && rgba[pixel * 4u + 2u] == 0);
+        CHECK(rgba[pixel * 4u + 3u] == 255u);
+    }
+    edds_free(rgba);
+    rgba = NULL;
+
+    profile.conversion = EDDS_CONVERSION_RED_GREEN;
+    CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+        &info, &rgba, &size));
+    for (size_t pixel = 0; pixel < GRADIENT_PIXELS; ++pixel) {
+        CHECK(rgba[pixel * 4u] == expected[pixel * 4u]);
+        CHECK(rgba[pixel * 4u + 1u] == expected[pixel * 4u + 1u]);
+        CHECK(rgba[pixel * 4u + 2u] == 0 && rgba[pixel * 4u + 3u] == 255u);
+    }
+    edds_free(rgba);
+    return 1;
+}
+
+/** Every lossy conversion owes a bounded error on the channels it claims to carry. */
+static int every_lossy_conversion_stays_inside_its_error_bound(void) {
+    static const unsigned colour[] = { 0, 1, 2 };
+    static const unsigned colour_alpha[] = { 0, 1, 2, 3 };
+    static const unsigned red[] = { 0 };
+    static const unsigned red_green[] = { 0, 1 };
+    static const struct {
+        edds_conversion conversion;
+        const unsigned *channels;
+        unsigned channel_count;
+        double bound;
+    } cases[] = {
+        { EDDS_CONVERSION_DXT, colour_alpha, 4, 2.5 },
+        { EDDS_CONVERSION_RED_HQ, red, 1, 1.0 },
+        { EDDS_CONVERSION_RED_GREEN_HQ, red_green, 2, 1.0 },
+        { EDDS_CONVERSION_COLOR_HQ, colour_alpha, 4, 2.5 }
+    };
+    uint8_t bgra[SMOOTH_PIXELS * 4];
+    uint8_t expected[SMOOTH_PIXELS * 4];
+    smooth_bgra(bgra);
+    gradient_rgba(bgra, expected, SMOOTH_PIXELS);
+
+    for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
+        edds_profile profile;
+        edds_info info;
+        uint8_t *rgba = NULL;
+        size_t size = 0;
+        edds_default_profile(&profile);
+        profile.conversion = cases[at].conversion;
+        CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
+            &info, &rgba, &size));
+        CHECK(size == SMOOTH_PIXELS * 4u);
+        CHECK(mean_channel_error(rgba, expected, SMOOTH_PIXELS,
+            cases[at].channels, cases[at].channel_count) <= cases[at].bound);
+        edds_free(rgba);
+    }
+    return 1;
+}
+
+/**
+ * The point of the HQ conversion, stated as a test: given the same opaque colours, BC7 has to come
+ * back closer to them than BC1 does. A BC7 encoder that only ever writes one line through a block
+ * would pass every other test here and quietly fail this one.
+ */
+static int the_colour_hq_conversion_beats_dxt_on_the_same_colours(void) {
+    static const unsigned colour[] = { 0, 1, 2 };
+    uint8_t bgra[SMOOTH_PIXELS * 4];
+    uint8_t expected[SMOOTH_PIXELS * 4];
+    double dxt_error;
+    double hq_error;
+    smooth_bgra(bgra);
+    for (size_t pixel = 0; pixel < SMOOTH_PIXELS; ++pixel) {
+        bgra[pixel * 4u + 3u] = 255u;
+    }
+    gradient_rgba(bgra, expected, SMOOTH_PIXELS);
+
+    {
+        edds_profile profile;
+        edds_info info;
+        uint8_t *rgba = NULL;
+        size_t size = 0;
+        edds_default_profile(&profile);
+        profile.conversion = EDDS_CONVERSION_DXT;
+        CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0, &info, &rgba, &size));
+        CHECK(info.pixel_format == EDDS_PIXEL_DXT1);
+        dxt_error = mean_channel_error(rgba, expected, SMOOTH_PIXELS, colour, 3);
+        edds_free(rgba);
+        rgba = NULL;
+        profile.conversion = EDDS_CONVERSION_COLOR_HQ;
+        CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0, &info, &rgba, &size));
+        CHECK(info.pixel_format == EDDS_PIXEL_BC7);
+        hq_error = mean_channel_error(rgba, expected, SMOOTH_PIXELS, colour, 3);
+        edds_free(rgba);
+    }
+    CHECK(hq_error < dxt_error);
+    return 1;
+}
+
+static int conversion_quality_is_refused_where_nothing_proves_an_effect(void) {
+    static const edds_conversion uncompressed[] = {
+        EDDS_CONVERSION_NONE, EDDS_CONVERSION_RED, EDDS_CONVERSION_RED_GREEN
+    };
+    static const edds_conversion compressed[] = {
+        EDDS_CONVERSION_DXT, EDDS_CONVERSION_RED_HQ,
+        EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
+    };
+    edds_profile profile;
+    edds_error error;
+
+    for (size_t at = 0; at < sizeof uncompressed / sizeof uncompressed[0]; ++at) {
+        edds_default_profile(&profile);
+        profile.conversion = uncompressed[at];
+        profile.conversion_quality = EDDS_QUALITY_SCALE / 2u;
+        CHECK(refused_profile(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+        CHECK(strcmp(error.code, "unsupported-setting") == 0);
+        /* The default is not a combination; it is what every conversion already has. */
+        profile.conversion_quality = EDDS_QUALITY_SCALE;
+        CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
+    }
+    for (size_t at = 0; at < sizeof compressed / sizeof compressed[0]; ++at) {
+        edds_default_profile(&profile);
+        profile.conversion = compressed[at];
+        profile.conversion_quality = 0;
+        CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
+        profile.conversion_quality = EDDS_QUALITY_SCALE;
+        CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
+        profile.conversion_quality = EDDS_QUALITY_SCALE + 1u;
+        CHECK(refused_profile(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    }
+
+    edds_default_profile(&profile);
+    profile.conversion = EDDS_CONVERSION_HDR;
+    CHECK(refused_profile(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strstr(error.message, "HDRCompression") != NULL);
+    edds_default_profile(&profile);
+    profile.conversion = (edds_conversion)99;
+    CHECK(refused_profile(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    return 1;
+}
+
+/** Quality has to buy something, or it would be a control that changes nothing. */
+static int conversion_quality_changes_a_compressed_result(void) {
+    static const edds_conversion compressed[] = {
+        EDDS_CONVERSION_DXT, EDDS_CONVERSION_RED_HQ,
+        EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
+    };
+    static const unsigned channels[] = { 0, 1, 2, 3 };
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    uint8_t expected[GRADIENT_PIXELS * 4];
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+    gradient_rgba(bgra, expected, GRADIENT_PIXELS);
+
+    for (size_t at = 0; at < sizeof compressed / sizeof compressed[0]; ++at) {
+        edds_profile profile;
+        edds_info cheap;
+        edds_info dear;
+        uint8_t *cheap_rgba = NULL;
+        uint8_t *dear_rgba = NULL;
+        size_t cheap_size = 0;
+        size_t dear_size = 0;
+        double cheap_error;
+        double dear_error;
+        edds_default_profile(&profile);
+        profile.conversion = compressed[at];
+        profile.conversion_quality = 0;
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+            &cheap, &cheap_rgba, &cheap_size));
+        profile.conversion_quality = EDDS_QUALITY_SCALE;
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+            &dear, &dear_rgba, &dear_size));
+        cheap_error = mean_channel_error(cheap_rgba, expected, GRADIENT_PIXELS, channels, 4);
+        dear_error = mean_channel_error(dear_rgba, expected, GRADIENT_PIXELS, channels, 4);
+        CHECK(cheap_size == dear_size);
+        CHECK(dear_error < cheap_error);
+        edds_free(cheap_rgba);
+        edds_free(dear_rgba);
+    }
+    return 1;
+}
+
+/**
+ * `FormatCompress` is a container, not a conversion. The same profile through COPY and through
+ * LZ4 has to decode to the same bytes, or one of the two is changing pixels behind the setting.
+ */
+static int container_compression_never_changes_a_decoded_pixel(void) {
+    static const edds_conversion conversions[] = {
+        EDDS_CONVERSION_NONE, EDDS_CONVERSION_DXT, EDDS_CONVERSION_RED,
+        EDDS_CONVERSION_RED_HQ, EDDS_CONVERSION_RED_GREEN,
+        EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
+    };
+    uint8_t bgra[SMOOTH_PIXELS * 4];
+    quadrant_bgra(bgra);
+
+    for (size_t at = 0; at < sizeof conversions / sizeof conversions[0]; ++at) {
+        edds_profile profile;
+        edds_info copied;
+        edds_info compressed;
+        uint8_t *copied_rgba = NULL;
+        uint8_t *compressed_rgba = NULL;
+        size_t copied_size = 0;
+        size_t compressed_size = 0;
+        edds_default_profile(&profile);
+        profile.conversion = conversions[at];
+        profile.format_compress = EDDS_COMPRESS_COPY;
+        CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
+            &copied, &copied_rgba, &copied_size));
+        profile.format_compress = EDDS_COMPRESS_BEST;
+        profile.compress_threshold = 100;
+        CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
+            &compressed, &compressed_rgba, &compressed_size));
+        CHECK(copied.pixel_format == compressed.pixel_format);
+        CHECK(copied.mips[0].container == EDDS_CONTAINER_COPY);
+        CHECK(compressed.mips[0].container == EDDS_CONTAINER_LZ4);
+        CHECK(copied_size == compressed_size);
+        CHECK(memcmp(copied_rgba, compressed_rgba, copied_size) == 0);
+        edds_free(copied_rgba);
+        edds_free(compressed_rgba);
+    }
+    return 1;
+}
+
+/**
+ * A mip narrower than a block still costs a whole one, and the smallest mip of every chain is a
+ * single pixel inside a single block. Both are decoded back to exactly their own dimensions.
+ */
+static int block_padding_reaches_the_smallest_mip(void) {
+    static const edds_conversion conversions[] = {
+        EDDS_CONVERSION_DXT, EDDS_CONVERSION_RED_HQ,
+        EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
+    };
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+
+    for (size_t at = 0; at < sizeof conversions / sizeof conversions[0]; ++at) {
+        edds_profile profile;
+        edds_info info;
+        edds_default_profile(&profile);
+        profile.conversion = conversions[at];
+        CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
+            &info, NULL, NULL));
+        CHECK(info.mip_count == 4u);
+        CHECK(info.mips[0].width == 9 && info.mips[0].height == 5);
+        CHECK(info.mips[1].width == 4 && info.mips[1].height == 2);
+        CHECK(info.mips[2].width == 2 && info.mips[2].height == 1);
+        CHECK(info.mips[3].width == 1 && info.mips[3].height == 1);
+        /* Three block columns and two block rows carry a nine-by-five image. */
+        CHECK(info.mips[0].decoded_bytes == 6u * (conversions[at] == EDDS_CONVERSION_RED_HQ ? 8u : 16u));
+        for (uint32_t level = 1; level < info.mip_count; ++level) {
+            CHECK(info.mips[level].decoded_bytes ==
+                (conversions[at] == EDDS_CONVERSION_RED_HQ ? 8u : 16u));
+        }
+        for (uint32_t level = 0; level < info.mip_count; ++level) {
+            uint8_t *rgba = NULL;
+            size_t size = 0;
+            edds_info reread;
+            CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, level,
+                &reread, &rgba, &size));
+            CHECK(size == (size_t)reread.mips[level].width * reread.mips[level].height * 4u);
+            edds_free(rgba);
+        }
+    }
+    return 1;
+}
+
+/** A block payload that is not whole blocks is refused at inspection, before any decode. */
+static int truncated_gpu_blocks_are_refused(void) {
+    uint8_t bgra[GRADIENT_PIXELS * 4];
+    uint8_t tga[18u + GRADIENT_PIXELS * 4u];
+    uint8_t *converted = NULL;
+    size_t converted_size = 0;
+    FILE *source;
+    FILE *output = temporary();
+    edds_profile profile;
+    edds_error error;
+    edds_info info;
+    long size;
+
+    gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
+    source = stream_of(tga,
+        fixture_tga_build(tga, sizeof tga, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, bgra));
+    edds_default_profile(&profile);
+    profile.conversion = EDDS_CONVERSION_COLOR_HQ;
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    profile.generate_mips = 0;
+    CHECK(source != NULL && output != NULL);
+    CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
+    fclose(source);
+    CHECK(fseek(output, 0, SEEK_END) == 0 && (size = ftell(output)) > 0);
+    converted_size = (size_t)size;
+    converted = malloc(converted_size);
+    CHECK(converted != NULL && fseek(output, 0, SEEK_SET) == 0);
+    CHECK(fread(converted, 1, converted_size, output) == converted_size);
+    fclose(output);
+
+    /* One block short of what three by two blocks require, declared in the mip table itself. */
+    {
+        FILE *damaged;
+        const size_t table_at = 148u;
+        converted[table_at + 4u] = (uint8_t)(6u * 16u - 16u);
+        damaged = stream_of(converted, converted_size - 16u);
+        CHECK(damaged != NULL);
+        CHECK(edds_inspect(damaged, &info, never_cancelled, NULL, &error) == EDDS_INVALID_INPUT);
+        CHECK(strcmp(error.code, "unexpected-mip-size") == 0);
+        fclose(damaged);
+    }
+    free(converted);
+    return 1;
+}
+
+/** Every conversion and every quality the CLI accepts survives a trip through the metadata text. */
+static int every_conversion_round_trips_through_metadata(void) {
+    static const uint32_t qualities[] = { 0, 26, 30, 500, 403, EDDS_QUALITY_SCALE };
+    size_t count = 0;
+    const edds_conversion_capability *capabilities = edds_conversions(&count);
+    CHECK(count == 8u);
+
+    for (size_t at = 0; at < count; ++at) {
+        for (size_t quality = 0; quality < sizeof qualities / sizeof qualities[0]; ++quality) {
+            edds_metadata metadata;
+            edds_metadata parsed;
+            edds_error error;
+            FILE *written;
+            memset(&metadata, 0, sizeof metadata);
+            memcpy(metadata.guid, "0123456789ABCDEF", 17);
+            (void)snprintf(metadata.name, sizeof metadata.name, "Probe/pixel.edds");
+            (void)snprintf(metadata.source_file, sizeof metadata.source_file, "pixel.tga");
+            metadata.source_format = EDDS_SOURCE_TGA;
+            edds_default_profile(&metadata.profile);
+            metadata.profile.conversion = capabilities[at].conversion;
+            metadata.profile.conversion_quality = qualities[quality];
+            written = temporary();
+            CHECK(written != NULL);
+            if (!capabilities[at].supported ||
+                (!capabilities[at].uses_quality && qualities[quality] != EDDS_QUALITY_SCALE)) {
+                /* Canonical metadata is never allowed to record a recipe that cannot be run. */
+                CHECK(edds_metadata_write(written, &metadata, &error) != EDDS_OK);
+                fclose(written);
+                continue;
+            }
+            CHECK(edds_metadata_write(written, &metadata, &error) == EDDS_OK);
+            CHECK(fseek(written, 0, SEEK_SET) == 0);
+            CHECK(edds_metadata_parse(written, &parsed, &error) == EDDS_OK);
+            CHECK(parsed.profile.conversion == metadata.profile.conversion);
+            CHECK(parsed.profile.conversion_quality == metadata.profile.conversion_quality);
+            fclose(written);
+        }
+    }
+    return 1;
+}
+
+/** A quality the text cannot state exactly is refused rather than rounded into something else. */
+static int metadata_quality_text_is_exact_or_refused(void) {
+    static const struct {
+        const char *text;
+        int accepted;
+        uint32_t thousandths;
+    } cases[] = {
+        { "1", 1, 1000 }, { "0", 1, 0 }, { "0.5", 1, 500 }, { "0.403", 1, 403 },
+        { "0.026", 1, 26 }, { "1.000", 1, 1000 }, { "0.0260", 0, 0 }, { "1.5", 0, 0 },
+        { "2", 0, 0 }, { "0.", 0, 0 }, { ".5", 0, 0 }, { "-1", 0, 0 }, { "0.5x", 0, 0 }
+    };
+    for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
+        char source[256];
+        FILE *input;
+        edds_metadata metadata;
+        edds_error error;
+        (void)snprintf(source, sizeof source,
+            "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
+            "TGAResourceClass PC { SourceFile \"a.tga\" Conversion DXTCompression "
+            "ConversionQuality %s } } }", cases[at].text);
+        input = stream_of((const uint8_t *)source, strlen(source));
+        CHECK(input != NULL);
+        if (cases[at].accepted) {
+            CHECK(edds_metadata_parse(input, &metadata, &error) == EDDS_OK);
+            CHECK(metadata.profile.conversion_quality == cases[at].thousandths);
+            CHECK(metadata.profile.conversion == EDDS_CONVERSION_DXT);
+        } else {
+            CHECK(edds_metadata_parse(input, &metadata, &error) != EDDS_OK);
+        }
+        fclose(input);
+    }
+    return 1;
+}
+
+/** The conversion contract is one table, and everything that names a conversion reads it. */
+static int the_conversion_contract_is_one_table(void) {
+    size_t count = 0;
+    const edds_conversion_capability *capabilities = edds_conversions(&count);
+    CHECK(capabilities != NULL && count == 8u);
+    for (size_t at = 0; at < count; ++at) {
+        CHECK(edds_conversion_capability_of(capabilities[at].conversion) == &capabilities[at]);
+        CHECK(edds_conversion_of_workbench_name(capabilities[at].workbench_name) == &capabilities[at]);
+        CHECK(edds_conversion_of_wire_name(capabilities[at].wire_name) == &capabilities[at]);
+    }
+    CHECK(edds_conversion_of_workbench_name("DXT") == NULL);
+    CHECK(edds_conversion_of_workbench_name(NULL) == NULL);
+    CHECK(edds_conversion_of_wire_name("dxt") == NULL);
+    CHECK(edds_conversion_capability_of((edds_conversion)99) == NULL);
+    return 1;
+}
+
+/** A stored DXT1 block is pixels now, so an existing DayZ texture previews instead of refusing. */
+static int a_stored_dxt1_block_decodes_to_its_pixels(void) {
+    test_bytes fixture = fixture_dxt1();
+    FILE *file = stream_of(fixture.data, fixture.size);
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t size = 0;
+
+    CHECK(fixture.data != NULL && file != NULL);
+    CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.pixel_format == EDDS_PIXEL_DXT1 && info.mips[0].stored_bytes == 8);
+    CHECK(info.preview_supported);
+    CHECK(edds_preview(file, &info, 0, never_cancelled, NULL, &rgba, &size, &error) == EDDS_OK);
+    CHECK(size == 4u * 4u * 4u);
+    /* Both endpoints of the block are black, so every pixel of it is opaque black. */
+    CHECK(every_pixel_is(rgba, size, 0, 0, 0));
+
+    edds_free(rgba);
+    fclose(file);
+    fixture_free(fixture);
+    return 1;
+}
+
 int main(void) {
     const int passed =
         copy_inspection_and_preview() &&
@@ -1504,7 +2212,22 @@ int main(void) {
         unsupported_tiff_subtypes_are_refused_before_any_pixel() &&
         sixteen_bit_tiff_samples_are_refused() &&
         a_second_tiff_page_is_refused_rather_than_silently_dropped() &&
-        damaged_tiff_input_fails_without_partial_output();
+        damaged_tiff_input_fails_without_partial_output() &&
+        the_conversion_contract_is_one_table() &&
+        every_conversion_stores_its_proven_runtime_format() &&
+        the_alpha_branch_is_read_off_each_source() &&
+        two_sources_under_one_profile_keep_their_own_alpha_branch() &&
+        the_uncompressed_channel_formats_are_lossless() &&
+        every_lossy_conversion_stays_inside_its_error_bound() &&
+        the_colour_hq_conversion_beats_dxt_on_the_same_colours() &&
+        conversion_quality_is_refused_where_nothing_proves_an_effect() &&
+        conversion_quality_changes_a_compressed_result() &&
+        container_compression_never_changes_a_decoded_pixel() &&
+        block_padding_reaches_the_smallest_mip() &&
+        truncated_gpu_blocks_are_refused() &&
+        every_conversion_round_trips_through_metadata() &&
+        metadata_quality_text_is_exact_or_refused() &&
+        a_stored_dxt1_block_decodes_to_its_pixels();
 
     return passed ? 0 : 1;
 }

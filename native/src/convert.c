@@ -1,21 +1,31 @@
 #include "image.h"
+#include "gpu.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 enum {
     DDS_HEADER_BYTES = 128,
+    DDS_DX10_HEADER_BYTES = 20,
+    DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
     DDSD_CAPS = 0x00000001,
     DDSD_HEIGHT = 0x00000002,
     DDSD_WIDTH = 0x00000004,
     DDSD_PITCH = 0x00000008,
     DDSD_PIXELFORMAT = 0x00001000,
     DDSD_MIPMAPCOUNT = 0x00020000,
+    DDSD_LINEARSIZE = 0x00080000,
     DDPF_ALPHAPIXELS = 0x00000001,
+    DDPF_FOURCC = 0x00000004,
     DDPF_RGB = 0x00000040,
     DDSCAPS_COMPLEX = 0x00000008,
     DDSCAPS_TEXTURE = 0x00001000,
-    DDSCAPS_MIPMAP = 0x00400000
+    DDSCAPS_MIPMAP = 0x00400000,
+    DXGI_FORMAT_R8G8_UNORM = 49,
+    DXGI_FORMAT_R8_UNORM = 61,
+    DXGI_FORMAT_BC4_UNORM = 80,
+    DXGI_FORMAT_BC5_UNORM = 83,
+    DXGI_FORMAT_BC7_UNORM = 98
 };
 
 typedef struct generated_mip {
@@ -23,6 +33,9 @@ typedef struct generated_mip {
     uint32_t height;
     uint32_t bytes;
     uint8_t *bgra;
+    /** The same mip in the runtime format, which is what the container then compresses. */
+    uint32_t payload_bytes;
+    uint8_t *payload;
     edds_container container;
     uint32_t stored_bytes;
     uint8_t *stored;
@@ -249,18 +262,18 @@ static edds_status prepare_storage(
         /* Container compression is the long part of a conversion, so it moves the row per mip. */
         report(progress, progress_context, 0.45 + 0.45 * ((double)at / (double)count));
         mip->container = EDDS_CONTAINER_COPY;
-        mip->stored_bytes = mip->bytes;
-        mip->stored = mip->bgra;
+        mip->stored_bytes = mip->payload_bytes;
+        mip->stored = mip->payload;
         if (profile->format_compress != EDDS_COMPRESS_COPY) {
             uint32_t compressed_bytes = 0;
-            uint8_t *compressed = lz4_frame(mip->bgra, mip->bytes,
+            uint8_t *compressed = lz4_frame(mip->payload, mip->payload_bytes,
                 profile->format_compress, &compressed_bytes);
             if (compressed == NULL) {
                 edds_fail(error, "allocation-failed", "Memory for LZ4 container compression could not be allocated.");
                 return EDDS_INTERNAL_FAILURE;
             }
             if ((uint64_t)compressed_bytes * 100u <=
-                (uint64_t)mip->bytes * profile->compress_threshold) {
+                (uint64_t)mip->payload_bytes * profile->compress_threshold) {
                 mip->container = EDDS_CONTAINER_LZ4;
                 mip->stored_bytes = compressed_bytes;
                 mip->stored = compressed;
@@ -274,13 +287,49 @@ static edds_status prepare_storage(
 
 static void free_mips(generated_mip *mips, uint32_t count) {
     for (uint32_t at = 0; at < count; ++at) {
-        if (mips[at].stored != mips[at].bgra) {
+        if (mips[at].stored != mips[at].payload) {
             free(mips[at].stored);
         }
+        free(mips[at].payload);
         free(mips[at].bgra);
         mips[at].bgra = NULL;
+        mips[at].payload = NULL;
         mips[at].stored = NULL;
     }
+}
+
+/**
+ * Turns the staged BGRA chain into the runtime format. Container compression happens afterwards
+ * and over these bytes, so `FormatCompress` cannot change a single decoded pixel of the result.
+ */
+static edds_status encode_mips(
+    generated_mip *mips,
+    uint32_t count,
+    edds_pixel_format format,
+    uint32_t quality,
+    edds_cancelled_fn cancelled,
+    void *context,
+    edds_error *error
+) {
+    for (uint32_t at = 0; at < count; ++at) {
+        generated_mip *mip = &mips[at];
+        mip->payload_bytes = edds_gpu_mip_bytes(format, mip->width, mip->height);
+        if (mip->payload_bytes == 0) {
+            edds_fail(error, "mip-size-limit", "A generated mip exceeds the runtime-format limit.");
+            return EDDS_INVALID_INPUT;
+        }
+        mip->payload = malloc(mip->payload_bytes);
+        if (mip->payload == NULL) {
+            edds_fail(error, "allocation-failed", "Memory for the runtime-format mip could not be allocated.");
+            return EDDS_INTERNAL_FAILURE;
+        }
+        if (cancelled != NULL && cancelled(context)) {
+            edds_fail(error, "cancelled", "The conversion was cancelled.");
+            return EDDS_CANCELLED;
+        }
+        edds_gpu_encode(format, quality, mip->bgra, mip->width, mip->height, mip->payload);
+    }
+    return EDDS_OK;
 }
 
 static edds_status generate_mips(
@@ -326,40 +375,84 @@ static edds_status generate_mips(
     return EDDS_OK;
 }
 
-static void dds_header(uint8_t header[DDS_HEADER_BYTES], const edds_decoded_source *source, uint32_t count) {
-    const uint32_t flags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PITCH |
-        DDSD_PIXELFORMAT | DDSD_MIPMAPCOUNT;
-    memset(header, 0, DDS_HEADER_BYTES);
+/** The DXGI format a DX10 header names, or 0 for a format that has a legacy descriptor. */
+static uint32_t dxgi_format_of(edds_pixel_format format) {
+    switch (format) {
+        case EDDS_PIXEL_R8: return DXGI_FORMAT_R8_UNORM;
+        case EDDS_PIXEL_RG8: return DXGI_FORMAT_R8G8_UNORM;
+        case EDDS_PIXEL_BC4: return DXGI_FORMAT_BC4_UNORM;
+        case EDDS_PIXEL_BC5: return DXGI_FORMAT_BC5_UNORM;
+        case EDDS_PIXEL_BC7: return DXGI_FORMAT_BC7_UNORM;
+        default: return 0;
+    }
+}
+
+/**
+ * Writes the DDS header the way DayZ's own textures carry it: a block format declares its top
+ * mip as a linear size, an uncompressed one declares a pitch, BGRA/BGRX and the two DXT formats
+ * keep their legacy descriptors, and everything else names its DXGI format through a DX10 header.
+ */
+static uint32_t dds_header(
+    uint8_t header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES],
+    edds_pixel_format format,
+    uint32_t width,
+    uint32_t height,
+    uint32_t count,
+    uint32_t top_mip_bytes
+) {
+    const uint32_t block = edds_gpu_block_bytes(format);
+    const uint32_t dxgi = dxgi_format_of(format);
+    const uint32_t flags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT |
+        DDSD_MIPMAPCOUNT | (block != 0 ? DDSD_LINEARSIZE : DDSD_PITCH);
+    memset(header, 0, DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES);
     memcpy(header, "DDS ", 4);
     edds_put_u32le(header + 4, 124);
     edds_put_u32le(header + 8, flags);
-    edds_put_u32le(header + 12, source->height);
-    edds_put_u32le(header + 16, source->width);
-    edds_put_u32le(header + 20, source->width * 4u);
+    edds_put_u32le(header + 12, height);
+    edds_put_u32le(header + 16, width);
+    edds_put_u32le(header + 20,
+        block != 0 ? top_mip_bytes : width * edds_gpu_pixel_bytes(format));
     edds_put_u32le(header + 28, count);
     memcpy(header + 36, "ENF1", 4);
     edds_put_u32le(header + 76, 32);
-    edds_put_u32le(header + 80, DDPF_RGB | (source->has_alpha ? DDPF_ALPHAPIXELS : 0u));
-    edds_put_u32le(header + 88, 32);
-    edds_put_u32le(header + 92, 0x00ff0000u);
-    edds_put_u32le(header + 96, 0x0000ff00u);
-    edds_put_u32le(header + 100, 0x000000ffu);
-    edds_put_u32le(header + 104, source->has_alpha ? 0xff000000u : 0u);
     edds_put_u32le(header + 108, DDSCAPS_TEXTURE |
         (count > 1 ? DDSCAPS_COMPLEX | DDSCAPS_MIPMAP : 0u));
+    if (format == EDDS_PIXEL_BGRA8 || format == EDDS_PIXEL_BGRX8) {
+        const int alpha = format == EDDS_PIXEL_BGRA8;
+        edds_put_u32le(header + 80, DDPF_RGB | (alpha ? DDPF_ALPHAPIXELS : 0u));
+        edds_put_u32le(header + 88, 32);
+        edds_put_u32le(header + 92, 0x00ff0000u);
+        edds_put_u32le(header + 96, 0x0000ff00u);
+        edds_put_u32le(header + 100, 0x000000ffu);
+        edds_put_u32le(header + 104, alpha ? 0xff000000u : 0u);
+        return DDS_HEADER_BYTES;
+    }
+    edds_put_u32le(header + 80, DDPF_FOURCC);
+    if (dxgi == 0) {
+        memcpy(header + 84, format == EDDS_PIXEL_DXT1 ? "DXT1" : "DXT5", 4);
+        return DDS_HEADER_BYTES;
+    }
+    memcpy(header + 84, "DX10", 4);
+    edds_put_u32le(header + 128, dxgi);
+    edds_put_u32le(header + 132, DDS_RESOURCE_DIMENSION_TEXTURE2D);
+    edds_put_u32le(header + 136, 0);
+    edds_put_u32le(header + 140, 1);
+    edds_put_u32le(header + 144, 0);
+    return DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES;
 }
 
 static edds_status write_edds(
     FILE *output,
-    const edds_decoded_source *source,
+    edds_pixel_format format,
     const generated_mip *mips,
     uint32_t count,
     edds_error *error
 ) {
-    uint8_t header[DDS_HEADER_BYTES];
+    uint8_t header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
     uint8_t descriptor[8];
-    dds_header(header, source, count);
-    if (fwrite(header, 1, sizeof header, output) != sizeof header) {
+    const uint32_t header_bytes =
+        dds_header(header, format, mips[0].width, mips[0].height, count, mips[0].payload_bytes);
+    if (fwrite(header, 1, header_bytes, output) != header_bytes) {
         goto failure;
     }
     for (uint32_t stored = 0; stored < count; ++stored) {
@@ -390,8 +483,84 @@ void edds_default_profile(edds_profile *profile) {
     if (profile != NULL) {
         profile->format_compress = EDDS_COMPRESS_FASTEST;
         profile->compress_threshold = 80;
+        profile->conversion = EDDS_CONVERSION_NONE;
+        profile->conversion_quality = EDDS_QUALITY_SCALE;
         profile->generate_mips = 1;
     }
+}
+
+edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
+    const edds_conversion_capability *conversion;
+    if (profile == NULL) {
+        edds_fail(error, "invalid-api-argument", "A conversion profile is required.");
+        return EDDS_INTERNAL_FAILURE;
+    }
+    if (profile->format_compress < EDDS_COMPRESS_COPY ||
+        profile->format_compress > EDDS_COMPRESS_BEST || profile->compress_threshold > 100u ||
+        (profile->generate_mips != 0 && profile->generate_mips != 1)) {
+        edds_fail(error, "unsupported-setting",
+            "The conversion profile is outside the supported Workbench slice.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    conversion = edds_conversion_capability_of(profile->conversion);
+    if (conversion == NULL || !conversion->supported) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting Conversion=%s is recognized but unsupported.",
+            conversion == NULL ? "unknown" : conversion->workbench_name);
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->conversion_quality > EDDS_QUALITY_SCALE) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting ConversionQuality must be between 0 and 1.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    /*
+     * Workbench itself calls the field "Conversion quality for compressed formats", so a quality
+     * other than the default alongside an uncompressed conversion is a combination nothing has
+     * confirmed the meaning of. It is refused rather than accepted and quietly ignored.
+     */
+    if (!conversion->uses_quality && profile->conversion_quality != EDDS_QUALITY_SCALE) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting ConversionQuality has no confirmed effect on Conversion=%s.",
+            conversion->workbench_name);
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    return EDDS_OK;
+}
+
+/**
+ * Two conversions branch on alpha, and they weigh it differently. `None` keeps whichever channel
+ * layout the source declared, because BGRX and BGRA cost the same four bytes and discarding a
+ * declared channel would be a change the source did not ask for. `DXTCompression` branches on
+ * whether the alpha is *used*: BC3 is twice the size of BC1 and spends all of it on an alpha block,
+ * so a fully opaque channel buys nothing. Only a sample below 255 is alpha the result has to carry.
+ */
+edds_pixel_format edds_profile_pixel_format(const edds_profile *profile, edds_source_alpha alpha) {
+    switch (profile == NULL ? EDDS_CONVERSION_NONE : profile->conversion) {
+        case EDDS_CONVERSION_NONE:
+            return alpha == EDDS_ALPHA_ABSENT ? EDDS_PIXEL_BGRX8 : EDDS_PIXEL_BGRA8;
+        case EDDS_CONVERSION_DXT:
+            return alpha == EDDS_ALPHA_USED ? EDDS_PIXEL_DXT5 : EDDS_PIXEL_DXT1;
+        case EDDS_CONVERSION_RED: return EDDS_PIXEL_R8;
+        case EDDS_CONVERSION_RED_HQ: return EDDS_PIXEL_BC4;
+        case EDDS_CONVERSION_RED_GREEN: return EDDS_PIXEL_RG8;
+        case EDDS_CONVERSION_RED_GREEN_HQ: return EDDS_PIXEL_BC5;
+        case EDDS_CONVERSION_COLOR_HQ: return EDDS_PIXEL_BC7;
+        default: return EDDS_PIXEL_UNKNOWN;
+    }
+}
+
+/** Read off this one source's own samples, never off a batch and never off a file name. */
+static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
+    if (!source->has_alpha) {
+        return EDDS_ALPHA_ABSENT;
+    }
+    for (size_t at = 3; at < (size_t)source->width * source->height * 4u; at += 4u) {
+        if (source->rgba[at] != 255u) {
+            return EDDS_ALPHA_USED;
+        }
+    }
+    return EDDS_ALPHA_OPAQUE;
 }
 
 edds_status edds_convert(
@@ -407,17 +576,16 @@ edds_status edds_convert(
 ) {
     edds_decoded_source image = { 0, 0, 0, NULL };
     generated_mip mips[EDDS_MAX_MIPS];
+    edds_pixel_format format;
     uint32_t count = 0;
     edds_status status;
     if (source == NULL || output == NULL || profile == NULL) {
         edds_fail(error, "invalid-api-argument", "The source, output, and profile are required.");
         return EDDS_INTERNAL_FAILURE;
     }
-    if (profile->format_compress < EDDS_COMPRESS_COPY ||
-        profile->format_compress > EDDS_COMPRESS_BEST || profile->compress_threshold > 100u ||
-        (profile->generate_mips != 0 && profile->generate_mips != 1)) {
-        edds_fail(error, "unsupported-setting", "The conversion profile is outside the supported Workbench slice.");
-        return EDDS_UNSUPPORTED_FORMAT;
+    status = edds_profile_check(profile, error);
+    if (status != EDDS_OK) {
+        return status;
     }
     if (edds_source_capability_of_format(source_format) == NULL) {
         edds_fail(error, "unsupported-source-format",
@@ -439,15 +607,21 @@ edds_status edds_convert(
     if (status != EDDS_OK) {
         return status;
     }
+    format = edds_profile_pixel_format(profile, source_alpha_of(&image));
     report(progress, progress_context, 0.15);
     status = generate_mips(&image, profile, mips, &count, cancelled, cancel_context, error);
+    if (status == EDDS_OK) {
+        report(progress, progress_context, 0.30);
+        status = encode_mips(mips, count, format, profile->conversion_quality,
+            cancelled, cancel_context, error);
+    }
     if (status == EDDS_OK) {
         report(progress, progress_context, 0.45);
         status = prepare_storage(mips, count, profile, progress, progress_context, error);
     }
     if (status == EDDS_OK) {
         report(progress, progress_context, 0.90);
-        status = write_edds(output, &image, mips, count, error);
+        status = write_edds(output, format, mips, count, error);
     }
     free_mips(mips, count);
     free(image.rgba);

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { EddsConversion, EddsInspection, EddsPreview } from '../../src/mods/edds';
-import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import { DEFAULT_TEXTURE_PROFILE, type TextureProfile } from '../../src/mods/textureConversion';
 import {
-  TEXTURE_PROFILE_FIELDS,
+  textureProfileFieldsOf,
   openedTextureAuthoring,
   updateTextureAuthoring,
 } from '../../src/mods/textureAuthoring';
@@ -118,20 +118,96 @@ test('successful conversion reaches result with actual independently supplied pr
 
 test('every Workbench key is visible while unsupported dependent values explain their lock', () => {
   assert.deepEqual(
-    TEXTURE_PROFILE_FIELDS.map(({ key, editable, reason }) => [key, editable, reason]),
+    textureProfileFieldsOf(DEFAULT_TEXTURE_PROFILE).map(({ key, editable, reason }) => [
+      key,
+      editable,
+      reason,
+    ]),
     [
-      ['TargetFormat', false, 'The first conversion slice supports EnfusionDDS only.'],
+      ['TargetFormat', false, 'This conversion slice supports EnfusionDDS only.'],
       ['FormatCompress', true, undefined],
       ['CompressTreshold', true, undefined],
-      ['Conversion', false, 'The first conversion slice supports None only.'],
-      ['ConversionQuality', false, 'Conversion=None fixes ConversionQuality at 1.'],
-      ['Swizzling', false, 'The first conversion slice supports None only.'],
+      ['Conversion', true, undefined],
+      [
+        'ConversionQuality',
+        false,
+        'Conversion=None stores its channels as they are, so quality has nothing to trade.',
+      ],
+      ['Swizzling', false, 'This conversion slice supports None only.'],
       ['GenerateMips', true, undefined],
-      ['MipMapFunction', false, 'GenerateMips uses Filter in the first conversion slice.'],
-      ['MipMapFilter', false, 'MipMapFunction=Filter uses Box in the first conversion slice.'],
-      ['TiledTexture', false, 'TiledTexture=false is not supported in the first conversion slice.'],
+      ['MipMapFunction', false, 'GenerateMips uses Filter in this conversion slice.'],
+      ['MipMapFilter', false, 'MipMapFunction=Filter uses Box in this conversion slice.'],
+      ['TiledTexture', false, 'TiledTexture=false is not supported in this conversion slice.'],
     ],
   );
+});
+
+test('a compressed conversion is what makes ConversionQuality a control at all', () => {
+  const fields = (conversion: TextureProfile['Conversion']) =>
+    textureProfileFieldsOf({ ...DEFAULT_TEXTURE_PROFILE, Conversion: conversion })
+      .find((field) => field.key === 'ConversionQuality');
+
+  assert.equal(fields('ColorHQCompression')?.editable, true);
+  assert.equal(fields('ColorHQCompression')?.reason, undefined);
+  assert.equal(fields('DXTCompression')?.editable, true);
+  assert.equal(fields('RedHQCompression')?.editable, true);
+  assert.equal(fields('RedGreenHQCompression')?.editable, true);
+  for (const uncompressed of ['None', 'Red', 'RedGreen'] as const) {
+    assert.equal(fields(uncompressed)?.editable, false);
+    assert.match(String(fields(uncompressed)?.reason), /stores its channels as they are/);
+  }
+});
+
+test('a conversion change that drops quality carries the default back with it', () => {
+  const authoring = readyAuthoring();
+  const hq = updateTextureAuthoring(authoring, {
+    kind: 'change-profile',
+    field: 'Conversion',
+    value: 'ColorHQCompression',
+  });
+  const lowered = updateTextureAuthoring(hq.state, {
+    kind: 'change-profile',
+    field: 'ConversionQuality',
+    value: 0.403,
+  });
+  assert.equal(
+    lowered.state.kind === 'authoring' && lowered.state.draft.ConversionQuality,
+    0.403,
+  );
+  const uncompressed = updateTextureAuthoring(lowered.state, {
+    kind: 'change-profile',
+    field: 'Conversion',
+    value: 'Red',
+  });
+  assert.equal(uncompressed.state.kind === 'authoring' && uncompressed.state.draft.Conversion, 'Red');
+  assert.equal(uncompressed.state.kind === 'authoring' && uncompressed.state.draft.ConversionQuality, 1);
+});
+
+test('a quality outside the recipe grammar never reaches a draft', () => {
+  const hq = updateTextureAuthoring(readyAuthoring(), {
+    kind: 'change-profile',
+    field: 'Conversion',
+    value: 'DXTCompression',
+  });
+  for (const refused of [-0.1, 1.1, 0.4031, Number.NaN]) {
+    const attempt = updateTextureAuthoring(hq.state, {
+      kind: 'change-profile',
+      field: 'ConversionQuality',
+      value: refused,
+    });
+    assert.equal(attempt.state.kind === 'authoring' && attempt.state.draft.ConversionQuality, 1);
+    assert.deepEqual(attempt.effects, []);
+  }
+});
+
+test('an uncompressed conversion refuses a quality rather than accepting a dead one', () => {
+  const attempt = updateTextureAuthoring(readyAuthoring(), {
+    kind: 'change-profile',
+    field: 'ConversionQuality',
+    value: 0.5,
+  });
+  assert.equal(attempt.state.kind === 'authoring' && attempt.state.draft.ConversionQuality, 1);
+  assert.deepEqual(attempt.effects, []);
 });
 
 function readyAuthoring() {

@@ -117,6 +117,36 @@ static int unsigned_value(json_scan *scan, uint32_t *result) {
     return 1;
 }
 
+/** `ConversionQuality` as the protocol sends it: `1`, `0`, or up to three decimals, in thousandths. */
+static int quality_value(json_scan *scan, uint32_t *result) {
+    uint32_t whole = 0;
+    uint32_t fraction = 0;
+    unsigned digits = 0;
+    int seen = 0;
+    space(scan);
+    while (scan->at < scan->end && *scan->at >= '0' && *scan->at <= '9') {
+        whole = whole * 10u + (uint32_t)(*scan->at++ - '0');
+        if (whole > 1u) return 0;
+        seen = 1;
+    }
+    if (!seen) return 0;
+    if (scan->at < scan->end && *scan->at == '.') {
+        ++scan->at;
+        if (scan->at == scan->end || *scan->at < '0' || *scan->at > '9') return 0;
+        while (scan->at < scan->end && *scan->at >= '0' && *scan->at <= '9') {
+            if (digits >= 3u) return 0;
+            fraction = fraction * 10u + (uint32_t)(*scan->at++ - '0');
+            ++digits;
+        }
+    }
+    while (digits < 3u) {
+        fraction *= 10u;
+        ++digits;
+    }
+    *result = whole * EDDS_QUALITY_SCALE + fraction;
+    return *result <= EDDS_QUALITY_SCALE;
+}
+
 static int skip_value(json_scan *scan, unsigned depth);
 
 static int skip_string(json_scan *scan) {
@@ -239,9 +269,13 @@ static int profile_value(json_scan *scan, edds_profile *profile) {
         } else if (strcmp(key, "CompressTreshold") == 0) {
             bit = 1u << 2; if (!unsigned_value(scan, &number) || number > 100u) return 0; profile->compress_threshold = number;
         } else if (strcmp(key, "Conversion") == 0) {
-            bit = 1u << 3; if (!string_value(scan, value, sizeof value) || strcmp(value, "None") != 0) return 0;
+            const edds_conversion_capability *capability;
+            bit = 1u << 3; if (!string_value(scan, value, sizeof value)) return 0;
+            capability = edds_conversion_of_workbench_name(value);
+            if (capability == NULL || !capability->supported) return 0;
+            profile->conversion = capability->conversion;
         } else if (strcmp(key, "ConversionQuality") == 0) {
-            bit = 1u << 4; if (!unsigned_value(scan, &number) || number != 1u) return 0;
+            bit = 1u << 4; if (!quality_value(scan, &profile->conversion_quality)) return 0;
         } else if (strcmp(key, "Swizzling") == 0) {
             bit = 1u << 5; if (!string_value(scan, value, sizeof value) || strcmp(value, "None") != 0) return 0;
         } else if (strcmp(key, "GenerateMips") == 0) {
@@ -258,7 +292,12 @@ static int profile_value(json_scan *scan, edds_profile *profile) {
         if (take(scan, '}')) break;
         if (!take(scan, ',')) return 0;
     }
-    return fields == 0x3ffu;
+    if (fields != 0x3ffu) return 0;
+    {
+        /* A quality against the conversion it would reach is only decidable once both are read. */
+        edds_error combination;
+        return edds_profile_check(profile, &combination) == EDDS_OK;
+    }
 }
 
 static int identity_value(json_scan *scan, edds_batch_job *job) {

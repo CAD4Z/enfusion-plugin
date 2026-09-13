@@ -21,6 +21,19 @@ test_bytes fixture_png_rgba_gamma(void);
 test_bytes fixture_tga_bgrx(void);
 test_bytes fixture_jpeg_ycbcr(void);
 test_bytes fixture_tiff_rgb(void);
+
+/**
+ * The controlled source the GPU conversions are measured against: nine by five, so a block row
+ * hangs off both edges and the mip chain runs down to one pixel, with a colour ramp across it and
+ * an alpha ramp through it. The independent reader rebuilds the same expectation from this file.
+ */
+test_bytes fixture_tga_gpu_gradient(void);
+
+/**
+ * Four flat quadrants, so every block of every runtime format repeats and the container has
+ * something to compress. It is how the black-box test gets one GPU result stored both ways.
+ */
+test_bytes fixture_tga_gpu_flat(void);
 void fixture_free(test_bytes fixture);
 int fixture_write(const char *path, test_bytes fixture);
 
@@ -67,5 +80,21 @@ typedef struct fixture_jpeg_spec {
 } fixture_jpeg_spec;
 
 size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_spec *spec);
+
+/**
+ * An uncompressed true-colour TGA of whatever size and samples a test wants. The GPU formats need
+ * a controlled source of their own — a gradient wide enough for several blocks, a size that is not
+ * a multiple of four, an alpha channel that is or is not used — and this is the cheapest source
+ * format to build exactly: a header and the BGRA samples, with no compression in between.
+ */
+size_t fixture_tga_bytes(uint32_t width, uint32_t height, int with_alpha);
+size_t fixture_tga_build(
+    uint8_t *output,
+    size_t capacity,
+    uint32_t width,
+    uint32_t height,
+    int with_alpha,
+    const uint8_t *bgra
+);
 
 #endif

@@ -12,6 +12,10 @@ import {
 import { loadTextureBatch, renderTextureDraft } from '../platform/textureConversion';
 import { batchFailureRetryable } from '../platform/eddsBatch';
 import type { EddsConverter } from '../platform/eddsConverter';
+import {
+  isSupportedTextureConversion,
+  isTextureQuality,
+} from '../mods/textureConversions';
 import type {
   TextureBatchRequest,
   TextureBatchStateMessage,
@@ -140,6 +144,16 @@ export class TextureBatchEditor {
         case 'change-mips':
           if (typeof request.value === 'boolean') {
             apply({ kind: 'change-profile', field: 'GenerateMips', value: request.value });
+          }
+          return;
+        case 'change-conversion':
+          if (isSupportedTextureConversion(request.value)) {
+            apply({ kind: 'change-profile', field: 'Conversion', value: request.value });
+          }
+          return;
+        case 'change-quality':
+          if (isTextureQuality(request.value)) {
+            apply({ kind: 'change-profile', field: 'ConversionQuality', value: request.value });
           }
           return;
         case 'run': apply({ kind: 'run' }); return;

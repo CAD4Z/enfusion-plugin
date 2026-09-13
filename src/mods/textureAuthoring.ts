@@ -4,6 +4,11 @@ import type {
   TextureConversionPlan,
   TextureProfile,
 } from './textureConversion';
+import {
+  type TextureConversion,
+  isTextureQuality,
+  textureConversionCapabilityOf,
+} from './textureConversions';
 
 type ReadyPlan = Extract<TextureConversionPlan, { kind: 'ready' }>;
 
@@ -15,50 +20,60 @@ export interface TextureRendering {
   readonly result: EddsPreview;
 }
 
-export const TEXTURE_PROFILE_FIELDS: readonly {
+export interface TextureProfileField {
   readonly key: keyof TextureProfile;
   readonly editable: boolean;
   readonly reason?: string;
-}[] = [
-  {
-    key: 'TargetFormat',
-    editable: false,
-    reason: 'The first conversion slice supports EnfusionDDS only.',
-  },
-  { key: 'FormatCompress', editable: true },
-  { key: 'CompressTreshold', editable: true },
-  {
-    key: 'Conversion',
-    editable: false,
-    reason: 'The first conversion slice supports None only.',
-  },
-  {
-    key: 'ConversionQuality',
-    editable: false,
-    reason: 'Conversion=None fixes ConversionQuality at 1.',
-  },
-  {
-    key: 'Swizzling',
-    editable: false,
-    reason: 'The first conversion slice supports None only.',
-  },
-  { key: 'GenerateMips', editable: true },
-  {
-    key: 'MipMapFunction',
-    editable: false,
-    reason: 'GenerateMips uses Filter in the first conversion slice.',
-  },
-  {
-    key: 'MipMapFilter',
-    editable: false,
-    reason: 'MipMapFunction=Filter uses Box in the first conversion slice.',
-  },
-  {
-    key: 'TiledTexture',
-    editable: false,
-    reason: 'TiledTexture=false is not supported in the first conversion slice.',
-  },
-];
+}
+
+/**
+ * Which controls the editor offers for one draft, and why each of the others is not offered.
+ * `ConversionQuality` is the field that comes and goes: Workbench describes it as the quality of
+ * a *compressed* conversion, so against an uncompressed one there is nothing for it to trade and
+ * a value other than the default would be refused before any preview. The editor says that rather
+ * than leaving a live control that quietly changes nothing.
+ */
+export function textureProfileFieldsOf(profile: TextureProfile): readonly TextureProfileField[] {
+  const conversion = textureConversionCapabilityOf(profile.Conversion);
+  return [
+    {
+      key: 'TargetFormat',
+      editable: false,
+      reason: 'This conversion slice supports EnfusionDDS only.',
+    },
+    { key: 'FormatCompress', editable: true },
+    { key: 'CompressTreshold', editable: true },
+    { key: 'Conversion', editable: true },
+    conversion?.usesQuality === true
+      ? { key: 'ConversionQuality', editable: true }
+      : {
+          key: 'ConversionQuality',
+          editable: false,
+          reason: `Conversion=${profile.Conversion} stores its channels as they are, so quality has nothing to trade.`,
+        },
+    {
+      key: 'Swizzling',
+      editable: false,
+      reason: 'This conversion slice supports None only.',
+    },
+    { key: 'GenerateMips', editable: true },
+    {
+      key: 'MipMapFunction',
+      editable: false,
+      reason: 'GenerateMips uses Filter in this conversion slice.',
+    },
+    {
+      key: 'MipMapFilter',
+      editable: false,
+      reason: 'MipMapFunction=Filter uses Box in this conversion slice.',
+    },
+    {
+      key: 'TiledTexture',
+      editable: false,
+      reason: 'TiledTexture=false is not supported in this conversion slice.',
+    },
+  ];
+}
 
 export type TextureAuthoringState =
   | { readonly kind: 'loading' }
@@ -107,6 +122,16 @@ export type TextureAuthoringEvent =
       readonly kind: 'change-profile';
       readonly field: 'GenerateMips';
       readonly value: boolean;
+    }
+  | {
+      readonly kind: 'change-profile';
+      readonly field: 'Conversion';
+      readonly value: TextureConversion;
+    }
+  | {
+      readonly kind: 'change-profile';
+      readonly field: 'ConversionQuality';
+      readonly value: number;
     }
   | { readonly kind: 'draft-rendered'; readonly revision: number; readonly rendered: TextureRendering }
   | { readonly kind: 'draft-failed'; readonly revision: number; readonly reason: string }
@@ -216,11 +241,29 @@ function changedProfile(
   if (event.field === 'CompressTreshold' && (event.value < 0 || event.value > 100)) {
     return unchanged(state);
   }
+  if (event.field === 'ConversionQuality' && !isTextureQuality(event.value)) {
+    return unchanged(state);
+  }
+  const capability = textureConversionCapabilityOf(
+    event.field === 'Conversion' ? event.value : state.draft.Conversion,
+  );
+  if (!capability?.supported) {
+    return unchanged(state);
+  }
+  /* Quality against a conversion whose encoder never reads it would be refused before any preview. */
+  if (event.field === 'ConversionQuality' && !capability.usesQuality && event.value !== 1) {
+    return unchanged(state);
+  }
   if (state.draft[event.field] === event.value) {
     return unchanged(state);
   }
 
-  const draft: TextureProfile = { ...state.draft, [event.field]: event.value };
+  const draft: TextureProfile = {
+    ...state.draft,
+    [event.field]: event.value,
+    /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
+    ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
+  };
   const revision = state.revision + 1;
   const plan: ReadyPlan = { ...state.plan, profile: draft };
   return {

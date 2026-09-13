@@ -199,6 +199,56 @@ static int unsigned_value(const token *value, uint32_t *result) {
     return 1;
 }
 
+/**
+ * `ConversionQuality` as thousandths. Workbench writes it as a plain `1` or as up to three
+ * decimals, and those are exactly the values that survive a round trip through this converter;
+ * a fourth decimal would have to be rounded on the way back out and is refused instead.
+ */
+static int quality_value(const token *value, uint32_t *result) {
+    const char *at = value->text;
+    uint32_t whole = 0;
+    uint32_t fraction = 0;
+    unsigned digits = 0;
+    if (value->kind != TOKEN_WORD || *at < '0' || *at > '9') return 0;
+    while (*at >= '0' && *at <= '9') {
+        whole = whole * 10u + (uint32_t)(*at - '0');
+        if (whole > 1u) return 0;
+        ++at;
+    }
+    if (*at == '.') {
+        ++at;
+        if (*at < '0' || *at > '9') return 0;
+        while (*at >= '0' && *at <= '9') {
+            if (digits >= 3u) return 0;
+            fraction = fraction * 10u + (uint32_t)(*at - '0');
+            ++digits;
+            ++at;
+        }
+    }
+    if (*at != '\0') return 0;
+    while (digits < 3u) {
+        fraction *= 10u;
+        ++digits;
+    }
+    *result = whole * EDDS_QUALITY_SCALE + fraction;
+    return *result <= EDDS_QUALITY_SCALE;
+}
+
+/** The shortest text that reads back as exactly this quality: `1`, `0.5`, `0.403`. */
+static void quality_text(uint32_t value, char text[8]) {
+    const uint32_t whole = value / EDDS_QUALITY_SCALE;
+    const uint32_t fraction = value % EDDS_QUALITY_SCALE;
+    if (fraction == 0) {
+        (void)snprintf(text, 8, "%u", whole);
+    } else if (fraction % 100u == 0) {
+        (void)snprintf(text, 8, "%u.%u", whole, fraction / 100u);
+    } else if (fraction % 10u == 0) {
+        (void)snprintf(text, 8, "%u.%02u", whole, fraction / 10u);
+    } else {
+        (void)snprintf(text, 8, "%u.%03u", whole, fraction);
+    }
+}
+
 static int is_one_of(const char *value, const char *const *choices, size_t count) {
     for (size_t at = 0; at < count; ++at) {
         if (strcmp(value, choices[at]) == 0) return 1;
@@ -261,12 +311,15 @@ static edds_status recipe_setting(
         return EDDS_OK;
     }
     if (bit == SETTING_CONVERSION) {
-        static const char *const known[] = {
-            "None", "DXTCompression", "Red", "RedHQCompression", "RedGreen",
-            "RedGreenHQCompression", "ColorHQCompression", "HDRCompression"
-        };
-        if (!is_one_of(value->text, known, sizeof known / sizeof known[0])) goto malformed;
-        return strcmp(value->text, "None") == 0 ? EDDS_OK : unsupported(error, key->text, value->text);
+        const edds_conversion_capability *capability =
+            edds_conversion_of_workbench_name(value->text);
+        if (capability == NULL) goto malformed;
+        metadata->profile.conversion = capability->conversion;
+        return capability->supported ? EDDS_OK : unsupported(error, key->text, value->text);
+    }
+    if (bit == SETTING_QUALITY) {
+        if (!quality_value(value, &metadata->profile.conversion_quality)) goto malformed;
+        return EDDS_OK;
     }
     if (bit == SETTING_SWIZZLING) {
         static const char *const known[] = {
@@ -294,8 +347,6 @@ static edds_status recipe_setting(
     } else if (bit == SETTING_GENERATE_MIPS) {
         if (number > 1u) goto malformed;
         metadata->profile.generate_mips = number != 0;
-    } else if (bit == SETTING_QUALITY) {
-        if (number != 1u) return unsupported(error, key->text, value->text);
     } else if ((bit == SETTING_REMOVE_MIPS || bit == SETTING_CONTAINS_MIPS ||
                 bit == SETTING_NORMALIZE || bit == SETTING_CUBEMAP) && number != 0u) {
         return unsupported(error, key->text, value->text);
@@ -345,6 +396,18 @@ static edds_status parse_recipe(
     if ((seen & SETTING_SOURCE) == 0 || metadata->source_file[0] == '\0') {
         fail(error, "missing-source-file", "PC metadata must declare a non-empty SourceFile.");
         return EDDS_INVALID_INPUT;
+    }
+    /*
+     * Settings arrive in whatever order the file wrote them, so a combination of two of them —
+     * a quality against the conversion it would reach — is only decidable once the recipe is whole.
+     */
+    {
+        edds_error combination;
+        const edds_status status = edds_profile_check(&metadata->profile, &combination);
+        if (status != EDDS_OK && pending == EDDS_OK) {
+            pending = status;
+            pending_error = combination;
+        }
     }
     if (pending != EDDS_OK) *error = pending_error;
     return pending;
@@ -531,6 +594,8 @@ static int safe_string(const char *value) {
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error) {
     const char *resource;
     const char *compress;
+    const edds_conversion_capability *conversion;
+    char quality[8];
     int written;
     if (output == NULL || metadata == NULL) {
         fail(error, "invalid-api-argument", "The metadata value and output are required.");
@@ -542,13 +607,20 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         resource = capability == NULL ? NULL : capability->resource_class;
     }
     compress = compress_name(metadata->profile.format_compress);
-    if (resource == NULL || compress == NULL || strlen(metadata->guid) != 16u ||
-        !safe_string(metadata->name) || !safe_string(metadata->source_file) ||
-        metadata->profile.compress_threshold > 100u ||
-        (metadata->profile.generate_mips != 0 && metadata->profile.generate_mips != 1)) {
+    conversion = edds_conversion_capability_of(metadata->profile.conversion);
+    if (resource == NULL || compress == NULL || conversion == NULL || strlen(metadata->guid) != 16u ||
+        !safe_string(metadata->name) || !safe_string(metadata->source_file)) {
         fail(error, "invalid-metadata-value", "The structured metadata value is incomplete or unsupported.");
         return EDDS_INVALID_INPUT;
     }
+    {
+        /* Canonical metadata never records a recipe this converter would refuse to run. */
+        const edds_status status = edds_profile_check(&metadata->profile, error);
+        if (status != EDDS_OK) {
+            return status;
+        }
+    }
+    quality_text(metadata->profile.conversion_quality, quality);
     for (const char *at = metadata->guid; *at != '\0'; ++at) {
         if (!isxdigit((unsigned char)*at)) {
             fail(error, "malformed-guid", "The metadata GUID must be exactly 16 hexadecimal characters.");
@@ -564,8 +636,8 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "   TargetFormat EnfusionDDS\n"
         "   FormatCompress %s\n"
         "   CompressTreshold %u\n"
-        "   Conversion None\n"
-        "   ConversionQuality 1\n"
+        "   Conversion %s\n"
+        "   ConversionQuality %s\n"
         "   Swizzling None\n"
         "   GenerateMips %d\n"
         "   MipMapFunction Filter\n"
@@ -581,8 +653,8 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         " }\n"
         "}\n",
         metadata->guid, metadata->name, resource, metadata->source_file, compress,
-        metadata->profile.compress_threshold, metadata->profile.generate_mips,
-        resource, resource, resource);
+        metadata->profile.compress_threshold, conversion->workbench_name, quality,
+        metadata->profile.generate_mips, resource, resource, resource);
     if (written < 0 || fflush(output) != 0) {
         fail(error, "metadata-write-failed", "Canonical metadata could not be written completely.");
         return EDDS_INTERNAL_FAILURE;

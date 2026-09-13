@@ -180,6 +180,89 @@ test('convert returns only actual committed artifact facts', () => {
   );
 });
 
+test('every runtime format a supported conversion produces comes back as a fact', () => {
+  for (const format of ['BGRA8', 'BGRX8', 'R8', 'RG8', 'DXT1', 'DXT5', 'BC4', 'BC5', 'BC7']) {
+    assert.equal(
+      conversionOf(
+        `{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"${format}","registered":false}`,
+      ).pixelFormat,
+      format,
+    );
+  }
+  assert.throws(
+    () =>
+      conversionOf(
+        '{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"DXGI_10","registered":false}',
+      ),
+    /convert.pixelFormat must be one of/i,
+  );
+});
+
+test('inspect reports the channels the file holds, including one and two of them', () => {
+  for (const [pixelFormat, channels] of [
+    ['R8', 'R'],
+    ['BC4', 'R'],
+    ['RG8', 'RG'],
+    ['BC5', 'RG'],
+    ['DXT1', 'RGB'],
+    ['BC7', 'RGBA'],
+  ] as const) {
+    const inspection = inspectionOf(JSON.stringify(inspectMessage({ pixelFormat, channels })));
+    assert.equal(inspection.pixelFormat, pixelFormat);
+    assert.equal(inspection.channels, channels);
+    assert.deepEqual(inspection.pixels, { kind: 'supported' });
+  }
+  assert.throws(
+    () => inspectionOf(JSON.stringify(inspectMessage({ channels: 'RA' }))),
+    /channels is not recognized/i,
+  );
+});
+
+test('a GPU recipe round-trips through the machine boundary with its exact quality', () => {
+  const recipeOf = (Conversion: string, ConversionQuality: unknown) =>
+    JSON.stringify({
+      ...inspectMessage({}),
+      metadata: {
+        schemaVersion: 1,
+        identity: {
+          guid: 'aBcDeF0123456789',
+          name: 'MyMod/GUI/icon.edds',
+          sourceFile: 'icon.png',
+          sourceFormat: 'png',
+        },
+        recipe: {
+          TargetFormat: 'EnfusionDDS',
+          FormatCompress: 'Fastest',
+          CompressTreshold: 80,
+          Conversion,
+          ConversionQuality,
+          Swizzling: 'None',
+          GenerateMips: true,
+          MipMapFunction: 'Filter',
+          MipMapFilter: 'Box',
+          TiledTexture: true,
+        },
+      },
+    });
+
+  const inspection = inspectionOf(recipeOf('ColorHQCompression', 0.403));
+  assert.equal(inspection.metadata?.profile.Conversion, 'ColorHQCompression');
+  assert.equal(inspection.metadata?.profile.ConversionQuality, 0.403);
+
+  assert.throws(
+    () => inspectionOf(recipeOf('HDRCompression', 1)),
+    /Conversion is not supported: HDRCompression/i,
+  );
+  assert.throws(
+    () => inspectionOf(recipeOf('DXTCompression', 1.5)),
+    /ConversionQuality must be 0 through 1/i,
+  );
+  assert.throws(
+    () => inspectionOf(recipeOf('DXTCompression', 0.4031)),
+    /ConversionQuality must be 0 through 1/i,
+  );
+});
+
 test('a different or malformed protocol is refused before its values are used', () => {
   assert.throws(
     () => protocolOf('{"protocolVersion":2,"kind":"protocol","toolVersion":"0.2","commands":[]}'),
@@ -290,8 +373,8 @@ test('inspect refuses internally contradictory or malformed machine output', () 
     /mipCount.*mips/i,
   );
   assert.throws(
-    () => inspectionOf(JSON.stringify(inspectMessage({ pixelFormat: 'DXT1', previewSupported: true }))),
-    /cannot preview DXT1/i,
+    () => inspectionOf(JSON.stringify(inspectMessage({ pixelFormat: 'DXGI_10', previewSupported: true }))),
+    /cannot preview DXGI_10/i,
   );
   assert.throws(
     () => inspectionOf(JSON.stringify(inspectMessage({ width: -1 }))),

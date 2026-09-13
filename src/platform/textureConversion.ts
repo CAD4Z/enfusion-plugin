@@ -205,6 +205,13 @@ export async function renderTextureDraft(
   const sourcePlan = detachedPlan(plan, sourceOutput, {
     ...plan.profile,
     FormatCompress: 'Copy',
+    /*
+     * The left pane is the source as it is, so it goes through no conversion at all: putting the
+     * drafted one through it would show the encoder's output on both sides and leave nothing to
+     * compare it against.
+     */
+    Conversion: 'None',
+    ConversionQuality: 1,
     GenerateMips: false,
   });
   const resultPlan = detachedPlan(plan, resultOutput, plan.profile);

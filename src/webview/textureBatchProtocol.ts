@@ -12,6 +12,8 @@ export type TextureBatchRequest =
   | { readonly type: 'change-compression'; readonly value: TextureCompression }
   | { readonly type: 'change-threshold'; readonly value: number }
   | { readonly type: 'change-mips'; readonly value: boolean }
+  | { readonly type: 'change-conversion'; readonly value: string }
+  | { readonly type: 'change-quality'; readonly value: number }
   | { readonly type: 'run' }
   | { readonly type: 'cancel' }
   | { readonly type: 'retry-failed' };

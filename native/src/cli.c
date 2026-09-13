@@ -134,6 +134,39 @@ static int unsigned_argument(const cli_char *text, uint32_t *value) {
     return 1;
 }
 
+/**
+ * `--conversion-quality` on the command line, in thousandths. The CLI takes the same text the
+ * Workbench recipe holds — `1`, `0.5`, `0.403` — so a profile can be handed straight across.
+ */
+static int quality_argument(const cli_char *text, uint32_t *value) {
+    uint32_t whole = 0;
+    uint32_t fraction = 0;
+    unsigned digits = 0;
+    int seen = 0;
+    while (*text >= (cli_char)'0' && *text <= (cli_char)'9') {
+        whole = whole * 10u + (uint32_t)(*text++ - (cli_char)'0');
+        if (whole > 1u) return 0;
+        seen = 1;
+    }
+    if (!seen) return 0;
+    if (*text == (cli_char)'.') {
+        ++text;
+        if (*text < (cli_char)'0' || *text > (cli_char)'9') return 0;
+        while (*text >= (cli_char)'0' && *text <= (cli_char)'9') {
+            if (digits >= 3u) return 0;
+            fraction = fraction * 10u + (uint32_t)(*text++ - (cli_char)'0');
+            ++digits;
+        }
+    }
+    if (*text != 0) return 0;
+    while (digits < 3u) {
+        fraction *= 10u;
+        ++digits;
+    }
+    *value = whole * EDDS_QUALITY_SCALE + fraction;
+    return *value <= EDDS_QUALITY_SCALE;
+}
+
 static void usage(void) {
     fputs(
         "usage:\n"
@@ -197,22 +230,19 @@ static int invalid_invocation(const char *code, const char *message) {
 }
 
 static const char *pixel_format(const edds_info *info, char buffer[32]) {
-    switch (info->pixel_format) {
-        case EDDS_PIXEL_BGRA8: return "BGRA8";
-        case EDDS_PIXEL_BGRX8: return "BGRX8";
-        case EDDS_PIXEL_DXT1: return "DXT1";
-        case EDDS_PIXEL_DXT5: return "DXT5";
-        case EDDS_PIXEL_DXGI:
-            (void)snprintf(buffer, 32, "DXGI_%u", info->dxgi_format);
-            return buffer;
-        case EDDS_PIXEL_UNKNOWN: return "UNKNOWN";
-        default: return "UNKNOWN";
+    if (info->pixel_format == EDDS_PIXEL_DXGI) {
+        (void)snprintf(buffer, 32, "DXGI_%u", info->dxgi_format);
+        return buffer;
     }
+    return edds_pixel_format_name(info->pixel_format);
 }
 
 static const char *preview_refusal(const edds_info *info) {
-    if (info->pixel_format != EDDS_PIXEL_BGRA8 && info->pixel_format != EDDS_PIXEL_BGRX8) {
+    if (info->pixel_format == EDDS_PIXEL_DXGI || info->pixel_format == EDDS_PIXEL_UNKNOWN) {
         return "Pixel preview is unavailable because this DDS pixel format is not supported.";
+    }
+    if ((uint64_t)info->width * info->height * 4u > EDDS_MAX_PREVIEW_BYTES) {
+        return "Pixel preview is unavailable because this texture decodes to more pixels than one preview holds.";
     }
     return "Pixel preview is unavailable because only one two-dimensional texture surface is supported.";
 }
@@ -227,14 +257,31 @@ static const char *metadata_compress(edds_format_compress compress) {
     }
 }
 
+/** The same shortest exact text the metadata carries, as a JSON number rather than a string. */
+static const char *quality_json(uint32_t value, char buffer[8]) {
+    const uint32_t whole = value / EDDS_QUALITY_SCALE;
+    const uint32_t fraction = value % EDDS_QUALITY_SCALE;
+    if (fraction == 0) {
+        (void)snprintf(buffer, 8, "%u", whole);
+    } else if (fraction % 100u == 0) {
+        (void)snprintf(buffer, 8, "%u.%u", whole, fraction / 100u);
+    } else if (fraction % 10u == 0) {
+        (void)snprintf(buffer, 8, "%u.%02u", whole, fraction / 10u);
+    } else {
+        (void)snprintf(buffer, 8, "%u.%03u", whole, fraction);
+    }
+    return buffer;
+}
+
 static void write_inspection(
     const edds_info *info,
     const edds_metadata *metadata,
     const char *unsupported_metadata_reason
 ) {
     char format_buffer[32];
-    const char *channels = info->pixel_format == EDDS_PIXEL_BGRA8 ? "RGBA" :
-        (info->pixel_format == EDDS_PIXEL_BGRX8 ? "RGB" : "UNKNOWN");
+    char quality_buffer[8];
+    /* The channels a decode of the file carries, which is the runtime fact, not the source's. */
+    const char *channels = edds_pixel_format_channels(info->pixel_format);
     (void)printf(
         "{\"protocolVersion\":1,\"kind\":\"inspect\",\"width\":%u,\"height\":%u,"
         "\"mipCount\":%u,\"pixelFormat\":\"%s\",\"channels\":\"%s\",\"previewSupported\":%s",
@@ -299,11 +346,17 @@ static void write_inspection(
         }
         fputs("},\"recipe\":{\"TargetFormat\":\"EnfusionDDS\",\"FormatCompress\":", stdout);
         json_string(metadata_compress(metadata->profile.format_compress));
+        (void)printf(",\"CompressTreshold\":%u,\"Conversion\":", metadata->profile.compress_threshold);
+        {
+            const edds_conversion_capability *conversion =
+                edds_conversion_capability_of(metadata->profile.conversion);
+            json_string(conversion == NULL ? "None" : conversion->workbench_name);
+        }
         (void)printf(
-            ",\"CompressTreshold\":%u,\"Conversion\":\"None\",\"ConversionQuality\":1,"
+            ",\"ConversionQuality\":%s,"
             "\"Swizzling\":\"None\",\"GenerateMips\":%s,"
             "\"MipMapFunction\":\"Filter\",\"MipMapFilter\":\"Box\",\"TiledTexture\":true}}",
-            metadata->profile.compress_threshold,
+            quality_json(metadata->profile.conversion_quality, quality_buffer),
             metadata->profile.generate_mips ? "true" : "false");
     }
     fputs("}\n", stdout);
@@ -403,7 +456,7 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
         } else if (equals(argv[at], "--conversion") && options->conversion == NULL && at + 1 < argc) {
             options->conversion = argv[++at];
         } else if (equals(argv[at], "--conversion-quality") && !options->quality_seen && at + 1 < argc) {
-            options->quality_seen = unsigned_argument(argv[++at], &options->conversion_quality);
+            options->quality_seen = quality_argument(argv[++at], &options->conversion_quality);
             if (!options->quality_seen) return 0;
         } else if (equals(argv[at], "--swizzling") && options->swizzling == NULL && at + 1 < argc) {
             options->swizzling = argv[++at];
@@ -478,8 +531,19 @@ static edds_status profile_of(
         if (options->compress_threshold > 100u) goto unsupported;
         profile->compress_threshold = options->compress_threshold;
     }
-    if (options->conversion != NULL && !equals(options->conversion, "none")) goto unsupported;
-    if (options->quality_seen && options->conversion_quality != 1u) goto unsupported;
+    if (options->conversion != NULL) {
+        size_t count = 0;
+        const edds_conversion_capability *capabilities = edds_conversions(&count);
+        const edds_conversion_capability *chosen = NULL;
+        for (size_t at = 0; at < count; ++at) {
+            if (equals(options->conversion, capabilities[at].wire_name)) chosen = &capabilities[at];
+        }
+        if (chosen == NULL) goto unsupported;
+        profile->conversion = chosen->conversion;
+    }
+    if (options->quality_seen) {
+        profile->conversion_quality = options->conversion_quality;
+    }
     if (options->swizzling != NULL && !equals(options->swizzling, "none")) goto unsupported;
     if (options->generate_mips != NULL) {
         if (equals(options->generate_mips, "true")) profile->generate_mips = 1;
@@ -489,7 +553,8 @@ static edds_status profile_of(
     if (options->mipmap_function != NULL && !equals(options->mipmap_function, "filter")) goto unsupported;
     if (options->mipmap_filter != NULL && !equals(options->mipmap_filter, "box")) goto unsupported;
     if (options->tiled_texture != NULL && !equals(options->tiled_texture, "true")) goto unsupported;
-    return EDDS_OK;
+    /* The conversion and its quality are one combination, so they are judged as one. */
+    return edds_profile_check(profile, error);
 
 unsupported:
     memset(error, 0, sizeof *error);

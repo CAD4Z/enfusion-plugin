@@ -28,7 +28,7 @@ edds-convert preview --machine --protocol 1 --mip N --input PATH
 edds-convert batch --machine --protocol 1 < jobs.ndjson
 edds-convert convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
   --target-format enfusion-dds --format-compress fastest --compress-threshold 80 \
-  --conversion none --conversion-quality 1 --swizzling none --generate-mips true \
+  --conversion color-hq-compression --conversion-quality 0.403 --swizzling none   --generate-mips true \
   --mipmap-function filter --mipmap-filter box --tiled-texture true
 ```
 
@@ -55,9 +55,14 @@ preview format, `5` cancellation and `6` internal failure.
 
 Inspection accepts the common DDS header, its optional DX10 extension, and the Enfusion `ENF1`
 mip table. It reports actual table order, `COPY`/`LZ4` storage, offsets, stored sizes, decoded sizes
-and LZ4 block counts. Preview decodes two-dimensional, single-surface BGRA8 and BGRX8 mips from
-either container and normalizes them to top-to-bottom RGBA8. Other pixel formats remain
-inspectable; preview returns `unsupported-format` and never manufactures pixels.
+and LZ4 block counts. Preview decodes every runtime format this converter can also write — BGRA8,
+BGRX8, R8, R8G8, DXT1, DXT5, BC4, BC5 and BC7 — from either container, for two-dimensional,
+single-surface textures, and normalizes them to top-to-bottom RGBA8. It shows what the file holds:
+a single-channel format leaves green and blue at zero rather than repeating red across them. Block
+formats decode through their padding, so a mip whose size is not a multiple of four and the 2x2 and
+1x1 mips at the end of a chain come back at exactly their own dimensions. BC7 decodes all eight of
+its block modes. Other pixel formats remain inspectable; preview returns `unsupported-format` and
+never manufactures pixels.
 
 Inputs are bounded to 1 GiB, dimensions to 32768 on either axis, mip levels to 32, decoded selected
 mips to 64 MiB, LZ4 streams to 1024 blocks and each stored LZ4 block to 1 MiB. Every offset and size
@@ -73,10 +78,25 @@ refused by its own code rather than decoded on a guess, and an extension outside
 and `.tif` included, which Workbench does not register — is `unsupported-source-extension` before
 anything is read. JPEG carries no alpha; TIFF alpha comes from the file, never from the profile.
 
-It writes BGRX/BGRA EnfusionDDS with a floor-halved NPOT Box mip chain. `Copy` always uses `COPY`;
-`Fastest`, `Medium` and `Best` select lossless `COPY` or independent-block `LZ4` per mip using the
-declared `CompressTreshold` percentage (equality selects LZ4). Unsupported known profile values are
-refused rather than substituted.
+It writes EnfusionDDS with a floor-halved NPOT Box mip chain. `--conversion` selects the runtime
+format: `none` writes 32-bit BGRX/BGRA, `dxt-compression` BC1 or BC3, `red` `R8_UNORM`,
+`red-hq-compression` BC4, `red-green` `R8G8_UNORM`, `red-green-hq-compression` BC5 and
+`color-hq-compression` BC7. `hdr-compression` is recognized and refused rather than replaced with
+the nearest LDR format. A block format declares its top mip as a linear size and an uncompressed
+one as a pitch, and every block format stores whole `ceil(w/4)*ceil(h/4)` blocks, padding the edge
+by repeating the last real column and row. The branch `none` and `dxt-compression` take is read off
+each source image's own samples: `none` follows whether the source declares an alpha channel, and
+`dxt-compression` writes BC3 only when some sample is actually below fully opaque.
+
+`--conversion-quality` is a fraction of one written the way a recipe writes it (`1`, `0.5`,
+`0.403`, at most three decimals), and it buys encoder search rather than a different format. It is
+accepted only where a compressed encoder reads it; against `none`, `red` or `red-green` any value
+other than `1` is refused before anything is written.
+
+`Copy` always uses `COPY`; `Fastest`, `Medium` and `Best` select lossless `COPY` or
+independent-block `LZ4` per mip using the declared `CompressTreshold` percentage (equality selects
+LZ4). The container is applied over the runtime format and never changes a decoded pixel of it.
+Unsupported known profile values are refused rather than substituted.
 
 Registration is explicit: supplying `--metadata`, `--resource-name`, `--source-file` and `--guid`
 together publishes a canonical EDDS/metadata pair; omitting all four publishes only EDDS and

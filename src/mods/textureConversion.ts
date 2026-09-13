@@ -4,17 +4,19 @@ import {
   type TextureSourceFormat,
   textureSourceFormatOf,
 } from './textureSources';
+import type { TextureConversion } from './textureConversions';
 
 export type { TextureSourceFormat };
 export type TextureCompression = 'Copy' | 'Fastest' | 'Medium' | 'Best';
 
-/** The entire supported first-slice Workbench recipe. There are no implicit preset fields. */
+/** The entire supported Workbench recipe. There are no implicit preset fields. */
 export interface TextureProfile {
   readonly TargetFormat: 'EnfusionDDS';
   readonly FormatCompress: TextureCompression;
   readonly CompressTreshold: number;
-  readonly Conversion: 'None';
-  readonly ConversionQuality: 1;
+  readonly Conversion: TextureConversion;
+  /** A fraction of one, to three decimals; only a compressed conversion reads it. */
+  readonly ConversionQuality: number;
   readonly Swizzling: 'None';
   readonly GenerateMips: boolean;
   readonly MipMapFunction: 'Filter';

@@ -29,6 +29,10 @@ import type {
   TextureAuthoringStateMessage,
 } from '../webview/textureConversionProtocol';
 import { TextureBatchEditor } from './textureBatchEditor';
+import {
+  isSupportedTextureConversion,
+  isTextureQuality,
+} from '../mods/textureConversions';
 
 class TextureSourceDocument implements vscode.CustomDocument {
   constructor(readonly uri: vscode.Uri) {}
@@ -151,6 +155,16 @@ export class TextureConversionEditor
           case 'change-mips':
             if (typeof request.value === 'boolean') {
               apply({ kind: 'change-profile', field: 'GenerateMips', value: request.value });
+            }
+            return;
+          case 'change-conversion':
+            if (isSupportedTextureConversion(request.value)) {
+              apply({ kind: 'change-profile', field: 'Conversion', value: request.value });
+            }
+            return;
+          case 'change-quality':
+            if (isTextureQuality(request.value)) {
+              apply({ kind: 'change-profile', field: 'ConversionQuality', value: request.value });
             }
             return;
           case 'select-mip':

@@ -31,6 +31,9 @@ add_library(edds_core STATIC
   src/edds.c
   src/image.c
   src/sources.c
+  src/conversions.c
+  src/gpu.c
+  src/bc7.c
   src/decode_png.c
   src/decode_tga.c
   src/decode_jpeg.c

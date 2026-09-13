@@ -52,9 +52,15 @@ jobs:
             native/.build-sanitize/fuzz-corpus/source.png \
             native/.build-sanitize/fuzz-corpus/source.tga \
             native/.build-sanitize/fuzz-corpus/source.jpg \
-            native/.build-sanitize/fuzz-corpus/source.tiff
+            native/.build-sanitize/fuzz-corpus/source.tiff \
+            native/.build-sanitize/fuzz-corpus/source-gpu.tga \
+            native/.build-sanitize/fuzz-corpus/source-gpu-flat.tga
           cp native/.build-sanitize/black-box-png-result.edds.meta \
             native/.build-sanitize/fuzz-corpus/metadata
+          # Every runtime format the black box produced, so the block decoders start from real ones.
+          for produced in native/.build-sanitize/black-box-gpu-*.edds; do
+            cp "$produced" "native/.build-sanitize/fuzz-corpus/$(basename "$produced")"
+          done
           printf '%s' '{"protocolVersion":1,"kind":"batch","jobCount":100}' \
             > native/.build-sanitize/fuzz-corpus/batch-header
           printf '%s' '{"protocolVersion":2,"kind":"batch","jobCount":1}' \

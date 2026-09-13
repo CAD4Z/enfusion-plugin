@@ -2,6 +2,7 @@
 
 import type { EddsInspection, EddsPreview } from '../mods/edds';
 import type { TextureChannel, TextureEditorState } from '../mods/textureEditor';
+import { textureChannelViewsOf } from '../mods/textureConversions';
 import type { TextureRequest, TextureStateMessage } from './textureProtocol';
 import './texture.css';
 
@@ -77,20 +78,14 @@ function toolbar(
   });
 
   const channels = element('div', 'channels');
-  for (const [value, label] of [
-    ['rgba', 'RGBA'],
-    ['red', 'R'],
-    ['green', 'G'],
-    ['blue', 'B'],
-    ['alpha', 'A'],
-  ] as const) {
+  for (const { view, label } of textureChannelViewsOf(inspection.channels)) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
     button.disabled = !hasPixels;
-    button.classList.toggle('active', value === channel);
+    button.classList.toggle('active', view === channel);
     button.addEventListener('click', () => {
-      host.postMessage({ type: 'select-channel', channel: value });
+      host.postMessage({ type: 'select-channel', channel: view });
     });
     channels.append(button);
   }

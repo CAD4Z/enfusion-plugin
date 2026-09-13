@@ -132,6 +132,49 @@ test('conversion spells out the immutable plan through stable native flags', asy
   ]);
 });
 
+test('a GPU conversion reaches the converter as its own wire name and exact quality', async () => {
+  const calls: ExecutableRequest[] = [];
+  const converter = new EddsConverter('C:\\extension', (request) => {
+    calls.push(request);
+    return Promise.resolve({
+      stdout:
+        request.args[0] === 'protocol'
+          ? PROTOCOL
+          : '{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"BC7","registered":false}',
+      stderr: '',
+    });
+  });
+
+  const result = await converter.convert({
+    kind: 'ready',
+    scope: 'detached',
+    action: 'convert',
+    label: 'Convert',
+    source: 'C:\\mod\\icon.png',
+    sourceFormat: 'PNG',
+    output: 'C:\\mod\\icon.edds',
+    identityAction: 'none',
+    profile: {
+      TargetFormat: 'EnfusionDDS',
+      FormatCompress: 'Fastest',
+      CompressTreshold: 80,
+      Conversion: 'ColorHQCompression',
+      ConversionQuality: 0.403,
+      Swizzling: 'None',
+      GenerateMips: true,
+      MipMapFunction: 'Filter',
+      MipMapFilter: 'Box',
+      TiledTexture: true,
+    },
+    revisions: { source: { size: 1, modified: 2 } },
+  });
+
+  assert.equal(result.pixelFormat, 'BC7');
+  const args = calls[1]?.args ?? [];
+  assert.equal(args[args.indexOf('--conversion') + 1], 'color-hq-compression');
+  assert.equal(args[args.indexOf('--conversion-quality') + 1], '0.403');
+});
+
 function inspectMessage(): string {
   return JSON.stringify({
     protocolVersion: 1,

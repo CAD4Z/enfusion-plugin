@@ -1,6 +1,6 @@
 /** Compact batch authoring UI: one item list, one common profile, one active viewport. */
 
-import { TEXTURE_PROFILE_FIELDS } from '../mods/textureAuthoring';
+import { profileFormControls } from './profileForm';
 import {
   textureBatchProgress,
   type TextureBatchAuthoringState,
@@ -128,50 +128,16 @@ function render(state: TextureBatchAuthoringState): void {
 
 function profileForm(profile: TextureProfile, locked: boolean): HTMLElement {
   const form = element('div', 'profile-form');
-  for (const field of TEXTURE_PROFILE_FIELDS) {
-    const label = document.createElement('label');
-    const caption = document.createElement('span');
-    caption.textContent = field.key;
-    let control: HTMLInputElement | HTMLSelectElement;
-    if (field.key === 'FormatCompress') {
-      const select = document.createElement('select');
-      for (const value of ['Copy', 'Fastest', 'Medium', 'Best'] as const) {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = value;
-        option.selected = value === profile.FormatCompress;
-        select.append(option);
-      }
-      select.addEventListener('change', () => {
-        const value = select.value;
-        if (value === 'Copy' || value === 'Fastest' || value === 'Medium' || value === 'Best') {
-          host.postMessage({ type: 'change-compression', value });
-        }
-      });
-      control = select;
-    } else {
-      const input = document.createElement('input');
-      if (field.key === 'GenerateMips' || field.key === 'TiledTexture') {
-        input.type = 'checkbox';
-        input.checked = Boolean(profile[field.key]);
-        if (field.key === 'GenerateMips') {
-          input.addEventListener('change', () => host.postMessage({ type: 'change-mips', value: input.checked }));
-        }
-      } else if (field.key === 'CompressTreshold') {
-        input.type = 'number'; input.min = '0'; input.max = '100'; input.value = String(profile.CompressTreshold);
-        input.addEventListener('change', () => host.postMessage({ type: 'change-threshold', value: Number(input.value) }));
-      } else {
-        input.type = 'text'; input.value = String(profile[field.key]);
-      }
-      control = input;
-    }
-    control.disabled = locked || !field.editable;
-    control.title = field.reason ?? field.key;
-    label.append(caption, control);
-    form.append(label);
-  }
+  form.append(...profileFormControls(profile, locked, {
+    compression: (value) => host.postMessage({ type: 'change-compression', value }),
+    threshold: (value) => host.postMessage({ type: 'change-threshold', value }),
+    mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
+    quality: (value) => host.postMessage({ type: 'change-quality', value }),
+  }));
   return form;
 }
+
 
 function leaf(source: string): string {
   return source.split(/[\\/]/).at(-1) ?? source;

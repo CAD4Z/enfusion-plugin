@@ -20,6 +20,11 @@ import {
   protocolOf,
 } from '../mods/edds';
 import type { TextureConversionPlan } from '../mods/textureConversion';
+import {
+  type TextureConversion,
+  textureConversionCapabilityOf,
+  textureQualityText,
+} from '../mods/textureConversions';
 import type { TextureBatchEvent } from '../mods/textureBatchProtocol';
 import type { TextureBatchJob } from '../mods/textureBatch';
 import {
@@ -137,8 +142,8 @@ export class EddsConverter {
             '--target-format', 'enfusion-dds',
             '--format-compress', profile.FormatCompress.toLowerCase(),
             '--compress-threshold', String(profile.CompressTreshold),
-            '--conversion', 'none',
-            '--conversion-quality', '1',
+            '--conversion', conversionWireOf(profile.Conversion),
+            '--conversion-quality', textureQualityText(profile.ConversionQuality),
             '--swizzling', 'none',
             '--generate-mips', String(profile.GenerateMips),
             '--mipmap-function', 'filter',
@@ -257,4 +262,17 @@ function categoryOf(exit: number | undefined): EddsFailureCategory {
     case undefined: return 'internal-failure';
     default: return 'internal-failure';
   }
+}
+
+/**
+ * The wire name the CLI takes for a conversion. A conversion the contract does not carry cannot
+ * reach here through a typed profile, and if one ever did, refusing it beats sending a flag the
+ * converter would read as some other conversion.
+ */
+function conversionWireOf(conversion: TextureConversion): string {
+  const capability = textureConversionCapabilityOf(conversion);
+  if (!capability?.supported) {
+    throw new Error(`Conversion ${conversion} is not supported by this converter.`);
+  }
+  return capability.wire;
 }

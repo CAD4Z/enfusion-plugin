@@ -153,6 +153,68 @@ export async function run(): Promise<void> {
     registered: false,
   });
   assert.equal((await vscode.workspace.fs.stat(converted)).type, vscode.FileType.File);
+
+  // Every runtime format, out of the executable that actually ships, not the one CI just built.
+  for (const [conversion, runtime, channels] of [
+    ['dxt-compression', 'DXT5', 'RGBA'],
+    ['red', 'R8', 'R'],
+    ['red-hq-compression', 'BC4', 'R'],
+    ['red-green', 'RG8', 'RG'],
+    ['red-green-hq-compression', 'BC5', 'RG'],
+    ['color-hq-compression', 'BC7', 'RGBA'],
+  ] as const) {
+    const output = vscode.Uri.joinPath(workspace.uri, `packaged-${conversion}.edds`);
+    const result = await executeFile(
+      executable,
+      [
+        'convert', '--machine', '--protocol', '1',
+        '--input', source.fsPath, '--output', output.fsPath,
+        '--target-format', 'enfusion-dds', '--format-compress', 'fastest',
+        '--compress-threshold', '80', '--conversion', conversion,
+        '--conversion-quality', '1',
+        '--swizzling', 'none', '--generate-mips', 'true', '--mipmap-function', 'filter',
+        '--mipmap-filter', 'box', '--tiled-texture', 'true',
+      ],
+      { encoding: 'utf8', shell: false, windowsHide: true },
+    );
+    assert.equal(machineValue(result.stdout).pixelFormat, runtime);
+
+    const inspected = await executeFile(
+      executable,
+      ['inspect', '--machine', '--protocol', '1', '--input', output.fsPath],
+      { encoding: 'utf8', shell: false, windowsHide: true },
+    );
+    const facts = machineValue(inspected.stdout);
+    assert.equal(facts.pixelFormat, runtime);
+    assert.equal(facts.channels, channels);
+    assert.equal(facts.previewSupported, true);
+
+    const previewed = await executeFile(
+      executable,
+      ['preview', '--machine', '--protocol', '1', '--mip', '0', '--input', output.fsPath],
+      { encoding: 'utf8', shell: false, windowsHide: true },
+    );
+    assert.equal(machineValue(previewed.stdout).byteLength, 2 * 1 * 4);
+  }
+
+  // HDRCompression is refused by the shipped executable too, not only by the build under test.
+  await assert.rejects(
+    executeFile(
+      executable,
+      [
+        'convert', '--machine', '--protocol', '1',
+        '--input', source.fsPath,
+        '--output', vscode.Uri.joinPath(workspace.uri, 'packaged-hdr.edds').fsPath,
+        '--conversion', 'hdr-compression',
+      ],
+      { encoding: 'utf8', shell: false, windowsHide: true },
+    ),
+  );
+}
+
+/** One machine-protocol result as a plain record, so a smoke assertion never indexes `any`. */
+function machineValue(stdout: string): Record<string, unknown> {
+  return JSON.parse(stdout) as Record<string, unknown>;
 }
 
 interface SmokeBatchJob {

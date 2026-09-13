@@ -7,17 +7,28 @@
 
 import type { TextureIdentity, TextureMetadata, TextureProfile } from './textureConversion';
 import { TEXTURE_SOURCES, textureSourceFormatOfWire } from './textureSources';
+import {
+  type DecodablePixelFormat,
+  type TextureChannels,
+  isSupportedTextureConversion,
+  isTextureQuality,
+  TEXTURE_CONVERSIONS,
+} from './textureConversions';
 
 export const EDDS_PROTOCOL_VERSION = 1;
 export const EDDS_MAX_DIMENSION = 32_768;
 export const EDDS_MAX_MIPS = 32;
 export const EDDS_MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
 
-/** The two modern uncompressed formats the first preview slice can decode. */
-export type PreviewablePixelFormat = 'BGRA8' | 'BGRX8';
+export type { DecodablePixelFormat };
 
 /** Recognized formats stay printable even while this version cannot decode their pixels. */
-export type EddsPixelFormat = PreviewablePixelFormat | 'DXT1' | 'DXT5' | `DXGI_${number}` | 'UNKNOWN';
+export type EddsPixelFormat = DecodablePixelFormat | `DXGI_${number}` | 'UNKNOWN';
+
+/** Every runtime format some supported conversion can produce, as one set to check against. */
+const DECODABLE_PIXEL_FORMATS: readonly DecodablePixelFormat[] = [
+  ...new Set(TEXTURE_CONVERSIONS.flatMap((conversion) => conversion.formats)),
+];
 
 /** The common DDS fields that remain useful even when the payload format is unsupported. */
 export interface DdsFacts {
@@ -53,7 +64,8 @@ export interface EddsInspection {
   readonly width: number;
   readonly height: number;
   readonly pixelFormat: EddsPixelFormat;
-  readonly channels: 'RGB' | 'RGBA' | 'UNKNOWN';
+  /** The channels a decode of the file really carries, not the ones its source had. */
+  readonly channels: TextureChannels | 'UNKNOWN';
   readonly dds: DdsFacts;
   readonly mips: readonly EddsMip[];
   readonly pixels:
@@ -80,7 +92,7 @@ export interface EddsConversion {
   readonly width: number;
   readonly height: number;
   readonly mipCount: number;
-  readonly pixelFormat: PreviewablePixelFormat;
+  readonly pixelFormat: DecodablePixelFormat;
   readonly registered: boolean;
 }
 
@@ -172,7 +184,7 @@ export function inspectionOf(source: string): EddsInspection {
     throw new Error('inspect width and height do not match mip level 0.');
   }
 
-  const canPreview = pixelFormat === 'BGRA8' || pixelFormat === 'BGRX8';
+  const canPreview = isDecodable(pixelFormat);
   if (previewSupported && !canPreview) {
     throw new Error(`This protocol cannot preview ${pixelFormat}, but the EDDS converter says it can.`);
   }
@@ -218,9 +230,15 @@ function unsupportedMetadataOf(source: unknown): NonNullable<EddsInspection['uns
   };
 }
 
-function channelsOf(value: unknown): 'RGB' | 'RGBA' | 'UNKNOWN' {
+function channelsOf(value: unknown): TextureChannels | 'UNKNOWN' {
   const channels = stringValue(value, 'channels');
-  if (channels !== 'RGB' && channels !== 'RGBA' && channels !== 'UNKNOWN') {
+  if (
+    channels !== 'R' &&
+    channels !== 'RG' &&
+    channels !== 'RGB' &&
+    channels !== 'RGBA' &&
+    channels !== 'UNKNOWN'
+  ) {
     throw new Error(`channels is not recognized: ${channels}.`);
   }
   return channels;
@@ -230,8 +248,10 @@ function channelsOf(value: unknown): 'RGB' | 'RGBA' | 'UNKNOWN' {
 export function conversionOf(source: string): EddsConversion {
   const value = envelopeOf(source, 'convert');
   const pixelFormat = pixelFormatOf(value.pixelFormat);
-  if (pixelFormat !== 'BGRA8' && pixelFormat !== 'BGRX8') {
-    throw new Error(`convert.pixelFormat must be BGRA8 or BGRX8, not ${pixelFormat}.`);
+  if (!isDecodable(pixelFormat)) {
+    throw new Error(
+      `convert.pixelFormat must be one of ${DECODABLE_PIXEL_FORMATS.join(', ')}, not ${pixelFormat}.`,
+    );
   }
 
   return {
@@ -344,9 +364,13 @@ function profileOf(value: Record<string, unknown>): TextureProfile {
     throw new Error('metadata.recipe.FormatCompress is not supported.');
   }
   const threshold = nonnegativeIntegerOf(value, 'CompressTreshold', 100);
-  literalOf(value, 'Conversion', 'None');
-  if (integerValue(value.ConversionQuality, 'metadata.recipe.ConversionQuality') !== 1) {
-    throw new Error('metadata.recipe.ConversionQuality must be 1.');
+  const conversion = stringOf(value, 'Conversion');
+  if (!isSupportedTextureConversion(conversion)) {
+    throw new Error(`metadata.recipe.Conversion is not supported: ${conversion}.`);
+  }
+  const quality = value.ConversionQuality;
+  if (!isTextureQuality(quality)) {
+    throw new Error('metadata.recipe.ConversionQuality must be 0 through 1, to three decimals.');
   }
   literalOf(value, 'Swizzling', 'None');
   const generateMips = booleanOf(value, 'GenerateMips');
@@ -360,8 +384,8 @@ function profileOf(value: Record<string, unknown>): TextureProfile {
     TargetFormat: 'EnfusionDDS',
     FormatCompress: compression,
     CompressTreshold: threshold,
-    Conversion: 'None',
-    ConversionQuality: 1,
+    Conversion: conversion,
+    ConversionQuality: quality,
     Swizzling: 'None',
     GenerateMips: generateMips,
     MipMapFunction: 'Filter',
@@ -431,13 +455,14 @@ function base64Of(encoded: string, byteLength: number): Uint8Array {
   return decoded;
 }
 
+function isDecodable(format: EddsPixelFormat): format is DecodablePixelFormat {
+  return (DECODABLE_PIXEL_FORMATS as readonly string[]).includes(format);
+}
+
 function pixelFormatOf(value: unknown): EddsPixelFormat {
   const format = stringValue(value, 'pixelFormat');
   if (
-    format === 'BGRA8' ||
-    format === 'BGRX8' ||
-    format === 'DXT1' ||
-    format === 'DXT5' ||
+    (DECODABLE_PIXEL_FORMATS as readonly string[]).includes(format) ||
     format === 'UNKNOWN' ||
     /^DXGI_(?:0|[1-9]\d*)$/.test(format)
   ) {
