@@ -10,7 +10,8 @@ static const edds_source_capability capabilities[] = {
     { EDDS_SOURCE_PNG, ".png", "png", "PNGResourceClass" },
     { EDDS_SOURCE_TGA, ".tga", "tga", "TGAResourceClass" },
     { EDDS_SOURCE_JPG, ".jpg", "jpg", "JPGResourceClass" },
-    { EDDS_SOURCE_TIFF, ".tiff", "tiff", "TIFFResourceClass" }
+    { EDDS_SOURCE_TIFF, ".tiff", "tiff", "TIFFResourceClass" },
+    { EDDS_SOURCE_DDS, ".dds", "dds", "DDSResourceClass" }
 };
 
 const edds_source_capability *edds_source_capabilities(size_t *count) {

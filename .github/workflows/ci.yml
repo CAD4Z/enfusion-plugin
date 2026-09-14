@@ -54,7 +54,8 @@ jobs:
             native/.build-sanitize/fuzz-corpus/source.jpg \
             native/.build-sanitize/fuzz-corpus/source.tiff \
             native/.build-sanitize/fuzz-corpus/source-gpu.tga \
-            native/.build-sanitize/fuzz-corpus/source-gpu-flat.tga
+            native/.build-sanitize/fuzz-corpus/source-gpu-flat.tga \
+            native/.build-sanitize/fuzz-corpus/source.dds
           cp native/.build-sanitize/black-box-png-result.edds.meta \
             native/.build-sanitize/fuzz-corpus/metadata
           # Every runtime format the black box produced, so the block decoders start from real ones.

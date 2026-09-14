@@ -6,9 +6,12 @@ import {
   withTextureBatchProfile,
 } from './textureBatch';
 import type { TextureBatchEvent } from './textureBatchProtocol';
-import type { ArtifactRevision, TextureCompression, TextureProfile } from './textureConversion';
 import {
-  type TextureConversion,
+  withActiveMipSettings,
+  type ArtifactRevision,
+  type TextureProfile,
+} from './textureConversion';
+import {
   isTextureQuality,
   textureConversionCapabilityOf,
 } from './textureConversions';
@@ -64,15 +67,31 @@ export type TextureBatchAuthoringState =
       readonly retryReason?: string;
     };
 
+type EditableBatchProfileKey =
+  | 'FormatCompress'
+  | 'CompressTreshold'
+  | 'RemoveMips'
+  | 'ContainsMips'
+  | 'GenerateMips'
+  | 'Normalize'
+  | 'MipMapFunction'
+  | 'MipMapFilter'
+  | 'Conversion'
+  | 'ConversionQuality';
+
+type TextureBatchProfileChange = {
+  readonly [Key in EditableBatchProfileKey]: {
+    readonly kind: 'change-profile';
+    readonly field: Key;
+    readonly value: TextureProfile[Key];
+  };
+}[EditableBatchProfileKey];
+
 export type TextureBatchAuthoringEvent =
   | { readonly kind: 'loaded'; readonly plan: TextureBatchPlan }
   | { readonly kind: 'load-failed'; readonly reason: string }
   | { readonly kind: 'select-item'; readonly source: string }
-  | { readonly kind: 'change-profile'; readonly field: 'FormatCompress'; readonly value: TextureCompression }
-  | { readonly kind: 'change-profile'; readonly field: 'CompressTreshold'; readonly value: number }
-  | { readonly kind: 'change-profile'; readonly field: 'GenerateMips'; readonly value: boolean }
-  | { readonly kind: 'change-profile'; readonly field: 'Conversion'; readonly value: TextureConversion }
-  | { readonly kind: 'change-profile'; readonly field: 'ConversionQuality'; readonly value: number }
+  | TextureBatchProfileChange
   | { readonly kind: 'item-rendered'; readonly source: string; readonly revision: number; readonly rendered: TextureRendering }
   | { readonly kind: 'item-render-failed'; readonly source: string; readonly revision: number; readonly reason: string }
   | { readonly kind: 'run' }
@@ -198,17 +217,22 @@ function changed(
   );
   if (state.draft[event.field] === event.value ||
       (event.field === 'CompressTreshold' && (event.value < 0 || event.value > 100)) ||
+      (event.field === 'RemoveMips' &&
+        (!Number.isInteger(event.value) || event.value < 0 || event.value > 14)) ||
+      (event.field === 'ContainsMips' &&
+        !state.plan.jobs.every((job) => job.sourceFormat === 'DDS')) ||
       (event.field === 'ConversionQuality' && !isTextureQuality(event.value)) ||
       capability === undefined || !capability.supported ||
       (event.field === 'ConversionQuality' && !capability.usesQuality && event.value !== 1)) {
     return unchanged(state);
   }
-  const draft: TextureProfile = {
+  const draft: TextureProfile = withActiveMipSettings({
     ...state.draft,
     [event.field]: event.value,
+    ...(event.field === 'ContainsMips' && event.value ? { GenerateMips: false } : {}),
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
-  };
+  });
   const plan = withTextureBatchProfile(state.plan, draft);
   const revision = state.revision + 1;
   const active = readyItem(plan, state.activeSource);

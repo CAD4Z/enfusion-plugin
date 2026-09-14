@@ -137,8 +137,10 @@ export async function run(): Promise<void> {
       'convert', '--machine', '--protocol', '1',
       '--input', source.fsPath, '--output', converted.fsPath,
       '--target-format', 'enfusion-dds', '--format-compress', 'fastest',
-      '--compress-threshold', '80', '--conversion', 'none', '--conversion-quality', '1',
-      '--swizzling', 'none', '--generate-mips', 'true', '--mipmap-function', 'filter',
+      '--compress-threshold', '80', '--remove-mips', '0',
+      '--conversion', 'none', '--conversion-quality', '1', '--swizzling', 'none',
+      '--contains-mips', 'false', '--generate-mips', 'true', '--normalize', 'false',
+      '--mipmap-function', 'filter',
       '--mipmap-filter', 'box', '--tiled-texture', 'true',
     ],
     { encoding: 'utf8', shell: false, windowsHide: true },
@@ -226,7 +228,8 @@ interface SmokeBatchJob {
 function batchInput(jobs: readonly SmokeBatchJob[]): string {
   const profile = {
     TargetFormat: 'EnfusionDDS', FormatCompress: 'Fastest', CompressTreshold: 80,
-    Conversion: 'None', ConversionQuality: 1, Swizzling: 'None', GenerateMips: false,
+    RemoveMips: 0, Conversion: 'None', ConversionQuality: 1, Swizzling: 'None',
+    ContainsMips: false, GenerateMips: false, Normalize: false,
     MipMapFunction: 'Filter', MipMapFilter: 'Box', TiledTexture: true,
   };
   return [

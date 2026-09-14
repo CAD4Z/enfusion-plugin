@@ -41,6 +41,26 @@ test('one profile edit replaces every ready item and starts only one active-row 
   assert.deepEqual(changed.effects.map(({ kind }) => kind), ['render-item']);
 });
 
+test('batch profile edits reset mip settings when their controlling stage is disabled', () => {
+  const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
+  const filtered = updateTextureBatch(loaded.state, {
+    kind: 'change-profile', field: 'MipMapFilter', value: 'Kaiser',
+  });
+  const normalized = updateTextureBatch(filtered.state, {
+    kind: 'change-profile', field: 'MipMapFunction', value: 'Normalize',
+  });
+  assert.equal(
+    normalized.state.kind === 'authoring' && normalized.state.draft.MipMapFilter,
+    'Box',
+  );
+
+  const disabled = updateTextureBatch(normalized.state, {
+    kind: 'change-profile', field: 'GenerateMips', value: false,
+  });
+  assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFunction, 'Filter');
+  assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFilter, 'Box');
+});
+
 test('per-item failures do not stop successes and cancellation preserves completed outputs', () => {
   const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
   const running = updateTextureBatch(loaded.state, { kind: 'run' });

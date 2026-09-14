@@ -304,7 +304,7 @@ static int uncompressed_tga_converts_through_the_public_edds_seam(void) {
         10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255,
         100, 110, 120, 255, 130, 140, 150, 255, 160, 170, 180, 255
     };
-    static const uint8_t expected_mip_one[] = { 70, 80, 90, 255 };
+    static const uint8_t expected_mip_one[] = { 85, 95, 105, 255 };
     FILE *source = stream_of(tga, sizeof tga);
     FILE *output = temporary();
     edds_profile profile;
@@ -346,7 +346,99 @@ static int supported_workbench_defaults_are_explicit(void) {
     edds_default_profile(&profile);
     CHECK(profile.format_compress == EDDS_COMPRESS_FASTEST);
     CHECK(profile.compress_threshold == 80u);
+    CHECK(profile.remove_mips == 0u);
+    CHECK(profile.contains_mips == 0);
     CHECK(profile.generate_mips == 1);
+    CHECK(profile.normalize == 0);
+    CHECK(profile.mipmap_function == EDDS_MIPMAP_FILTER);
+    CHECK(profile.mipmap_filter == EDDS_FILTER_BOX);
+    CHECK(profile.tiled_texture == 1);
+    return 1;
+}
+
+static int mip_profile_refuses_conflicts_and_unproven_values(void) {
+    edds_profile profile;
+    edds_error error;
+
+    edds_default_profile(&profile);
+    profile.contains_mips = 1;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
+
+    edds_default_profile(&profile);
+    profile.remove_mips = 15;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-setting") == 0);
+
+    edds_default_profile(&profile);
+    profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strstr(error.message, "ColorNoise") != NULL);
+
+    edds_default_profile(&profile);
+    profile.mipmap_filter = EDDS_FILTER_TRIANGLE;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strstr(error.message, "Triangle") != NULL);
+
+    edds_default_profile(&profile);
+    profile.generate_mips = 0;
+    profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
+
+    edds_default_profile(&profile);
+    profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
+    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
+
+    edds_default_profile(&profile);
+    profile.tiled_texture = 0;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strstr(error.message, "TiledTexture=false") != NULL);
+    return 1;
+}
+
+static int dds_supplied_levels_are_removed_from_the_large_end(void) {
+    static const uint8_t expected_middle[] = {
+        11, 22, 33, 255, 44, 55, 66, 255
+    };
+    static const uint8_t expected_last[] = { 77, 88, 99, 255 };
+    test_bytes dds = fixture_dds_bgrx_mips();
+    FILE *source = stream_of(dds.data, dds.size);
+    FILE *output = temporary();
+    edds_profile profile;
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t rgba_size = 0;
+
+    CHECK(dds.data != NULL && source != NULL && output != NULL);
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    profile.contains_mips = 1;
+    profile.generate_mips = 0;
+    profile.remove_mips = 1;
+    CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(fseek(output, 0, SEEK_SET) == 0);
+    CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.width == 2 && info.height == 1 && info.mip_count == 2);
+    CHECK(edds_preview(output, &info, 0, never_cancelled, NULL,
+        &rgba, &rgba_size, &error) == EDDS_OK);
+    CHECK(rgba_size == sizeof expected_middle &&
+        memcmp(rgba, expected_middle, sizeof expected_middle) == 0);
+    edds_free(rgba);
+    rgba = NULL;
+    CHECK(edds_preview(output, &info, 1, never_cancelled, NULL,
+        &rgba, &rgba_size, &error) == EDDS_OK);
+    CHECK(rgba_size == sizeof expected_last &&
+        memcmp(rgba, expected_last, sizeof expected_last) == 0);
+
+    edds_free(rgba);
+    fclose(source);
+    fclose(output);
+    fixture_free(dds);
     return 1;
 }
 
@@ -355,7 +447,7 @@ static int rgba_png_converts_with_declared_alpha(void) {
         10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120,
         110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220
     };
-    static const uint8_t expected_mip_one[] = { 80, 90, 100, 110 };
+    static const uint8_t expected_mip_one[] = { 100, 110, 120, 130 };
     test_bytes png = fixture_png_rgba();
     FILE *source = stream_of(png.data, png.size);
     FILE *output = temporary();
@@ -620,10 +712,13 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
         "   TargetFormat EnfusionDDS\n"
         "   FormatCompress Best\n"
         "   CompressTreshold 73\n"
+        "   RemoveMips 2\n"
         "   Conversion None\n"
         "   ConversionQuality 1\n"
         "   Swizzling None\n"
+        "   ContainsMips 0\n"
         "   GenerateMips 0\n"
+        "   Normalize 1\n"
         "   MipMapFunction Filter\n"
         "   MipMapFilter Box\n"
         "   TiledTexture 1\n"
@@ -641,10 +736,13 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
         "   TargetFormat EnfusionDDS\n"
         "   FormatCompress Best\n"
         "   CompressTreshold 73\n"
+        "   RemoveMips 2\n"
         "   Conversion None\n"
         "   ConversionQuality 1\n"
         "   Swizzling None\n"
+        "   ContainsMips 0\n"
         "   GenerateMips 0\n"
+        "   Normalize 1\n"
         "   MipMapFunction Filter\n"
         "   MipMapFilter Box\n"
         "   TiledTexture 1\n"
@@ -671,7 +769,9 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
     CHECK(strcmp(metadata.source_file, "pixel.png") == 0);
     CHECK(metadata.source_format == EDDS_SOURCE_PNG);
     CHECK(metadata.profile.format_compress == EDDS_COMPRESS_BEST);
-    CHECK(metadata.profile.compress_threshold == 73 && !metadata.profile.generate_mips);
+    CHECK(metadata.profile.compress_threshold == 73 && metadata.profile.remove_mips == 2u);
+    CHECK(!metadata.profile.contains_mips && !metadata.profile.generate_mips);
+    CHECK(metadata.profile.normalize && metadata.profile.mipmap_filter == EDDS_FILTER_BOX);
     CHECK(edds_metadata_write(output, &metadata, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
     CHECK(fread(actual, 1, sizeof expected - 1u, output) == sizeof expected - 1u);
@@ -687,16 +787,32 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
 }
 
 static int known_but_unsupported_metadata_is_never_defaulted(void) {
-    static const char source[] =
-        "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
-        "TGAResourceClass PC { SourceFile \"a.tga\" Conversion HDRCompression } } }";
-    FILE *input = stream_of((const uint8_t *)source, strlen(source));
-    edds_metadata metadata;
-    edds_error error;
-    CHECK(input != NULL);
-    CHECK(edds_metadata_parse(input, &metadata, &error) == EDDS_UNSUPPORTED_FORMAT);
-    CHECK(strcmp(error.code, "unsupported-setting") == 0);
-    fclose(input);
+    static const struct {
+        const char *setting;
+        const char *code;
+    } cases[] = {
+        { "Conversion HDRCompression", "unsupported-setting" },
+        { "MipMapFunction ColorNoise", "unsupported-setting" },
+        { "MipMapFilter Triangle", "unsupported-setting" },
+        { "TiledTexture 0", "unsupported-setting" },
+        { "GenerateMips 0 MipMapFunction Normalize", "unsupported-combination" },
+        { "MipMapFunction Normalize MipMapFilter Kaiser", "unsupported-combination" },
+        { "ContainsMips 1 GenerateMips 1", "unsupported-combination" }
+    };
+    for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
+        char source[512];
+        edds_metadata metadata;
+        edds_error error;
+        FILE *input;
+        (void)snprintf(source, sizeof source,
+            "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
+            "TGAResourceClass PC { SourceFile \"a.tga\" %s } } }", cases[at].setting);
+        input = stream_of((const uint8_t *)source, strlen(source));
+        CHECK(input != NULL);
+        CHECK(edds_metadata_parse(input, &metadata, &error) == EDDS_UNSUPPORTED_FORMAT);
+        CHECK(strcmp(error.code, cases[at].code) == 0);
+        fclose(input);
+    }
     return 1;
 }
 
@@ -704,9 +820,9 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
 static int every_resource_class_round_trips_through_metadata(void) {
     size_t count = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
-    CHECK(count == 4u);
+    CHECK(count == 5u);
     for (size_t at = 0; at < count; ++at) {
-        char text[512];
+        char text[768];
         FILE *written = temporary();
         FILE *reread;
         edds_metadata metadata;
@@ -720,6 +836,10 @@ static int every_resource_class_round_trips_through_metadata(void) {
             capabilities[at].extension);
         metadata.source_format = capabilities[at].format;
         edds_default_profile(&metadata.profile);
+        if (metadata.source_format == EDDS_SOURCE_DDS) {
+            metadata.profile.contains_mips = 1;
+            metadata.profile.generate_mips = 0;
+        }
         CHECK(written != NULL);
         CHECK(edds_metadata_write(written, &metadata, &error) == EDDS_OK);
         CHECK(fseek(written, 0, SEEK_END) == 0 && (size = ftell(written)) > 0);
@@ -759,9 +879,19 @@ static int batch_ndjson_parser_has_a_bounded_mutation_corpus(void) {
         "\"input\":\"C:\\\\a.png\",\"output\":\"C:\\\\a.edds\","
         "\"metadata\":null,\"identity\":null,\"profile\":{"
         "\"TargetFormat\":\"EnfusionDDS\",\"FormatCompress\":\"Fastest\","
-        "\"CompressTreshold\":80,\"Conversion\":\"None\",\"ConversionQuality\":1,"
-        "\"Swizzling\":\"None\",\"GenerateMips\":true,\"MipMapFunction\":\"Filter\","
+        "\"CompressTreshold\":80,\"RemoveMips\":2,\"Conversion\":\"None\","
+        "\"ConversionQuality\":1,\"Swizzling\":\"None\",\"ContainsMips\":false,"
+        "\"GenerateMips\":true,\"Normalize\":true,\"MipMapFunction\":\"Normalize\","
         "\"MipMapFilter\":\"Box\",\"TiledTexture\":true},\"expected\":null}";
+    static const char inactive_mip_setting[] =
+        "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"a\","
+        "\"input\":\"C:\\\\a.png\",\"output\":\"C:\\\\a.edds\","
+        "\"metadata\":null,\"identity\":null,\"profile\":{"
+        "\"TargetFormat\":\"EnfusionDDS\",\"FormatCompress\":\"Fastest\","
+        "\"CompressTreshold\":80,\"RemoveMips\":0,\"Conversion\":\"None\","
+        "\"ConversionQuality\":1,\"Swizzling\":\"None\",\"ContainsMips\":false,"
+        "\"GenerateMips\":false,\"Normalize\":false,\"MipMapFunction\":\"Filter\","
+        "\"MipMapFilter\":\"Kaiser\",\"TiledTexture\":true},\"expected\":null}";
     static const char incompatible[] =
         "{\"protocolVersion\":2,\"kind\":\"batch\",\"jobCount\":1}";
     static const char unknown[] = "{\"protocolVersion\":1,\"kind\":\"surprise\"}";
@@ -771,6 +901,12 @@ static int batch_ndjson_parser_has_a_bounded_mutation_corpus(void) {
     CHECK(record.kind == EDDS_BATCH_HEADER && record.job_count == 100u);
     CHECK(edds_batch_parse_line(job, strlen(job), &record, &error) == EDDS_OK);
     CHECK(record.kind == EDDS_BATCH_JOB && strcmp(record.job.id, "a") == 0);
+    CHECK(record.job.profile.remove_mips == 2u && record.job.profile.normalize);
+    CHECK(record.job.profile.mipmap_function == EDDS_MIPMAP_NORMALIZE);
+    CHECK(record.job.profile.mipmap_filter == EDDS_FILTER_BOX);
+    CHECK(edds_batch_parse_line(inactive_mip_setting, strlen(inactive_mip_setting),
+        &record, &error) == EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
     for (size_t size = 0; size < strlen(job); ++size) {
         CHECK(edds_batch_parse_line(job, size, &record, &error) == EDDS_INVALID_INVOCATION);
     }
@@ -971,15 +1107,15 @@ static int decoded_through_convert(
  * Runs a source that has to be refused. Returns the refusal, or EDDS_OK — which no refusal ever
  * is — when the conversion either succeeded or left bytes behind it.
  */
-static edds_status refused_by(
+static edds_status refused_by_profile(
     const uint8_t *bytes,
     size_t size,
     edds_source_format format,
+    const edds_profile *profile,
     edds_error *error
 ) {
     FILE *source = stream_of(bytes, size);
     FILE *output = temporary();
-    edds_profile profile;
     edds_status status;
     long written = -1;
     if (source == NULL || output == NULL) {
@@ -987,8 +1123,7 @@ static edds_status refused_by(
         if (output != NULL) fclose(output);
         return EDDS_OK;
     }
-    edds_default_profile(&profile);
-    status = edds_convert(source, format, output, &profile,
+    status = edds_convert(source, format, output, profile,
         never_cancelled, NULL, NULL, NULL, error);
     if (fseek(output, 0, SEEK_END) == 0) {
         written = ftell(output);
@@ -996,6 +1131,132 @@ static edds_status refused_by(
     fclose(source);
     fclose(output);
     return status == EDDS_OK || written != 0 ? EDDS_OK : status;
+}
+
+static edds_status refused_by(
+    const uint8_t *bytes,
+    size_t size,
+    edds_source_format format,
+    edds_error *error
+) {
+    edds_profile profile;
+    edds_default_profile(&profile);
+    return refused_by_profile(bytes, size, format, &profile, error);
+}
+
+static int dds_top_level_generates_but_cannot_claim_a_supplied_chain(void) {
+    test_bytes dds = fixture_dds_bgrx_top();
+    FILE *source = stream_of(dds.data, dds.size);
+    FILE *output = temporary();
+    edds_profile profile;
+    edds_info info;
+    edds_error error;
+
+    CHECK(dds.data != NULL && source != NULL && output != NULL);
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(fseek(output, 0, SEEK_SET) == 0);
+    CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.width == 4u && info.height == 2u && info.mip_count == 3u);
+    fclose(source);
+    fclose(output);
+
+    profile.generate_mips = 0;
+    profile.contains_mips = 1;
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-dds-mip-layout") == 0);
+
+    /* DDS permits zero for a top-only file; keep that admitted header shape controlled too. */
+    memset(dds.data + 28, 0, 4);
+    {
+        uint8_t *rgba = NULL;
+        size_t rgba_size = 0;
+        CHECK(decoded_through_convert(dds.data, dds.size, EDDS_SOURCE_DDS, 0,
+            &info, &rgba, &rgba_size));
+        CHECK(rgba_size == 4u * 2u * 4u && rgba[0] == 1u && rgba[1] == 2u &&
+            rgba[2] == 3u && rgba[3] == 255u);
+        edds_free(rgba);
+    }
+    fixture_free(dds);
+    return 1;
+}
+
+static int dds_refusals_are_precise_and_atomic(void) {
+    test_bytes dds = fixture_dds_bgrx_mips();
+    test_bytes top = fixture_dds_bgrx_top();
+    test_bytes png = fixture_png_rgba();
+    edds_profile profile;
+    edds_error error;
+
+    CHECK(dds.data != NULL && top.data != NULL && png.data != NULL && dds.size > 128u);
+
+    edds_default_profile(&profile);
+    profile.contains_mips = 1;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
+
+    profile.generate_mips = 0;
+    profile.contains_mips = 1;
+    profile.remove_mips = 3;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_INVALID_INPUT);
+    CHECK(strcmp(error.code, "remove-mips-out-of-range") == 0);
+
+    profile.remove_mips = 0;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size - 1u, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_INVALID_INPUT);
+    CHECK(strcmp(error.code, "truncated-dds-mip") == 0);
+
+    for (size_t prefix = 0; prefix < dds.size; ++prefix) {
+        memset(&error, 0, sizeof error);
+        CHECK(refused_by_profile(dds.data, prefix, EDDS_SOURCE_DDS, &profile, &error) != EDDS_OK);
+    }
+
+    dds.data[28] = 2u;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-dds-mip-layout") == 0);
+    dds.data[28] = 3u;
+
+    dds.data[32] = 1u;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-dds-header") == 0);
+    dds.data[32] = 0u;
+
+    dds.data[20] += 1u;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-dds-pitch") == 0);
+    dds.data[20] -= 1u;
+
+    ++top.size;
+    profile.contains_mips = 0;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(top.data, top.size, EDDS_SOURCE_DDS, &profile, &error) ==
+        EDDS_INVALID_INPUT);
+    CHECK(strcmp(error.code, "trailing-dds-data") == 0);
+
+    profile.contains_mips = 1;
+    memset(&error, 0, sizeof error);
+    CHECK(refused_by_profile(png.data, png.size, EDDS_SOURCE_PNG, &profile, &error) ==
+        EDDS_UNSUPPORTED_FORMAT);
+    CHECK(strcmp(error.code, "unsupported-combination") == 0);
+
+    fixture_free(png);
+    fixture_free(top);
+    fixture_free(dds);
+    return 1;
 }
 
 static int every_pixel_is(const uint8_t *rgba, size_t size, uint8_t red, uint8_t green, uint8_t blue) {
@@ -1450,7 +1711,7 @@ static int damaged_tiff_input_fails_without_partial_output(void) {
 static int the_source_contract_names_only_registered_resource_classes(void) {
     size_t count = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
-    CHECK(capabilities != NULL && count == 4u);
+    CHECK(capabilities != NULL && count == 5u);
     for (size_t at = 0; at < count; ++at) {
         CHECK(edds_source_capability_of_format(capabilities[at].format) == &capabilities[at]);
         CHECK(edds_source_capability_of_resource_class(capabilities[at].resource_class) ==
@@ -1571,6 +1832,253 @@ static int converted_source(
     fclose(source);
     fclose(output);
     return ok;
+}
+
+static int box_and_kaiser_mips_cover_npot_edges_exactly(void) {
+    static const uint8_t expected_box[] = { 11, 0, 0, 255, 13, 0, 0, 255 };
+    static const uint8_t expected_kaiser[] = { 17, 0, 0, 255, 17, 0, 0, 255 };
+    uint8_t bgra[5u * 3u * 4u] = { 0 };
+    edds_profile profile;
+    edds_info info;
+    uint8_t *rgba = NULL;
+    size_t rgba_size = 0;
+
+    for (uint32_t y = 0; y < 3u; ++y) {
+        for (uint32_t x = 0; x < 5u; ++x) {
+            const size_t at = ((size_t)y * 5u + x) * 4u;
+            bgra[at + 2u] = (uint8_t)(y * 10u + x);
+            bgra[at + 3u] = 255u;
+        }
+    }
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    CHECK(converted_source(bgra, 5, 3, 1, &profile, 1, &info, &rgba, &rgba_size));
+    CHECK(info.mip_count == 3u && rgba_size == sizeof expected_box);
+    CHECK(memcmp(rgba, expected_box, sizeof expected_box) == 0);
+    edds_free(rgba);
+    rgba = NULL;
+
+    memset(bgra, 0, sizeof bgra);
+    for (size_t at = 0; at < 15u; ++at) bgra[at * 4u + 3u] = 255u;
+    bgra[(1u * 5u + 2u) * 4u + 2u] = 255u;
+    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    CHECK(converted_source(bgra, 5, 3, 1, &profile, 1, &info, &rgba, &rgba_size));
+    CHECK(rgba_size == sizeof expected_kaiser);
+    CHECK(memcmp(rgba, expected_kaiser, sizeof expected_kaiser) == 0);
+    edds_free(rgba);
+
+    {
+        static const uint8_t expected_line[] = { 8, 0, 0, 255, 32, 0, 0, 255 };
+        uint8_t horizontal[5u * 4u] = { 0 };
+        uint8_t vertical[5u * 4u] = { 0 };
+        profile.mipmap_filter = EDDS_FILTER_BOX;
+        for (size_t at = 0; at < 5u; ++at) {
+            horizontal[at * 4u + 2u] = (uint8_t)(at * 10u);
+            horizontal[at * 4u + 3u] = 255u;
+            vertical[at * 4u + 2u] = (uint8_t)(at * 10u);
+            vertical[at * 4u + 3u] = 255u;
+        }
+        rgba = NULL;
+        CHECK(converted_source(horizontal, 5, 1, 1, &profile, 1, &info, &rgba, &rgba_size));
+        CHECK(info.mips[1].width == 2u && info.mips[1].height == 1u);
+        CHECK(rgba_size == sizeof expected_line &&
+            memcmp(rgba, expected_line, sizeof expected_line) == 0);
+        edds_free(rgba);
+        rgba = NULL;
+        CHECK(converted_source(vertical, 1, 5, 1, &profile, 1, &info, &rgba, &rgba_size));
+        CHECK(info.mips[1].width == 1u && info.mips[1].height == 2u);
+        CHECK(rgba_size == sizeof expected_line &&
+            memcmp(rgba, expected_line, sizeof expected_line) == 0);
+        edds_free(rgba);
+    }
+    return 1;
+}
+
+static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void) {
+    test_bytes dxt1 = fixture_dds_dxt1_top();
+    test_bytes dxt5 = fixture_dds_dxt5_top();
+    test_bytes r8 = fixture_dds_dx10_r8_mips();
+    edds_profile profile;
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t rgba_size = 0;
+    FILE *source;
+    FILE *output;
+
+    CHECK(dxt1.data != NULL && dxt5.data != NULL && r8.data != NULL);
+    CHECK(decoded_through_convert(dxt1.data, dxt1.size, EDDS_SOURCE_DDS, 0,
+        &info, &rgba, &rgba_size));
+    CHECK(info.width == 4u && info.height == 4u && info.mip_count == 1u);
+    CHECK(rgba_size == 4u * 4u * 4u && every_pixel_is(rgba, rgba_size, 0, 0, 0));
+    edds_free(rgba);
+    rgba = NULL;
+
+    CHECK(decoded_through_convert(dxt5.data, dxt5.size, EDDS_SOURCE_DDS, 0,
+        &info, &rgba, &rgba_size));
+    CHECK(info.width == 4u && info.height == 4u && info.mip_count == 1u);
+    CHECK(rgba_size == 4u * 4u * 4u && rgba[0] == 0u && rgba[1] == 0u &&
+        rgba[2] == 0u && rgba[3] == 0u);
+    edds_free(rgba);
+    rgba = NULL;
+
+    {
+        static const uint8_t r[] = { 17 };
+        static const uint8_t rg[] = { 17, 33 };
+        static const uint8_t zero8[8] = { 0 };
+        static const uint8_t zero16[16] = { 0 };
+        static const uint8_t bgra[] = { 3, 2, 1, 4 };
+        static const uint8_t bc7[] = {
+            0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x81, 0x40,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+        static const struct {
+            uint32_t dxgi;
+            const uint8_t *sample;
+            size_t sample_size;
+            uint32_t bytes_per_pixel;
+            uint8_t red;
+            uint8_t green;
+            uint8_t blue;
+            uint8_t alpha;
+        } cases[] = {
+            { 61, r, sizeof r, 1, 17, 0, 0, 255 },
+            { 49, rg, sizeof rg, 2, 17, 33, 0, 255 },
+            { 71, zero8, sizeof zero8, 0, 0, 0, 0, 255 },
+            { 77, zero16, sizeof zero16, 0, 0, 0, 0, 0 },
+            { 80, zero8, sizeof zero8, 0, 0, 0, 0, 255 },
+            { 83, zero16, sizeof zero16, 0, 0, 0, 0, 255 },
+            { 87, bgra, sizeof bgra, 4, 1, 2, 3, 4 },
+            { 88, bgra, sizeof bgra, 4, 1, 2, 3, 255 },
+            { 98, bc7, sizeof bc7, 0, 128, 128, 128, 128 }
+        };
+        for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
+            const size_t pixels = cases[at].bytes_per_pixel == 0u ? 1u : 16u;
+            const size_t payload_size = cases[at].sample_size * pixels;
+            uint8_t payload[64] = { 0 };
+            test_bytes fixture;
+            for (size_t pixel = 0; pixel < pixels; ++pixel) {
+                memcpy(payload + pixel * cases[at].sample_size,
+                    cases[at].sample, cases[at].sample_size);
+            }
+            fixture = fixture_dds_dx10_top(cases[at].dxgi, payload, payload_size,
+                cases[at].bytes_per_pixel);
+            CHECK(fixture.data != NULL);
+            CHECK(decoded_through_convert(fixture.data, fixture.size, EDDS_SOURCE_DDS, 0,
+                &info, &rgba, &rgba_size));
+            CHECK(info.width == 4u && info.height == 4u && rgba_size == 4u * 4u * 4u);
+            CHECK(rgba[0] == cases[at].red && rgba[1] == cases[at].green &&
+                rgba[2] == cases[at].blue && rgba[3] == cases[at].alpha);
+            edds_free(rgba);
+            rgba = NULL;
+            fixture_free(fixture);
+        }
+    }
+
+    source = stream_of(r8.data, r8.size);
+    output = temporary();
+    CHECK(source != NULL && output != NULL);
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    profile.conversion = EDDS_CONVERSION_RED;
+    profile.contains_mips = 1;
+    profile.generate_mips = 0;
+    CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(fseek(output, 0, SEEK_SET) == 0);
+    CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.width == 4u && info.height == 2u && info.mip_count == 3u &&
+        info.pixel_format == EDDS_PIXEL_R8);
+    for (uint32_t level = 0; level < info.mip_count; ++level) {
+        static const uint8_t expected[] = { 1, 11, 33 };
+        CHECK(edds_preview(output, &info, level, never_cancelled, NULL,
+            &rgba, &rgba_size, &error) == EDDS_OK);
+        CHECK(rgba_size == (size_t)info.mips[level].width * info.mips[level].height * 4u);
+        CHECK(rgba[0] == expected[level] && rgba[1] == 0u &&
+            rgba[2] == 0u && rgba[3] == 255u);
+        edds_free(rgba);
+        rgba = NULL;
+    }
+    fclose(source);
+    fclose(output);
+    fixture_free(dxt1);
+    fixture_free(dxt5);
+    fixture_free(r8);
+    return 1;
+}
+
+static int dds_alpha_branch_scans_every_supplied_level(void) {
+    test_bytes dds = fixture_dds_bgra_alpha_mips();
+    FILE *source = stream_of(dds.data, dds.size);
+    FILE *output = temporary();
+    edds_profile profile;
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t rgba_size = 0;
+
+    CHECK(dds.data != NULL && source != NULL && output != NULL);
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    profile.conversion = EDDS_CONVERSION_DXT;
+    profile.contains_mips = 1;
+    profile.generate_mips = 0;
+    CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
+        never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(fseek(output, 0, SEEK_SET) == 0);
+    CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.pixel_format == EDDS_PIXEL_DXT5 && info.mip_count == 3u);
+    CHECK(edds_preview(output, &info, 2, never_cancelled, NULL,
+        &rgba, &rgba_size, &error) == EDDS_OK);
+    CHECK(rgba_size == 4u && rgba[3] < 255u);
+
+    edds_free(rgba);
+    fclose(source);
+    fclose(output);
+    fixture_free(dds);
+    return 1;
+}
+
+static int normalize_flag_and_mipmap_function_have_distinct_stages(void) {
+    static const uint8_t source_bgra[] = {
+        127, 127, 191, 33,
+        127, 191, 127, 77
+    };
+    static const uint8_t expected_normalized_source[] = {
+        255, 128, 128, 33,
+        128, 255, 128, 77
+    };
+    static const uint8_t expected_pre_normalized_mip[] = { 192, 192, 128, 55 };
+    static const uint8_t expected_post_normalized_mip[] = { 218, 218, 128, 55 };
+    edds_profile profile;
+    edds_info info;
+    uint8_t *rgba = NULL;
+    size_t rgba_size = 0;
+
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_COPY;
+    profile.normalize = 1;
+    CHECK(converted_source(source_bgra, 2, 1, 1, &profile, 0,
+        &info, &rgba, &rgba_size));
+    CHECK(rgba_size == sizeof expected_normalized_source &&
+        memcmp(rgba, expected_normalized_source, sizeof expected_normalized_source) == 0);
+    edds_free(rgba);
+    rgba = NULL;
+    CHECK(converted_source(source_bgra, 2, 1, 1, &profile, 1,
+        &info, &rgba, &rgba_size));
+    CHECK(rgba_size == sizeof expected_pre_normalized_mip &&
+        memcmp(rgba, expected_pre_normalized_mip, sizeof expected_pre_normalized_mip) == 0);
+    edds_free(rgba);
+    rgba = NULL;
+
+    profile.normalize = 0;
+    profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
+    CHECK(converted_source(source_bgra, 2, 1, 1, &profile, 1,
+        &info, &rgba, &rgba_size));
+    CHECK(rgba_size == sizeof expected_post_normalized_mip &&
+        memcmp(rgba, expected_post_normalized_mip, sizeof expected_post_normalized_mip) == 0);
+    edds_free(rgba);
+    return 1;
 }
 
 static edds_status refused_profile(const edds_profile *profile, edds_error *error) {
@@ -2211,6 +2719,12 @@ int main(void) {
         malformed_sizes_and_oversized_files_are_refused() &&
         integer_boundaries_are_refused_before_arithmetic() &&
         supported_workbench_defaults_are_explicit() &&
+        mip_profile_refuses_conflicts_and_unproven_values() &&
+        dds_supplied_levels_are_removed_from_the_large_end() &&
+        dds_top_level_generates_but_cannot_claim_a_supplied_chain() &&
+        dds_refusals_are_precise_and_atomic() &&
+        dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels() &&
+        dds_alpha_branch_scans_every_supplied_level() &&
         uncompressed_tga_converts_through_the_public_edds_seam() &&
         rgba_png_converts_with_declared_alpha() &&
         png_gamma_is_metadata_not_a_sample_transform() &&
@@ -2241,6 +2755,8 @@ int main(void) {
         a_second_tiff_page_is_refused_rather_than_silently_dropped() &&
         damaged_tiff_input_fails_without_partial_output() &&
         the_conversion_contract_is_one_table() &&
+        box_and_kaiser_mips_cover_npot_edges_exactly() &&
+        normalize_flag_and_mipmap_function_have_distinct_stages() &&
         every_conversion_stores_its_proven_runtime_format() &&
         the_alpha_branch_is_read_off_each_source() &&
         two_sources_under_one_profile_keep_their_own_alpha_branch() &&

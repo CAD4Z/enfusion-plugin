@@ -241,6 +241,131 @@ test_bytes fixture_dxt5_low_endpoints(void) {
     return fixture;
 }
 
+test_bytes fixture_dds_bgrx_mips(void) {
+    static const uint8_t top[] = {
+        3, 2, 1, 0, 6, 5, 4, 0, 9, 8, 7, 0, 12, 11, 10, 0,
+        15, 14, 13, 0, 18, 17, 16, 0, 21, 20, 19, 0, 24, 23, 22, 0
+    };
+    static const uint8_t middle[] = { 33, 22, 11, 0, 66, 55, 44, 0 };
+    static const uint8_t last[] = { 99, 88, 77, 0 };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
+    size_t at = DDS_HEADER_BYTES;
+    if (fixture.data == NULL) {
+        return fixture;
+    }
+    header(fixture.data, 4, 2, 3, "\0\0\0\0", 0u);
+    memset(fixture.data + 32, 0, 44);
+    put_u32(fixture.data + 76, 32);
+    put_u32(fixture.data + 80, 0x40u);
+    put_u32(fixture.data + 88, 32u);
+    put_u32(fixture.data + 92, 0x00ff0000u);
+    put_u32(fixture.data + 96, 0x0000ff00u);
+    put_u32(fixture.data + 100, 0x000000ffu);
+    memcpy(fixture.data + at, top, sizeof top);
+    at += sizeof top;
+    memcpy(fixture.data + at, middle, sizeof middle);
+    at += sizeof middle;
+    memcpy(fixture.data + at, last, sizeof last);
+    return fixture;
+}
+
+test_bytes fixture_dds_bgrx_top(void) {
+    test_bytes fixture = fixture_dds_bgrx_mips();
+    if (fixture.data != NULL) {
+        fixture.size = DDS_HEADER_BYTES + 4u * 2u * 4u;
+        put_u32(fixture.data + 8, 0x0000100fu);
+        put_u32(fixture.data + 28, 1u);
+        put_u32(fixture.data + 108, 0x00001000u);
+    }
+    return fixture;
+}
+
+test_bytes fixture_dds_dxt1_top(void) {
+    static const uint8_t block[8] = { 0 };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof block);
+    if (fixture.data == NULL) return fixture;
+    header(fixture.data, 4, 4, 1, "DXT1", 0u);
+    put_u32(fixture.data + 8, 0x00081007u);
+    put_u32(fixture.data + 20, (uint32_t)sizeof block);
+    memset(fixture.data + 32, 0, 44);
+    memcpy(fixture.data + DDS_HEADER_BYTES, block, sizeof block);
+    return fixture;
+}
+
+test_bytes fixture_dds_dxt5_top(void) {
+    static const uint8_t block[16] = { 0 };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof block);
+    if (fixture.data == NULL) return fixture;
+    header(fixture.data, 4, 4, 1, "DXT5", 0u);
+    put_u32(fixture.data + 8, 0x00081007u);
+    put_u32(fixture.data + 20, (uint32_t)sizeof block);
+    memset(fixture.data + 32, 0, 44);
+    memcpy(fixture.data + DDS_HEADER_BYTES, block, sizeof block);
+    return fixture;
+}
+
+test_bytes fixture_dds_bgra_alpha_mips(void) {
+    static const uint8_t top[] = {
+        3, 2, 1, 255, 6, 5, 4, 255, 9, 8, 7, 255, 12, 11, 10, 255,
+        15, 14, 13, 255, 18, 17, 16, 255, 21, 20, 19, 255, 24, 23, 22, 255
+    };
+    static const uint8_t middle[] = { 33, 22, 11, 128, 66, 55, 44, 128 };
+    static const uint8_t last[] = { 99, 88, 77, 64 };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
+    size_t at = DDS_HEADER_BYTES;
+    if (fixture.data == NULL) return fixture;
+    header(fixture.data, 4, 2, 3, "\0\0\0\0", 0xff000000u);
+    memset(fixture.data + 32, 0, 44);
+    memcpy(fixture.data + at, top, sizeof top);
+    at += sizeof top;
+    memcpy(fixture.data + at, middle, sizeof middle);
+    at += sizeof middle;
+    memcpy(fixture.data + at, last, sizeof last);
+    return fixture;
+}
+
+test_bytes fixture_dds_dx10_top(
+    uint32_t dxgi_format,
+    const uint8_t *payload,
+    size_t payload_size,
+    uint32_t bytes_per_pixel
+) {
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u + payload_size);
+    const int compressed = bytes_per_pixel == 0u;
+    if (fixture.data == NULL) return fixture;
+    header(fixture.data, 4, 4, 1, "DX10", 0u);
+    put_u32(fixture.data + 8, compressed ? 0x00081007u : 0x0000100fu);
+    put_u32(fixture.data + 20, compressed ? (uint32_t)payload_size : 4u * bytes_per_pixel);
+    memset(fixture.data + 32, 0, 44);
+    put_u32(fixture.data + 128, dxgi_format);
+    put_u32(fixture.data + 132, 3u);
+    put_u32(fixture.data + 140, 1u);
+    memcpy(fixture.data + DDS_HEADER_BYTES + 20u, payload, payload_size);
+    return fixture;
+}
+
+test_bytes fixture_dds_dx10_r8_mips(void) {
+    static const uint8_t top[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    static const uint8_t middle[] = { 11, 22 };
+    static const uint8_t last[] = { 33 };
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u +
+        sizeof top + sizeof middle + sizeof last);
+    size_t at = DDS_HEADER_BYTES + 20u;
+    if (fixture.data == NULL) return fixture;
+    header(fixture.data, 4, 2, 3, "DX10", 0u);
+    put_u32(fixture.data + 20, 4u);
+    memset(fixture.data + 32, 0, 44);
+    put_u32(fixture.data + 128, 61u);
+    put_u32(fixture.data + 132, 3u);
+    put_u32(fixture.data + 140, 1u);
+    memcpy(fixture.data + at, top, sizeof top);
+    at += sizeof top;
+    memcpy(fixture.data + at, middle, sizeof middle);
+    at += sizeof middle;
+    memcpy(fixture.data + at, last, sizeof last);
+    return fixture;
+}
+
 test_bytes fixture_odd_fourcc(void) {
     static const char odd_fourcc[4] = { 'Q', '"', '\\', '\1' };
     static const uint8_t block[8] = { 0 };

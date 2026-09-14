@@ -127,6 +127,7 @@ test('every Workbench key is visible while unsupported dependent values explain 
       ['TargetFormat', false, 'This conversion slice supports EnfusionDDS only.'],
       ['FormatCompress', true, undefined],
       ['CompressTreshold', true, undefined],
+      ['RemoveMips', true, undefined],
       ['Conversion', true, undefined],
       [
         'ConversionQuality',
@@ -134,12 +135,64 @@ test('every Workbench key is visible while unsupported dependent values explain 
         'Conversion=None stores its channels as they are, so quality has nothing to trade.',
       ],
       ['Swizzling', false, 'This conversion slice supports None only.'],
+      ['ContainsMips', false, 'ContainsMips is available only for a DDS source.'],
       ['GenerateMips', true, undefined],
-      ['MipMapFunction', false, 'GenerateMips uses Filter in this conversion slice.'],
-      ['MipMapFilter', false, 'MipMapFunction=Filter uses Box in this conversion slice.'],
+      ['Normalize', true, undefined],
+      ['MipMapFunction', true, undefined],
+      ['MipMapFilter', true, undefined],
       ['TiledTexture', false, 'TiledTexture=false is not supported in this conversion slice.'],
     ],
   );
+});
+
+test('a DDS supplied-chain choice disables generation and its dependent filter controls', () => {
+  const loaded = updateTextureAuthoring(openedTextureAuthoring().state, {
+    kind: 'loaded',
+    plan: plan('DDS'),
+  });
+  const filtered = updateTextureAuthoring(loaded.state, {
+    kind: 'change-profile', field: 'MipMapFilter', value: 'Kaiser',
+  });
+  const changed = updateTextureAuthoring(filtered.state, {
+    kind: 'change-profile',
+    field: 'ContainsMips',
+    value: true,
+  });
+  assert.equal(changed.state.kind, 'authoring');
+  const draft = changed.state.kind === 'authoring' ? changed.state.draft : DEFAULT_TEXTURE_PROFILE;
+  assert.equal(draft.ContainsMips, true);
+  assert.equal(draft.GenerateMips, false);
+  assert.equal(draft.MipMapFunction, 'Filter');
+  assert.equal(draft.MipMapFilter, 'Box');
+  assert.deepEqual(
+    textureProfileFieldsOf(draft, 'DDS')
+      .filter(({ key }) => key === 'ContainsMips' || key === 'GenerateMips' || key === 'MipMapFilter')
+      .map(({ key, editable, reason }) => [key, editable, reason]),
+    [
+      ['ContainsMips', true, undefined],
+      ['GenerateMips', false, 'GenerateMips is disabled while ContainsMips supplies the chain.'],
+      ['MipMapFilter', false, 'MipMapFilter applies only while GenerateMips is enabled.'],
+    ],
+  );
+});
+
+test('turning off mip generation or its filter stage resets inactive settings', () => {
+  const filtered = updateTextureAuthoring(readyAuthoring(), {
+    kind: 'change-profile', field: 'MipMapFilter', value: 'Kaiser',
+  });
+  const normalized = updateTextureAuthoring(filtered.state, {
+    kind: 'change-profile', field: 'MipMapFunction', value: 'Normalize',
+  });
+  assert.equal(
+    normalized.state.kind === 'authoring' && normalized.state.draft.MipMapFilter,
+    'Box',
+  );
+
+  const disabled = updateTextureAuthoring(normalized.state, {
+    kind: 'change-profile', field: 'GenerateMips', value: false,
+  });
+  assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFunction, 'Filter');
+  assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFilter, 'Box');
 });
 
 test('a compressed conversion is what makes ConversionQuality a control at all', () => {
@@ -222,14 +275,14 @@ function readyAuthoring() {
   }).state;
 }
 
-function plan() {
+function plan(sourceFormat: 'PNG' | 'DDS' = 'PNG') {
   return {
     kind: 'ready' as const,
     scope: 'registered' as const,
     action: 'convert' as const,
     label: 'Convert' as const,
     source: 'C:\\mod\\Mod\\icon.png',
-    sourceFormat: 'PNG' as const,
+    sourceFormat,
     output: 'C:\\mod\\Mod\\icon.edds',
     metadata: 'C:\\mod\\Mod\\icon.edds.meta',
     identity: { guid: '0123456789ABCDEF', name: 'Mod/icon.edds', sourceFile: 'icon.png' },

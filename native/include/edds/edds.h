@@ -52,7 +52,8 @@ typedef enum edds_source_format {
     EDDS_SOURCE_PNG,
     EDDS_SOURCE_TGA,
     EDDS_SOURCE_JPG,
-    EDDS_SOURCE_TIFF
+    EDDS_SOURCE_TIFF,
+    EDDS_SOURCE_DDS
 } edds_source_format;
 
 /**
@@ -121,6 +122,18 @@ const edds_conversion_capability *edds_conversion_capability_of(edds_conversion 
 const edds_conversion_capability *edds_conversion_of_workbench_name(const char *name);
 const edds_conversion_capability *edds_conversion_of_wire_name(const char *name);
 
+typedef enum edds_mipmap_function {
+    EDDS_MIPMAP_FILTER,
+    EDDS_MIPMAP_NORMALIZE,
+    EDDS_MIPMAP_COLOR_NOISE
+} edds_mipmap_function;
+
+typedef enum edds_mipmap_filter {
+    EDDS_FILTER_BOX,
+    EDDS_FILTER_KAISER,
+    EDDS_FILTER_TRIANGLE
+} edds_mipmap_filter;
+
 /** The exact supported Workbench slice. Values outside it are refused, never substituted. */
 typedef struct edds_profile {
     edds_format_compress format_compress;
@@ -128,7 +141,14 @@ typedef struct edds_profile {
     edds_conversion conversion;
     /** Thousandths of one, so 1000 is Workbench's default `ConversionQuality 1`. */
     uint32_t conversion_quality;
+    /** Number of the largest completed levels removed after generation or supplied-mip decode. */
+    uint32_t remove_mips;
+    int contains_mips;
     int generate_mips;
+    int normalize;
+    edds_mipmap_function mipmap_function;
+    edds_mipmap_filter mipmap_filter;
+    int tiled_texture;
 } edds_profile;
 
 #define EDDS_METADATA_GUID_BYTES 17u

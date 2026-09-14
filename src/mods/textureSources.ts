@@ -18,7 +18,7 @@ export interface TextureSource {
   readonly wire: string;
 }
 
-export type TextureSourceFormat = 'PNG' | 'TGA' | 'JPG' | 'TIFF';
+export type TextureSourceFormat = 'PNG' | 'TGA' | 'JPG' | 'TIFF' | 'DDS';
 
 /**
  * The Workbench resource class each row maps to is deliberately absent: only the native metadata
@@ -29,6 +29,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
   { format: 'TGA', extension: 'tga', wire: 'tga' },
   { format: 'JPG', extension: 'jpg', wire: 'jpg' },
   { format: 'TIFF', extension: 'tiff', wire: 'tiff' },
+  { format: 'DDS', extension: 'dds', wire: 'dds' },
 ];
 
 /** The format of a path, or undefined when nothing in the contract claims that extension. */

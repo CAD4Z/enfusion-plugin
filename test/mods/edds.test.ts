@@ -36,17 +36,20 @@ test('inspect accepts only the structured supported metadata recipe', () => {
         identity: {
           guid: 'aBcDeF0123456789',
           name: 'MyMod/GUI/icon.edds',
-          sourceFile: 'icon.png',
-          sourceFormat: 'png',
+          sourceFile: 'icon.dds',
+          sourceFormat: 'dds',
         },
         recipe: {
           TargetFormat: 'EnfusionDDS',
           FormatCompress: 'Best',
           CompressTreshold: 72,
+          RemoveMips: 2,
           Conversion: 'None',
           ConversionQuality: 1,
           Swizzling: 'None',
+          ContainsMips: true,
           GenerateMips: false,
+          Normalize: true,
           MipMapFunction: 'Filter',
           MipMapFilter: 'Box',
           TiledTexture: true,
@@ -58,16 +61,19 @@ test('inspect accepts only the structured supported metadata recipe', () => {
   assert.deepEqual(inspection.metadata, {
     guid: 'aBcDeF0123456789',
     name: 'MyMod/GUI/icon.edds',
-    sourceFile: 'icon.png',
-    sourceFormat: 'PNG',
+    sourceFile: 'icon.dds',
+    sourceFormat: 'DDS',
     profile: {
       TargetFormat: 'EnfusionDDS',
       FormatCompress: 'Best',
       CompressTreshold: 72,
+      RemoveMips: 2,
       Conversion: 'None',
       ConversionQuality: 1,
       Swizzling: 'None',
+      ContainsMips: true,
       GenerateMips: false,
+      Normalize: true,
       MipMapFunction: 'Filter',
       MipMapFilter: 'Box',
       TiledTexture: true,
@@ -94,6 +100,43 @@ test('inspect accepts only the structured supported metadata recipe', () => {
   );
 });
 
+test('metadata refuses mip settings that their controlling stage cannot use', () => {
+  const recipe = {
+    TargetFormat: 'EnfusionDDS',
+    FormatCompress: 'Fastest',
+    CompressTreshold: 80,
+    RemoveMips: 0,
+    Conversion: 'None',
+    ConversionQuality: 1,
+    Swizzling: 'None',
+    ContainsMips: false,
+    GenerateMips: true,
+    Normalize: false,
+    MipMapFunction: 'Filter',
+    MipMapFilter: 'Box',
+    TiledTexture: true,
+  } as const;
+  const inspect = (changed: Record<string, unknown>) => inspectionOf(JSON.stringify({
+    ...inspectMessage({}),
+    metadata: {
+      schemaVersion: 1,
+      identity: {
+        guid: 'aBcDeF0123456789', name: 'x.edds', sourceFile: 'x.png', sourceFormat: 'png',
+      },
+      recipe: { ...recipe, ...changed },
+    },
+  }));
+
+  assert.throws(
+    () => inspect({ GenerateMips: false, MipMapFunction: 'Normalize' }),
+    /MipMapFunction.*GenerateMips/i,
+  );
+  assert.throws(
+    () => inspect({ MipMapFunction: 'Normalize', MipMapFilter: 'Kaiser' }),
+    /MipMapFilter.*MipMapFunction/i,
+  );
+});
+
 test('every source format in the contract crosses the process boundary, and no alias does', () => {
   for (const [wire, format] of [['jpg', 'JPG'], ['tiff', 'TIFF']] as const) {
     const inspection = inspectionOf(
@@ -111,10 +154,13 @@ test('every source format in the contract crosses the process boundary, and no a
             TargetFormat: 'EnfusionDDS',
             FormatCompress: 'Fastest',
             CompressTreshold: 80,
+            RemoveMips: 0,
             Conversion: 'None',
             ConversionQuality: 1,
             Swizzling: 'None',
+            ContainsMips: false,
             GenerateMips: true,
+            Normalize: false,
             MipMapFunction: 'Filter',
             MipMapFilter: 'Box',
             TiledTexture: true,
@@ -234,10 +280,13 @@ test('a GPU recipe round-trips through the machine boundary with its exact quali
           TargetFormat: 'EnfusionDDS',
           FormatCompress: 'Fastest',
           CompressTreshold: 80,
+          RemoveMips: 0,
           Conversion,
           ConversionQuality,
           Swizzling: 'None',
+          ContainsMips: false,
           GenerateMips: true,
+          Normalize: false,
           MipMapFunction: 'Filter',
           MipMapFilter: 'Box',
           TiledTexture: true,

@@ -7,10 +7,12 @@ set(png "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.png")
 set(tga "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.tga")
 set(jpg_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.jpg")
 set(tiff_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.tiff")
+set(dds_source "${CMAKE_CURRENT_BINARY_DIR}/black-box-source.dds")
 set(png_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-png-result.edds")
 set(tga_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-tga-result.edds")
 set(jpg_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-jpg-result.edds")
 set(tiff_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-tiff-result.edds")
+set(dds_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-dds-result.edds")
 set(png_metadata "${png_result}.meta")
 set(jpg_metadata "${jpg_result}.meta")
 
@@ -19,7 +21,7 @@ set(gpu_flat "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-flat.tga")
 
 execute_process(
   COMMAND "${FIXTURE}" "${copy}" "${lz4}" "${dxt1}" "${odd_fourcc}" "${overflow}"
-    "${png}" "${tga}" "${jpg_source}" "${tiff_source}" "${gpu_source}" "${gpu_flat}"
+    "${png}" "${tga}" "${jpg_source}" "${tiff_source}" "${gpu_source}" "${gpu_flat}" "${dds_source}"
   RESULT_VARIABLE fixture_result
   ERROR_VARIABLE fixture_error
 )
@@ -30,7 +32,7 @@ endif()
 set(batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch.ndjson")
 set(batch_png "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-png.edds")
 set(batch_tga "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-tga.edds")
-set(batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"Conversion":"None","ConversionQuality":1,"Swizzling":"None","GenerateMips":false,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
+set(batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"RemoveMips":0,"Conversion":"None","ConversionQuality":1,"Swizzling":"None","ContainsMips":false,"GenerateMips":false,"Normalize":false,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
 file(WRITE "${batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":3}\n"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"png\",\"input\":\"${png}\",\"output\":\"${batch_png}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
@@ -259,6 +261,58 @@ if(NOT unsupported_profile_code STREQUAL "unsupported-setting")
   message(FATAL_ERROR "unsupported profile returned the wrong refusal: ${unsupported_profile_output}")
 endif()
 
+foreach(refused_mip IN ITEMS
+    "--mipmap-function;color-noise"
+    "--mipmap-filter;triangle")
+  list(GET refused_mip 0 refused_mip_flag)
+  list(GET refused_mip 1 refused_mip_value)
+  set(refused_mip_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-${refused_mip_value}.edds")
+  file(REMOVE "${refused_mip_result}")
+  execute_process(
+    COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
+      --output "${refused_mip_result}" "${refused_mip_flag}" "${refused_mip_value}"
+    RESULT_VARIABLE refused_mip_exit OUTPUT_VARIABLE refused_mip_output ERROR_QUIET
+  )
+  string(JSON refused_mip_code GET "${refused_mip_output}" error code)
+  if(NOT refused_mip_exit EQUAL 4 OR EXISTS "${refused_mip_result}" OR
+     NOT refused_mip_code STREQUAL "unsupported-setting")
+    message(FATAL_ERROR
+      "${refused_mip_value} was not refused atomically: ${refused_mip_output}")
+  endif()
+endforeach()
+
+set(inactive_mip_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-inactive-mip.edds")
+file(REMOVE "${inactive_mip_result}")
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
+    --output "${inactive_mip_result}" --generate-mips false --mipmap-filter kaiser
+  RESULT_VARIABLE inactive_mip_exit OUTPUT_VARIABLE inactive_mip_output ERROR_QUIET
+)
+string(JSON inactive_mip_code GET "${inactive_mip_output}" error code)
+if(NOT inactive_mip_exit EQUAL 4 OR EXISTS "${inactive_mip_result}" OR
+   NOT inactive_mip_code STREQUAL "unsupported-combination")
+  message(FATAL_ERROR "inactive CLI mip setting was not refused atomically: ${inactive_mip_output}")
+endif()
+
+string(REPLACE "\"MipMapFilter\":\"Box\"" "\"MipMapFilter\":\"Kaiser\""
+  inactive_batch_profile "${batch_profile}")
+set(inactive_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-inactive-mip.ndjson")
+set(inactive_batch_output "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-inactive-mip.edds")
+file(REMOVE "${inactive_batch_output}")
+file(WRITE "${inactive_batch_input}"
+  "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}\n"
+  "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"inactive\",\"input\":\"${png}\",\"output\":\"${inactive_batch_output}\",\"metadata\":null,\"identity\":null,\"profile\":${inactive_batch_profile},\"expected\":null}\n"
+  "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
+execute_process(
+  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${inactive_batch_input}"
+  RESULT_VARIABLE inactive_batch_exit OUTPUT_VARIABLE inactive_batch_stdout ERROR_QUIET
+)
+string(JSON inactive_batch_code GET "${inactive_batch_stdout}" error code)
+if(NOT inactive_batch_exit EQUAL 4 OR EXISTS "${inactive_batch_output}" OR
+   NOT inactive_batch_code STREQUAL "unsupported-combination")
+  message(FATAL_ERROR "inactive batch mip setting lost its refusal: ${inactive_batch_stdout}")
+endif()
+
 execute_process(
   COMMAND "${REFERENCE_READER}" "${copy}" "${lz4}"
   RESULT_VARIABLE reference_result
@@ -273,9 +327,10 @@ execute_process(
     --input "${png}" --output "${png_result}"
     --metadata "${png_metadata}" --resource-name Probe/black-box-png-result.edds
     --source-file black-box-source.png --guid 0123456789ABCDEF
-    --target-format enfusion-dds --format-compress copy --compress-threshold 80
+    --target-format enfusion-dds --format-compress copy --compress-threshold 80 --remove-mips 0
     --conversion none --conversion-quality 1 --swizzling none
-    --generate-mips true --mipmap-function filter --mipmap-filter box
+    --contains-mips false --generate-mips true --normalize false
+    --mipmap-function filter --mipmap-filter box
     --tiled-texture true
   RESULT_VARIABLE png_convert_result
   OUTPUT_VARIABLE png_convert_output
@@ -510,8 +565,77 @@ if(NOT source_batch_result EQUAL 0 OR NOT EXISTS "${source_batch_jpg}" OR
 endif()
 
 execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1
+    --input "${dds_source}" --output "${dds_result}"
+    --target-format enfusion-dds --format-compress copy --compress-threshold 80
+    --remove-mips 1 --conversion none --conversion-quality 1 --swizzling none
+    --contains-mips true --generate-mips false --normalize false
+    --mipmap-function filter --mipmap-filter box --tiled-texture true
+  RESULT_VARIABLE dds_convert_result OUTPUT_VARIABLE dds_convert_output
+  ERROR_VARIABLE dds_convert_error OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT dds_convert_result EQUAL 0 OR NOT EXISTS "${dds_result}")
+  message(FATAL_ERROR "DDS supplied-mip conversion failed: ${dds_convert_error} ${dds_convert_output}")
+endif()
+string(JSON dds_width GET "${dds_convert_output}" width)
+string(JSON dds_height GET "${dds_convert_output}" height)
+string(JSON dds_mips GET "${dds_convert_output}" mipCount)
+if(NOT dds_width EQUAL 2 OR NOT dds_height EQUAL 1 OR NOT dds_mips EQUAL 2)
+  message(FATAL_ERROR "DDS RemoveMips changed the wrong end of the chain: ${dds_convert_output}")
+endif()
+
+set(dds_conflict "${CMAKE_CURRENT_BINARY_DIR}/black-box-dds-conflict.edds")
+file(REMOVE "${dds_conflict}")
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${dds_source}"
+    --output "${dds_conflict}" --contains-mips true --generate-mips true
+  RESULT_VARIABLE dds_conflict_result OUTPUT_VARIABLE dds_conflict_output ERROR_QUIET
+)
+string(JSON dds_conflict_code GET "${dds_conflict_output}" error code)
+if(NOT dds_conflict_result EQUAL 4 OR EXISTS "${dds_conflict}" OR
+   NOT dds_conflict_code STREQUAL "unsupported-combination")
+  message(FATAL_ERROR "conflicting DDS mip settings were not refused atomically: ${dds_conflict_output}")
+endif()
+
+set(kaiser_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-mip-kaiser.edds")
+set(pre_normalize_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-mip-pre-normalize.edds")
+set(post_normalize_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-mip-post-normalize.edds")
+file(REMOVE "${kaiser_result}" "${pre_normalize_result}" "${post_normalize_result}")
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}" --output "${kaiser_result}"
+    --format-compress copy --conversion none --generate-mips true
+    --mipmap-function filter --mipmap-filter kaiser
+  RESULT_VARIABLE kaiser_result_code OUTPUT_QUIET ERROR_QUIET
+)
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}"
+    --output "${pre_normalize_result}" --format-compress copy --conversion none
+    --generate-mips false --normalize true --mipmap-function filter --mipmap-filter box
+  RESULT_VARIABLE pre_normalize_result_code OUTPUT_QUIET ERROR_QUIET
+)
+execute_process(
+  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}"
+    --output "${post_normalize_result}" --format-compress copy --conversion none
+    --generate-mips true --normalize false --mipmap-function normalize --mipmap-filter box
+  RESULT_VARIABLE post_normalize_result_code OUTPUT_QUIET ERROR_QUIET
+)
+if(NOT kaiser_result_code EQUAL 0 OR NOT pre_normalize_result_code EQUAL 0 OR
+   NOT post_normalize_result_code EQUAL 0 OR NOT EXISTS "${kaiser_result}" OR
+   NOT EXISTS "${pre_normalize_result}" OR NOT EXISTS "${post_normalize_result}")
+  message(FATAL_ERROR "mip golden outputs were not created for independent verification")
+endif()
+execute_process(
+  COMMAND "${REFERENCE_READER}" --mips
+    "${kaiser_result}" "${pre_normalize_result}" "${post_normalize_result}"
+  RESULT_VARIABLE mip_reference_result ERROR_VARIABLE mip_reference_error
+)
+if(NOT mip_reference_result EQUAL 0)
+  message(FATAL_ERROR "mip golden outputs failed independent verification: ${mip_reference_error}")
+endif()
+
+execute_process(
   COMMAND "${REFERENCE_READER}" "${copy}" "${lz4}" "${png_result}" "${tga_result}"
-    "${jpg_result}" "${tiff_result}"
+    "${jpg_result}" "${tiff_result}" "${dds_result}"
   RESULT_VARIABLE converted_reference_result
   ERROR_VARIABLE converted_reference_error
 )
@@ -771,7 +895,7 @@ endforeach()
 # A batch is the same job contract, so a GPU profile goes through it with no encoder path of its own.
 set(gpu_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-batch.ndjson")
 set(gpu_batch_output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-batch.edds")
-set(gpu_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"Conversion":"ColorHQCompression","ConversionQuality":0.5,"Swizzling":"None","GenerateMips":true,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
+set(gpu_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"RemoveMips":0,"Conversion":"ColorHQCompression","ConversionQuality":0.5,"Swizzling":"None","ContainsMips":false,"GenerateMips":true,"Normalize":false,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
 file(REMOVE "${gpu_batch_output}")
 file(WRITE "${gpu_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}
@@ -799,7 +923,7 @@ endif()
 
 # A quality no conversion can use is refused by the batch parser, before any job starts.
 set(dead_batch_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dead-quality.ndjson")
-set(dead_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"Conversion":"None","ConversionQuality":0.5,"Swizzling":"None","GenerateMips":true,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
+set(dead_batch_profile [=[{"TargetFormat":"EnfusionDDS","FormatCompress":"Fastest","CompressTreshold":80,"RemoveMips":0,"Conversion":"None","ConversionQuality":0.5,"Swizzling":"None","ContainsMips":false,"GenerateMips":true,"Normalize":false,"MipMapFunction":"Filter","MipMapFilter":"Box","TiledTexture":true}]=])
 file(WRITE "${dead_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}
 "

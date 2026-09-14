@@ -333,25 +333,39 @@ static edds_status recipe_setting(
     if (bit == SETTING_MIP_FUNCTION) {
         static const char *const known[] = { "Filter", "ColorNoise", "Normalize" };
         if (!is_one_of(value->text, known, sizeof known / sizeof known[0])) goto malformed;
-        return strcmp(value->text, "Filter") == 0 ? EDDS_OK : unsupported(error, key->text, value->text);
+        if (strcmp(value->text, "Filter") == 0) metadata->profile.mipmap_function = EDDS_MIPMAP_FILTER;
+        else if (strcmp(value->text, "Normalize") == 0) metadata->profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
+        else metadata->profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
+        return EDDS_OK;
     }
     if (bit == SETTING_MIP_FILTER) {
         static const char *const known[] = { "Box", "Kaiser", "Triangle" };
         if (!is_one_of(value->text, known, sizeof known / sizeof known[0])) goto malformed;
-        return strcmp(value->text, "Box") == 0 ? EDDS_OK : unsupported(error, key->text, value->text);
+        if (strcmp(value->text, "Box") == 0) metadata->profile.mipmap_filter = EDDS_FILTER_BOX;
+        else if (strcmp(value->text, "Kaiser") == 0) metadata->profile.mipmap_filter = EDDS_FILTER_KAISER;
+        else metadata->profile.mipmap_filter = EDDS_FILTER_TRIANGLE;
+        return EDDS_OK;
     }
     if (!unsigned_value(value, &number)) goto malformed;
     if (bit == SETTING_THRESHOLD) {
         if (number > 100u) return unsupported(error, key->text, value->text);
         metadata->profile.compress_threshold = number;
+    } else if (bit == SETTING_REMOVE_MIPS) {
+        metadata->profile.remove_mips = number;
+    } else if (bit == SETTING_CONTAINS_MIPS) {
+        if (number > 1u) goto malformed;
+        metadata->profile.contains_mips = number != 0;
     } else if (bit == SETTING_GENERATE_MIPS) {
         if (number > 1u) goto malformed;
         metadata->profile.generate_mips = number != 0;
-    } else if ((bit == SETTING_REMOVE_MIPS || bit == SETTING_CONTAINS_MIPS ||
-                bit == SETTING_NORMALIZE || bit == SETTING_CUBEMAP) && number != 0u) {
+    } else if (bit == SETTING_NORMALIZE) {
+        if (number > 1u) goto malformed;
+        metadata->profile.normalize = number != 0;
+    } else if (bit == SETTING_CUBEMAP && number != 0u) {
         return unsupported(error, key->text, value->text);
-    } else if (bit == SETTING_TILED && number != 1u) {
-        return unsupported(error, key->text, value->text);
+    } else if (bit == SETTING_TILED) {
+        if (number > 1u) goto malformed;
+        metadata->profile.tiled_texture = number != 0;
     }
     return EDDS_OK;
 
@@ -403,7 +417,13 @@ static edds_status parse_recipe(
      */
     {
         edds_error combination;
-        const edds_status status = edds_profile_check(&metadata->profile, &combination);
+        edds_status status = edds_profile_check(&metadata->profile, &combination);
+        if (status == EDDS_OK && metadata->source_format != EDDS_SOURCE_DDS &&
+            metadata->profile.contains_mips) {
+            fail(&combination, "unsupported-combination",
+                "ContainsMips is supported only for a DDS source.");
+            status = EDDS_UNSUPPORTED_FORMAT;
+        }
         if (status != EDDS_OK && pending == EDDS_OK) {
             pending = status;
             pending_error = combination;
@@ -582,6 +602,24 @@ static const char *compress_name(edds_format_compress compress) {
     }
 }
 
+static const char *mipmap_function_name(edds_mipmap_function function) {
+    switch (function) {
+        case EDDS_MIPMAP_FILTER: return "Filter";
+        case EDDS_MIPMAP_NORMALIZE: return "Normalize";
+        case EDDS_MIPMAP_COLOR_NOISE: return "ColorNoise";
+        default: return NULL;
+    }
+}
+
+static const char *mipmap_filter_name(edds_mipmap_filter filter) {
+    switch (filter) {
+        case EDDS_FILTER_BOX: return "Box";
+        case EDDS_FILTER_KAISER: return "Kaiser";
+        case EDDS_FILTER_TRIANGLE: return "Triangle";
+        default: return NULL;
+    }
+}
+
 static int safe_string(const char *value) {
     if (*value == '\0') return 0;
     while (*value != '\0') {
@@ -594,6 +632,8 @@ static int safe_string(const char *value) {
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error) {
     const char *resource;
     const char *compress;
+    const char *mipmap_function;
+    const char *mipmap_filter;
     const edds_conversion_capability *conversion;
     char quality[8];
     int written;
@@ -607,8 +647,11 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         resource = capability == NULL ? NULL : capability->resource_class;
     }
     compress = compress_name(metadata->profile.format_compress);
+    mipmap_function = mipmap_function_name(metadata->profile.mipmap_function);
+    mipmap_filter = mipmap_filter_name(metadata->profile.mipmap_filter);
     conversion = edds_conversion_capability_of(metadata->profile.conversion);
-    if (resource == NULL || compress == NULL || conversion == NULL || strlen(metadata->guid) != 16u ||
+    if (resource == NULL || compress == NULL || conversion == NULL || mipmap_function == NULL ||
+        mipmap_filter == NULL || strlen(metadata->guid) != 16u ||
         !safe_string(metadata->name) || !safe_string(metadata->source_file)) {
         fail(error, "invalid-metadata-value", "The structured metadata value is incomplete or unsupported.");
         return EDDS_INVALID_INPUT;
@@ -618,6 +661,11 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         const edds_status status = edds_profile_check(&metadata->profile, error);
         if (status != EDDS_OK) {
             return status;
+        }
+        if (metadata->source_format != EDDS_SOURCE_DDS && metadata->profile.contains_mips) {
+            fail(error, "unsupported-combination",
+                "ContainsMips is supported only for a DDS source.");
+            return EDDS_UNSUPPORTED_FORMAT;
         }
     }
     quality_text(metadata->profile.conversion_quality, quality);
@@ -636,12 +684,15 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "   TargetFormat EnfusionDDS\n"
         "   FormatCompress %s\n"
         "   CompressTreshold %u\n"
+        "   RemoveMips %u\n"
         "   Conversion %s\n"
         "   ConversionQuality %s\n"
         "   Swizzling None\n"
+        "   ContainsMips %d\n"
         "   GenerateMips %d\n"
-        "   MipMapFunction Filter\n"
-        "   MipMapFilter Box\n"
+        "   Normalize %d\n"
+        "   MipMapFunction %s\n"
+        "   MipMapFilter %s\n"
         "   TiledTexture 1\n"
         "  }\n"
         "  %s XBOX_ONE : PC {\n"
@@ -653,8 +704,10 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         " }\n"
         "}\n",
         metadata->guid, metadata->name, resource, metadata->source_file, compress,
-        metadata->profile.compress_threshold, conversion->workbench_name, quality,
-        metadata->profile.generate_mips, resource, resource, resource);
+        metadata->profile.compress_threshold, metadata->profile.remove_mips,
+        conversion->workbench_name, quality, metadata->profile.contains_mips,
+        metadata->profile.generate_mips, metadata->profile.normalize,
+        mipmap_function, mipmap_filter, resource, resource, resource);
     if (written < 0 || fflush(output) != 0) {
         fail(error, "metadata-write-failed", "Canonical metadata could not be written completely.");
         return EDDS_INTERNAL_FAILURE;

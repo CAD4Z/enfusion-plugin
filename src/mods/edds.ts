@@ -5,7 +5,12 @@
  * value is checked before the view can allocate from it or describe it as a fact of the file.
  */
 
-import type { TextureIdentity, TextureMetadata, TextureProfile } from './textureConversion';
+import type {
+  TextureIdentity,
+  TextureMetadata,
+  TextureProfile,
+  TextureSourceFormat,
+} from './textureConversion';
 import { TEXTURE_SOURCES, textureSourceFormatOfWire } from './textureSources';
 import {
   type DecodablePixelFormat,
@@ -348,11 +353,14 @@ function metadataOf(source: unknown): TextureMetadata {
     name: stringOf(identity, 'name'),
     sourceFile: stringOf(identity, 'sourceFile'),
     sourceFormat,
-    profile: profileOf(recipe),
+    profile: profileOf(recipe, sourceFormat),
   };
 }
 
-function profileOf(value: Record<string, unknown>): TextureProfile {
+function profileOf(
+  value: Record<string, unknown>,
+  sourceFormat: TextureSourceFormat,
+): TextureProfile {
   literalOf(value, 'TargetFormat', 'EnfusionDDS');
   const compression = stringOf(value, 'FormatCompress');
   if (
@@ -364,6 +372,7 @@ function profileOf(value: Record<string, unknown>): TextureProfile {
     throw new Error('metadata.recipe.FormatCompress is not supported.');
   }
   const threshold = nonnegativeIntegerOf(value, 'CompressTreshold', 100);
+  const removeMips = nonnegativeIntegerOf(value, 'RemoveMips', 14);
   const conversion = stringOf(value, 'Conversion');
   if (!isSupportedTextureConversion(conversion)) {
     throw new Error(`metadata.recipe.Conversion is not supported: ${conversion}.`);
@@ -373,23 +382,48 @@ function profileOf(value: Record<string, unknown>): TextureProfile {
     throw new Error('metadata.recipe.ConversionQuality must be 0 through 1, to three decimals.');
   }
   literalOf(value, 'Swizzling', 'None');
+  const containsMips = booleanOf(value, 'ContainsMips');
   const generateMips = booleanOf(value, 'GenerateMips');
-  literalOf(value, 'MipMapFunction', 'Filter');
-  literalOf(value, 'MipMapFilter', 'Box');
+  const normalize = booleanOf(value, 'Normalize');
+  const mipMapFunction = stringOf(value, 'MipMapFunction');
+  if (mipMapFunction !== 'Filter' && mipMapFunction !== 'Normalize') {
+    throw new Error(`metadata.recipe.MipMapFunction is not supported: ${mipMapFunction}.`);
+  }
+  const mipMapFilter = stringOf(value, 'MipMapFilter');
+  if (mipMapFilter !== 'Box' && mipMapFilter !== 'Kaiser') {
+    throw new Error(`metadata.recipe.MipMapFilter is not supported: ${mipMapFilter}.`);
+  }
   if (booleanOf(value, 'TiledTexture') !== true) {
     throw new Error('metadata.recipe.TiledTexture must be true.');
+  }
+  if (containsMips && generateMips) {
+    throw new Error('metadata.recipe.ContainsMips and GenerateMips cannot both be true.');
+  }
+  if (!generateMips && mipMapFunction !== 'Filter') {
+    throw new Error('metadata.recipe.MipMapFunction is active only while GenerateMips is true.');
+  }
+  if ((!generateMips || mipMapFunction !== 'Filter') && mipMapFilter !== 'Box') {
+    throw new Error(
+      'metadata.recipe.MipMapFilter is active only while GenerateMips is true and MipMapFunction is Filter.',
+    );
+  }
+  if (sourceFormat !== 'DDS' && containsMips) {
+    throw new Error('metadata.recipe.ContainsMips is supported only for a DDS source.');
   }
 
   return {
     TargetFormat: 'EnfusionDDS',
     FormatCompress: compression,
     CompressTreshold: threshold,
+    RemoveMips: removeMips,
     Conversion: conversion,
     ConversionQuality: quality,
     Swizzling: 'None',
+    ContainsMips: containsMips,
     GenerateMips: generateMips,
-    MipMapFunction: 'Filter',
-    MipMapFilter: 'Box',
+    Normalize: normalize,
+    MipMapFunction: mipMapFunction,
+    MipMapFilter: mipMapFilter,
     TiledTexture: true,
   };
 }

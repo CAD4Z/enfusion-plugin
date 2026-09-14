@@ -28,7 +28,8 @@ edds-convert preview --machine --protocol 1 --mip N --input PATH
 edds-convert batch --machine --protocol 1 < jobs.ndjson
 edds-convert convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
   --target-format enfusion-dds --format-compress fastest --compress-threshold 80 \
-  --conversion color-hq-compression --conversion-quality 0.403 --swizzling none   --generate-mips true \
+  --remove-mips 0 --conversion color-hq-compression --conversion-quality 0.403 \
+  --swizzling none --contains-mips false --generate-mips true --normalize false \
   --mipmap-function filter --mipmap-filter box --tiled-texture true
 ```
 
@@ -69,16 +70,24 @@ mips to 64 MiB, LZ4 streams to 1024 blocks and each stored LZ4 block to 1 MiB. E
 is checked before reads or allocation; trailing bytes, malformed final-block markers and decoded
 size mismatches are invalid input.
 
-Conversion accepts the four source resource classes DayZ Workbench registers, by the one extension
+Conversion accepts five source resource classes DayZ Workbench registers, by the one extension
 that names each: non-interlaced 8-bit RGB/RGBA `.png`; uncompressed true-color 24/32-bit `.tga`;
 baseline sequential 8-bit Huffman `.jpg`, greyscale or YCbCr, one scan, luma 1x1/2x1/1x2/2x2 over
 1x1 chroma; and single-page 8-bit chunky `.tiff` in strips, uncompressed or LZW/Deflate/PackBits,
-greyscale BlackIsZero or RGB with an optional unassociated alpha extra sample. Any other subtype is
+greyscale BlackIsZero or RGB with an optional unassociated alpha extra sample. `.dds` admits one
+controlled two-dimensional LDR surface in legacy BGRX/BGRA, DXT1/DXT5, or DX10 R8/RG8,
+BC1/BC3/BC4/BC5/BC7/BGRA/BGRX UNORM layout, with either only the top level or a complete tight
+largest-to-smallest chain. Any other subtype is
 refused by its own code rather than decoded on a guess, and an extension outside that set — `.jpeg`
 and `.tif` included, which Workbench does not register — is `unsupported-source-extension` before
 anything is read. JPEG carries no alpha; TIFF alpha comes from the file, never from the profile.
 
-It writes EnfusionDDS with a floor-halved NPOT Box mip chain. `--conversion` selects the runtime
+It writes EnfusionDDS with a floor-halved NPOT Box or Kaiser mip chain. Supplied DDS levels are used
+only with `--contains-mips true --generate-mips false`; otherwise only the decoded top level enters
+the generated path. `--remove-mips` removes levels from the large end after that path has completed.
+Boolean `--normalize` normalizes source vectors before filtering, while
+`--mipmap-function normalize` normalizes each reduced level after Box filtering. `--conversion`
+selects the runtime
 format: `none` writes 32-bit BGRX/BGRA, `dxt-compression` BC1 or BC3, `red` `R8_UNORM`,
 `red-hq-compression` BC4, `red-green` `R8G8_UNORM`, `red-green-hq-compression` BC5 and
 `color-hq-compression` BC7. `hdr-compression` is recognized and refused rather than replaced with

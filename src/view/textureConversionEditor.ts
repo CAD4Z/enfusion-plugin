@@ -152,9 +152,34 @@ export class TextureConversionEditor
               apply({ kind: 'change-profile', field: 'CompressTreshold', value: request.value });
             }
             return;
+          case 'change-remove-mips':
+            if (Number.isInteger(request.value) && request.value >= 0 && request.value <= 14) {
+              apply({ kind: 'change-profile', field: 'RemoveMips', value: request.value });
+            }
+            return;
+          case 'change-contains-mips':
+            if (typeof request.value === 'boolean') {
+              apply({ kind: 'change-profile', field: 'ContainsMips', value: request.value });
+            }
+            return;
           case 'change-mips':
             if (typeof request.value === 'boolean') {
               apply({ kind: 'change-profile', field: 'GenerateMips', value: request.value });
+            }
+            return;
+          case 'change-normalize':
+            if (typeof request.value === 'boolean') {
+              apply({ kind: 'change-profile', field: 'Normalize', value: request.value });
+            }
+            return;
+          case 'change-mipmap-function':
+            if (request.value === 'Filter' || request.value === 'Normalize') {
+              apply({ kind: 'change-profile', field: 'MipMapFunction', value: request.value });
+            }
+            return;
+          case 'change-mipmap-filter':
+            if (request.value === 'Box' || request.value === 'Kaiser') {
+              apply({ kind: 'change-profile', field: 'MipMapFilter', value: request.value });
             }
             return;
           case 'change-conversion':

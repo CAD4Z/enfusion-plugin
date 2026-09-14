@@ -257,6 +257,24 @@ static const char *metadata_compress(edds_format_compress compress) {
     }
 }
 
+static const char *metadata_mipmap_function(edds_mipmap_function function) {
+    switch (function) {
+        case EDDS_MIPMAP_FILTER: return "Filter";
+        case EDDS_MIPMAP_NORMALIZE: return "Normalize";
+        case EDDS_MIPMAP_COLOR_NOISE: return "ColorNoise";
+        default: return "Unknown";
+    }
+}
+
+static const char *metadata_mipmap_filter(edds_mipmap_filter filter) {
+    switch (filter) {
+        case EDDS_FILTER_BOX: return "Box";
+        case EDDS_FILTER_KAISER: return "Kaiser";
+        case EDDS_FILTER_TRIANGLE: return "Triangle";
+        default: return "Unknown";
+    }
+}
+
 /** The same shortest exact text the metadata carries, as a JSON number rather than a string. */
 static const char *quality_json(uint32_t value, char buffer[8]) {
     const uint32_t whole = value / EDDS_QUALITY_SCALE;
@@ -346,18 +364,26 @@ static void write_inspection(
         }
         fputs("},\"recipe\":{\"TargetFormat\":\"EnfusionDDS\",\"FormatCompress\":", stdout);
         json_string(metadata_compress(metadata->profile.format_compress));
-        (void)printf(",\"CompressTreshold\":%u,\"Conversion\":", metadata->profile.compress_threshold);
+        (void)printf(",\"CompressTreshold\":%u,\"RemoveMips\":%u,\"Conversion\":",
+            metadata->profile.compress_threshold, metadata->profile.remove_mips);
         {
             const edds_conversion_capability *conversion =
                 edds_conversion_capability_of(metadata->profile.conversion);
             json_string(conversion == NULL ? "None" : conversion->workbench_name);
         }
         (void)printf(
-            ",\"ConversionQuality\":%s,"
-            "\"Swizzling\":\"None\",\"GenerateMips\":%s,"
-            "\"MipMapFunction\":\"Filter\",\"MipMapFilter\":\"Box\",\"TiledTexture\":true}}",
+            ",\"ConversionQuality\":%s,\"Swizzling\":\"None\","
+            "\"ContainsMips\":%s,\"GenerateMips\":%s,\"Normalize\":%s,"
+            "\"MipMapFunction\":",
             quality_json(metadata->profile.conversion_quality, quality_buffer),
-            metadata->profile.generate_mips ? "true" : "false");
+            metadata->profile.contains_mips ? "true" : "false",
+            metadata->profile.generate_mips ? "true" : "false",
+            metadata->profile.normalize ? "true" : "false");
+        json_string(metadata_mipmap_function(metadata->profile.mipmap_function));
+        fputs(",\"MipMapFilter\":", stdout);
+        json_string(metadata_mipmap_filter(metadata->profile.mipmap_filter));
+        (void)printf(",\"TiledTexture\":%s}}",
+            metadata->profile.tiled_texture ? "true" : "false");
     }
     fputs("}\n", stdout);
 }
@@ -413,11 +439,15 @@ typedef struct parsed_arguments {
     const cli_char *format_compress;
     int threshold_seen;
     uint32_t compress_threshold;
+    int remove_mips_seen;
+    uint32_t remove_mips;
     const cli_char *conversion;
     int quality_seen;
     uint32_t conversion_quality;
     const cli_char *swizzling;
+    const cli_char *contains_mips;
     const cli_char *generate_mips;
+    const cli_char *normalize;
     const cli_char *mipmap_function;
     const cli_char *mipmap_filter;
     const cli_char *tiled_texture;
@@ -453,6 +483,9 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
         } else if (equals(argv[at], "--compress-threshold") && !options->threshold_seen && at + 1 < argc) {
             options->threshold_seen = unsigned_argument(argv[++at], &options->compress_threshold);
             if (!options->threshold_seen) return 0;
+        } else if (equals(argv[at], "--remove-mips") && !options->remove_mips_seen && at + 1 < argc) {
+            options->remove_mips_seen = unsigned_argument(argv[++at], &options->remove_mips);
+            if (!options->remove_mips_seen) return 0;
         } else if (equals(argv[at], "--conversion") && options->conversion == NULL && at + 1 < argc) {
             options->conversion = argv[++at];
         } else if (equals(argv[at], "--conversion-quality") && !options->quality_seen && at + 1 < argc) {
@@ -460,8 +493,12 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
             if (!options->quality_seen) return 0;
         } else if (equals(argv[at], "--swizzling") && options->swizzling == NULL && at + 1 < argc) {
             options->swizzling = argv[++at];
+        } else if (equals(argv[at], "--contains-mips") && options->contains_mips == NULL && at + 1 < argc) {
+            options->contains_mips = argv[++at];
         } else if (equals(argv[at], "--generate-mips") && options->generate_mips == NULL && at + 1 < argc) {
             options->generate_mips = argv[++at];
+        } else if (equals(argv[at], "--normalize") && options->normalize == NULL && at + 1 < argc) {
+            options->normalize = argv[++at];
         } else if (equals(argv[at], "--mipmap-function") && options->mipmap_function == NULL && at + 1 < argc) {
             options->mipmap_function = argv[++at];
         } else if (equals(argv[at], "--mipmap-filter") && options->mipmap_filter == NULL && at + 1 < argc) {
@@ -497,8 +534,10 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
 static int has_profile_options(const parsed_arguments *options) {
     return options->output != NULL || options->target_format != NULL ||
         options->format_compress != NULL || options->threshold_seen ||
+        options->remove_mips_seen ||
         options->conversion != NULL || options->quality_seen || options->swizzling != NULL ||
-        options->generate_mips != NULL || options->mipmap_function != NULL ||
+        options->contains_mips != NULL || options->generate_mips != NULL ||
+        options->normalize != NULL || options->mipmap_function != NULL ||
         options->mipmap_filter != NULL || options->tiled_texture != NULL;
 }
 
@@ -531,6 +570,7 @@ static edds_status profile_of(
         if (options->compress_threshold > 100u) goto unsupported;
         profile->compress_threshold = options->compress_threshold;
     }
+    if (options->remove_mips_seen) profile->remove_mips = options->remove_mips;
     if (options->conversion != NULL) {
         size_t count = 0;
         const edds_conversion_capability *capabilities = edds_conversions(&count);
@@ -545,14 +585,38 @@ static edds_status profile_of(
         profile->conversion_quality = options->conversion_quality;
     }
     if (options->swizzling != NULL && !equals(options->swizzling, "none")) goto unsupported;
+    if (options->contains_mips != NULL) {
+        if (equals(options->contains_mips, "true")) profile->contains_mips = 1;
+        else if (equals(options->contains_mips, "false")) profile->contains_mips = 0;
+        else goto unsupported;
+    }
     if (options->generate_mips != NULL) {
         if (equals(options->generate_mips, "true")) profile->generate_mips = 1;
         else if (equals(options->generate_mips, "false")) profile->generate_mips = 0;
         else goto unsupported;
     }
-    if (options->mipmap_function != NULL && !equals(options->mipmap_function, "filter")) goto unsupported;
-    if (options->mipmap_filter != NULL && !equals(options->mipmap_filter, "box")) goto unsupported;
-    if (options->tiled_texture != NULL && !equals(options->tiled_texture, "true")) goto unsupported;
+    if (options->normalize != NULL) {
+        if (equals(options->normalize, "true")) profile->normalize = 1;
+        else if (equals(options->normalize, "false")) profile->normalize = 0;
+        else goto unsupported;
+    }
+    if (options->mipmap_function != NULL) {
+        if (equals(options->mipmap_function, "filter")) profile->mipmap_function = EDDS_MIPMAP_FILTER;
+        else if (equals(options->mipmap_function, "normalize")) profile->mipmap_function = EDDS_MIPMAP_NORMALIZE;
+        else if (equals(options->mipmap_function, "color-noise")) profile->mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
+        else goto unsupported;
+    }
+    if (options->mipmap_filter != NULL) {
+        if (equals(options->mipmap_filter, "box")) profile->mipmap_filter = EDDS_FILTER_BOX;
+        else if (equals(options->mipmap_filter, "kaiser")) profile->mipmap_filter = EDDS_FILTER_KAISER;
+        else if (equals(options->mipmap_filter, "triangle")) profile->mipmap_filter = EDDS_FILTER_TRIANGLE;
+        else goto unsupported;
+    }
+    if (options->tiled_texture != NULL) {
+        if (equals(options->tiled_texture, "true")) profile->tiled_texture = 1;
+        else if (equals(options->tiled_texture, "false")) profile->tiled_texture = 0;
+        else goto unsupported;
+    }
     /* The conversion and its quality are one combination, so they are judged as one. */
     return edds_profile_check(profile, error);
 

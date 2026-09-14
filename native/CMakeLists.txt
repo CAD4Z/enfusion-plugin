@@ -38,6 +38,7 @@ add_library(edds_core STATIC
   src/decode_tga.c
   src/decode_jpeg.c
   src/decode_tiff.c
+  src/decode_dds.c
   src/convert.c
   src/metadata.c
   src/batch.c

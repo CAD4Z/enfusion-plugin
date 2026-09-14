@@ -1,6 +1,7 @@
 #include "image.h"
 #include "gpu.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -63,35 +64,221 @@ static int mip_bytes(uint32_t width, uint32_t height, uint32_t *bytes) {
     return 1;
 }
 
-static void source_mip(const edds_decoded_source *source, generated_mip *mip) {
+static void rgba_mip(const uint8_t *rgba, int has_alpha, generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; at += 4u) {
-        mip->bgra[at] = source->rgba[at + 2u];
-        mip->bgra[at + 1u] = source->rgba[at + 1u];
-        mip->bgra[at + 2u] = source->rgba[at];
-        mip->bgra[at + 3u] = source->has_alpha ? source->rgba[at + 3u] : 255u;
+        mip->bgra[at] = rgba[at + 2u];
+        mip->bgra[at + 1u] = rgba[at + 1u];
+        mip->bgra[at + 2u] = rgba[at];
+        mip->bgra[at + 3u] = has_alpha ? rgba[at + 3u] : 255u;
     }
 }
 
 static void box_mip(const generated_mip *previous, generated_mip *next) {
-    const uint32_t sample_width = previous->width > 1 ? 2u : 1u;
-    const uint32_t sample_height = previous->height > 1 ? 2u : 1u;
-    const uint32_t divisor = sample_width * sample_height;
-    for (uint32_t y = 0; y < next->height; ++y) {
-        for (uint32_t x = 0; x < next->width; ++x) {
-            const size_t output_at = ((size_t)y * next->width + x) * 4u;
-            for (uint32_t channel = 0; channel < 4; ++channel) {
+    const uint32_t width = next->width;
+    const uint32_t height = next->height;
+    for (uint32_t channel = 0; channel < 4u; ++channel) {
+        if (previous->width == 1u || previous->height == 1u) {
+            const uint32_t length = width * height;
+            for (uint32_t at = 0; at < length; ++at) {
+                const uint8_t *source = previous->bgra + (size_t)(at * 2u) * 4u + channel;
+                if ((previous->width * previous->height & 1u) != 0u) {
+                    const uint32_t first = length - at;
+                    const uint32_t middle = length;
+                    const uint32_t last = 1u + at;
+                    const uint32_t divisor = 2u * length + 1u;
+                    const uint32_t total = first * source[0] + middle * source[4] +
+                        last * source[8];
+                    next->bgra[(size_t)at * 4u + channel] =
+                        (uint8_t)((total + divisor / 2u) / divisor);
+                } else {
+                    next->bgra[(size_t)at * 4u + channel] =
+                        (uint8_t)(((uint32_t)source[0] + source[4] + 1u) / 2u);
+                }
+            }
+            continue;
+        }
+        for (uint32_t y = 0; y < height; ++y) {
+            const uint32_t y_weights[3] = { height - y, height, 1u + y };
+            const uint32_t y_samples = (previous->height & 1u) != 0u ? 3u : 2u;
+            for (uint32_t x = 0; x < width; ++x) {
+                const uint32_t x_weights[3] = { width - x, width, 1u + x };
+                const uint32_t x_samples = (previous->width & 1u) != 0u ? 3u : 2u;
+                const uint32_t divisor =
+                    ((previous->width & 1u) != 0u ? previous->width : 2u) *
+                    ((previous->height & 1u) != 0u ? previous->height : 2u);
                 uint32_t total = 0;
-                for (uint32_t dy = 0; dy < sample_height; ++dy) {
-                    for (uint32_t dx = 0; dx < sample_width; ++dx) {
+                for (uint32_t dy = 0; dy < y_samples; ++dy) {
+                    for (uint32_t dx = 0; dx < x_samples; ++dx) {
+                        const uint32_t wx = x_samples == 3u ? x_weights[dx] : 1u;
+                        const uint32_t wy = y_samples == 3u ? y_weights[dy] : 1u;
                         const size_t source_at =
-                            ((size_t)(y * sample_height + dy) * previous->width +
-                                x * sample_width + dx) * 4u;
-                        total += previous->bgra[source_at + channel];
+                            ((size_t)(y * 2u + dy) * previous->width + x * 2u + dx) * 4u;
+                        total += wx * wy * previous->bgra[source_at + channel];
                     }
                 }
-                next->bgra[output_at + channel] = (uint8_t)((total + divisor / 2u) / divisor);
+                next->bgra[((size_t)y * width + x) * 4u + channel] =
+                    (uint8_t)((total + divisor / 2u) / divisor);
             }
         }
+    }
+}
+
+static float bessel_zero(float value) {
+    const float half = 0.5f * value;
+    float sum = 1.0f;
+    float power = 1.0f;
+    float delta = 1.0f;
+    int k = 0;
+    while (delta > sum * 1e-6f) {
+        ++k;
+        power *= half / (float)k;
+        delta = power * power;
+        sum += delta;
+    }
+    return sum;
+}
+
+static float sinc_value(float value) {
+    if (fabsf(value) < 1e-6f) {
+        return 1.0f + value * value * (-1.0f / 6.0f + value * value / 120.0f);
+    }
+    return sinf(value) / value;
+}
+
+static float kaiser_value(float position) {
+    const float pi = 3.14159265358979323846f;
+    const float ratio = position / 3.0f;
+    const float inside = 1.0f - ratio * ratio;
+    return inside < 0.0f
+        ? 0.0f
+        : sinc_value(pi * position) * bessel_zero(4.0f * sqrtf(inside)) / bessel_zero(4.0f);
+}
+
+static uint32_t repeat_index(int index, uint32_t length) {
+    int result = index % (int)length;
+    return (uint32_t)(result < 0 ? result + (int)length : result);
+}
+
+static int kaiser_weights(
+    uint32_t source_length,
+    uint32_t destination_length,
+    uint32_t destination,
+    int *left,
+    float weights[20]
+) {
+    const float scale = (float)destination_length / (float)source_length;
+    const float inverse_scale = 1.0f / scale;
+    const float width = 3.0f * inverse_scale;
+    const int window = (int)ceilf(width * 2.0f) + 1;
+    const float center = (0.5f + (float)destination) * inverse_scale;
+    const int first = (int)floorf(center - width);
+    float total = 0.0f;
+
+    for (int sample = 0; sample < window; ++sample) {
+        double integrated = 0.0;
+        for (int sub = 0; sub < 32; ++sub) {
+            const float position =
+                ((float)(first + sample) - center + ((float)sub + 0.5f) / 32.0f) * scale;
+            integrated += kaiser_value(position);
+        }
+        weights[sample] = (float)(integrated / 32.0);
+        total += weights[sample];
+    }
+    for (int sample = 0; sample < window; ++sample) {
+        weights[sample] /= total;
+    }
+    *left = first;
+    return window;
+}
+
+static float kaiser_sample_float(
+    const float *source,
+    uint32_t source_length,
+    uint32_t destination_length,
+    uint32_t destination,
+    size_t stride
+) {
+    float weights[20];
+    int left;
+    const int window = kaiser_weights(
+        source_length, destination_length, destination, &left, weights);
+    float result = 0.0f;
+    for (int sample = 0; sample < window; ++sample) {
+        result += weights[sample] *
+            source[(size_t)repeat_index(left + sample, source_length) * stride];
+    }
+    return result;
+}
+
+static float kaiser_sample_bytes(
+    const uint8_t *source,
+    uint32_t source_length,
+    uint32_t destination_length,
+    uint32_t destination,
+    size_t stride
+) {
+    float weights[20];
+    int left;
+    const int window = kaiser_weights(
+        source_length, destination_length, destination, &left, weights);
+    float result = 0.0f;
+    for (int sample = 0; sample < window; ++sample) {
+        result += weights[sample] *
+            source[(size_t)repeat_index(left + sample, source_length) * stride];
+    }
+    return result;
+}
+
+static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
+    const size_t intermediate_count = (size_t)next->width * previous->height;
+    float *intermediate = malloc(intermediate_count * sizeof *intermediate);
+    if (intermediate == NULL) return 0;
+
+    for (uint32_t channel = 0; channel < 4u; ++channel) {
+        for (uint32_t y = 0; y < previous->height; ++y) {
+            for (uint32_t x = 0; x < next->width; ++x) {
+                float value;
+                if (previous->width == next->width) {
+                    value = (float)previous->bgra[((size_t)y * previous->width + x) * 4u + channel];
+                } else {
+                    value = kaiser_sample_bytes(
+                        previous->bgra + (size_t)y * previous->width * 4u + channel,
+                        previous->width, next->width, x, 4u);
+                }
+                intermediate[(size_t)y * next->width + x] = value;
+            }
+        }
+        for (uint32_t y = 0; y < next->height; ++y) {
+            for (uint32_t x = 0; x < next->width; ++x) {
+                float value = previous->height == next->height
+                    ? intermediate[(size_t)y * next->width + x]
+                    : kaiser_sample_float(intermediate + x, previous->height, next->height, y,
+                        next->width);
+                if (value < 0.0f) value = 0.0f;
+                if (value > 255.0f) value = 255.0f;
+                next->bgra[((size_t)y * next->width + x) * 4u + channel] =
+                    (uint8_t)floorf(value + 0.5f);
+            }
+        }
+    }
+    free(intermediate);
+    return 1;
+}
+
+static void normalize_mip(generated_mip *mip) {
+    for (size_t at = 0; at < mip->bytes; at += 4u) {
+        float red = (2.0f * mip->bgra[at + 2u] - 254.0f) / 255.0f;
+        float green = (2.0f * mip->bgra[at + 1u] - 254.0f) / 255.0f;
+        float blue = (2.0f * mip->bgra[at] - 254.0f) / 255.0f;
+        const float length = sqrtf(red * red + green * green + blue * blue);
+        if (length > 1e-8f) {
+            red /= length;
+            green /= length;
+            blue /= length;
+        }
+        mip->bgra[at + 2u] = (uint8_t)floorf((red * 0.5f + 0.5f) * 255.0f + 0.5f);
+        mip->bgra[at + 1u] = (uint8_t)floorf((green * 0.5f + 0.5f) * 255.0f + 0.5f);
+        mip->bgra[at] = (uint8_t)floorf((blue * 0.5f + 0.5f) * 255.0f + 0.5f);
     }
 }
 
@@ -341,38 +528,94 @@ static edds_status generate_mips(
     void *context,
     edds_error *error
 ) {
-    *count = mip_count(source->width, source->height, profile->generate_mips);
-    memset(mips, 0, sizeof(*mips) * *count);
+    if (profile->contains_mips && source->supplied_mip_count !=
+            mip_count(source->width, source->height, 1)) {
+        edds_fail(error, "unsupported-dds-mip-layout",
+            "ContainsMips=true requires one complete largest-to-smallest DDS mip chain.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    const uint32_t complete_count = profile->contains_mips
+        ? source->supplied_mip_count
+        : mip_count(source->width, source->height, profile->generate_mips);
+    if (complete_count == 0 || profile->remove_mips >= complete_count) {
+        edds_fail(error, "remove-mips-out-of-range",
+            "RemoveMips=%u would remove a missing level or the complete mip chain.",
+            profile->remove_mips);
+        return EDDS_INVALID_INPUT;
+    }
+    *count = complete_count;
+    memset(mips, 0, sizeof(*mips) * complete_count);
     mips[0].width = source->width;
     mips[0].height = source->height;
-    for (uint32_t at = 0; at < *count; ++at) {
+    for (uint32_t at = 0; at < complete_count; ++at) {
         if (cancelled != NULL && cancelled(context)) {
-            free_mips(mips, *count);
+            free_mips(mips, complete_count);
             edds_fail(error, "cancelled", "The conversion was cancelled.");
             return EDDS_CANCELLED;
         }
-        if (at > 0) {
+        if (profile->contains_mips) {
+            mips[at].width = source->supplied_mips[at].width;
+            mips[at].height = source->supplied_mips[at].height;
+        } else if (at > 0) {
             mips[at].width = mips[at - 1u].width > 1 ? mips[at - 1u].width / 2u : 1u;
             mips[at].height = mips[at - 1u].height > 1 ? mips[at - 1u].height / 2u : 1u;
         }
         if (!mip_bytes(mips[at].width, mips[at].height, &mips[at].bytes)) {
-            free_mips(mips, *count);
+            free_mips(mips, complete_count);
             edds_fail(error, "mip-size-limit", "A generated mip exceeds the decoded-image limit.");
             return EDDS_INVALID_INPUT;
         }
         mips[at].bgra = malloc(mips[at].bytes);
         if (mips[at].bgra == NULL) {
-            free_mips(mips, *count);
+            free_mips(mips, complete_count);
             edds_fail(error, "allocation-failed", "Memory for the mip chain could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
-        if (at == 0) {
-            source_mip(source, &mips[at]);
+        if (profile->contains_mips) {
+            rgba_mip(source->supplied_mips[at].rgba, source->has_alpha, &mips[at]);
+        } else if (at == 0) {
+            rgba_mip(source->rgba, source->has_alpha, &mips[at]);
         } else {
-            box_mip(&mips[at - 1u], &mips[at]);
+            if (profile->mipmap_function == EDDS_MIPMAP_FILTER &&
+                profile->mipmap_filter == EDDS_FILTER_KAISER) {
+                if (!kaiser_mip(&mips[at - 1u], &mips[at])) {
+                    free_mips(mips, complete_count);
+                    edds_fail(error, "allocation-failed",
+                        "Memory for Kaiser mip filtering could not be allocated.");
+                    return EDDS_INTERNAL_FAILURE;
+                }
+            } else {
+                box_mip(&mips[at - 1u], &mips[at]);
+            }
+        }
+        if ((profile->normalize && (profile->contains_mips || at == 0)) ||
+            (at > 0 && !profile->contains_mips &&
+             profile->mipmap_function == EDDS_MIPMAP_NORMALIZE)) {
+            normalize_mip(&mips[at]);
         }
     }
+    if (profile->remove_mips != 0) {
+        const uint32_t removed = profile->remove_mips;
+        for (uint32_t at = 0; at < removed; ++at) {
+            free(mips[at].bgra);
+            mips[at].bgra = NULL;
+        }
+        memmove(mips, mips + removed, sizeof(*mips) * (complete_count - removed));
+        memset(mips + complete_count - removed, 0, sizeof(*mips) * removed);
+        *count = complete_count - removed;
+    }
     return EDDS_OK;
+}
+
+static void free_source(edds_decoded_source *source) {
+    if (source->supplied_mip_count != 0) {
+        for (uint32_t level = 0; level < source->supplied_mip_count; ++level) {
+            free(source->supplied_mips[level].rgba);
+        }
+    } else {
+        free(source->rgba);
+    }
+    memset(source, 0, sizeof *source);
 }
 
 /** The DXGI format a DX10 header names, or 0 for a format that has a legacy descriptor. */
@@ -485,7 +728,13 @@ void edds_default_profile(edds_profile *profile) {
         profile->compress_threshold = 80;
         profile->conversion = EDDS_CONVERSION_NONE;
         profile->conversion_quality = EDDS_QUALITY_SCALE;
+        profile->remove_mips = 0;
+        profile->contains_mips = 0;
         profile->generate_mips = 1;
+        profile->normalize = 0;
+        profile->mipmap_function = EDDS_MIPMAP_FILTER;
+        profile->mipmap_filter = EDDS_FILTER_BOX;
+        profile->tiled_texture = 1;
     }
 }
 
@@ -497,9 +746,52 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
     }
     if (profile->format_compress < EDDS_COMPRESS_COPY ||
         profile->format_compress > EDDS_COMPRESS_BEST || profile->compress_threshold > 100u ||
-        (profile->generate_mips != 0 && profile->generate_mips != 1)) {
+        profile->remove_mips > 14u ||
+        (profile->contains_mips != 0 && profile->contains_mips != 1) ||
+        (profile->generate_mips != 0 && profile->generate_mips != 1) ||
+        (profile->normalize != 0 && profile->normalize != 1)) {
         edds_fail(error, "unsupported-setting",
             "The conversion profile is outside the supported Workbench slice.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->contains_mips && profile->generate_mips) {
+        edds_fail(error, "unsupported-combination",
+            "Workbench settings ContainsMips=true and GenerateMips=true are mutually exclusive.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->mipmap_function == EDDS_MIPMAP_COLOR_NOISE) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting MipMapFunction=ColorNoise is recognized but unsupported.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->mipmap_function < EDDS_MIPMAP_FILTER ||
+        profile->mipmap_function > EDDS_MIPMAP_COLOR_NOISE) {
+        edds_fail(error, "unsupported-setting", "Workbench setting MipMapFunction is unknown.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->mipmap_filter == EDDS_FILTER_TRIANGLE) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting MipMapFilter=Triangle is recognized but unsupported.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->mipmap_filter < EDDS_FILTER_BOX || profile->mipmap_filter > EDDS_FILTER_TRIANGLE) {
+        edds_fail(error, "unsupported-setting", "Workbench setting MipMapFilter is unknown.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (!profile->generate_mips && profile->mipmap_function != EDDS_MIPMAP_FILTER) {
+        edds_fail(error, "unsupported-combination",
+            "Workbench setting MipMapFunction is active only while GenerateMips=true.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if ((!profile->generate_mips || profile->mipmap_function != EDDS_MIPMAP_FILTER) &&
+        profile->mipmap_filter != EDDS_FILTER_BOX) {
+        edds_fail(error, "unsupported-combination",
+            "Workbench setting MipMapFilter is active only for GenerateMips=true and MipMapFunction=Filter.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (!profile->tiled_texture) {
+        edds_fail(error, "unsupported-setting",
+            "Workbench setting TiledTexture=false is recognized but unsupported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
     conversion = edds_conversion_capability_of(profile->conversion);
@@ -555,10 +847,17 @@ static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
     if (!source->has_alpha) {
         return EDDS_ALPHA_ABSENT;
     }
-    for (size_t at = 3; at < (size_t)source->width * source->height * 4u; at += 4u) {
-        if (source->rgba[at] != 255u) {
-            return EDDS_ALPHA_USED;
+    if (source->supplied_mip_count > 0u) {
+        for (uint32_t level = 0; level < source->supplied_mip_count; ++level) {
+            const edds_decoded_mip *mip = &source->supplied_mips[level];
+            for (size_t at = 3; at < (size_t)mip->width * mip->height * 4u; at += 4u) {
+                if (mip->rgba[at] != 255u) return EDDS_ALPHA_USED;
+            }
         }
+        return EDDS_ALPHA_OPAQUE;
+    }
+    for (size_t at = 3; at < (size_t)source->width * source->height * 4u; at += 4u) {
+        if (source->rgba[at] != 255u) return EDDS_ALPHA_USED;
     }
     return EDDS_ALPHA_OPAQUE;
 }
@@ -574,7 +873,7 @@ edds_status edds_convert(
     void *progress_context,
     edds_error *error
 ) {
-    edds_decoded_source image = { 0, 0, 0, NULL };
+    edds_decoded_source image = { 0 };
     generated_mip mips[EDDS_MAX_MIPS];
     edds_pixel_format format;
     uint32_t count = 0;
@@ -592,6 +891,11 @@ edds_status edds_convert(
             "The source format is outside the supported Workbench resource classes.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
+    if (source_format != EDDS_SOURCE_DDS && profile->contains_mips) {
+        edds_fail(error, "unsupported-combination",
+            "ContainsMips=true requires a DDS source with a controlled supplied-mip layout.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
     /*
      * Deliberately without a default: the capability table above has already refused anything
      * outside the enum, so a format added to the contract with no decoder behind it is a build
@@ -603,6 +907,7 @@ edds_status edds_convert(
         case EDDS_SOURCE_TGA: status = edds_decode_tga(source, &image, error); break;
         case EDDS_SOURCE_JPG: status = edds_decode_jpeg(source, &image, error); break;
         case EDDS_SOURCE_TIFF: status = edds_decode_tiff(source, &image, error); break;
+        case EDDS_SOURCE_DDS: status = edds_decode_dds(source, &image, error); break;
     }
     if (status != EDDS_OK) {
         return status;
@@ -624,6 +929,6 @@ edds_status edds_convert(
         status = write_edds(output, format, mips, count, error);
     }
     free_mips(mips, count);
-    free(image.rgba);
+    free_source(&image);
     return status;
 }

@@ -20,12 +20,13 @@ import {
   textureSourceFormatOfWire,
 } from '../../src/mods/textureSources';
 
-test('the contract is the four resource classes DayZ Workbench registers, and nothing else', () => {
+test('the contract includes DDS only under the resource class Workbench registers', () => {
   assert.deepEqual(TEXTURE_SOURCES, [
     { format: 'PNG', extension: 'png', wire: 'png' },
     { format: 'TGA', extension: 'tga', wire: 'tga' },
     { format: 'JPG', extension: 'jpg', wire: 'jpg' },
     { format: 'TIFF', extension: 'tiff', wire: 'tiff' },
+    { format: 'DDS', extension: 'dds', wire: 'dds' },
   ]);
 });
 
@@ -34,6 +35,7 @@ test('an extension names its format however it was typed', () => {
   assert.equal(textureSourceFormatOf('C:\\mod\\Mod\\icon.TiFf'), 'TIFF');
   assert.equal(textureSourceFormatOf('C:\\mod\\Mod\\icon.png'), 'PNG');
   assert.equal(textureSourceFormatOf('C:\\mod\\Mod\\Icon.Tga'), 'TGA');
+  assert.equal(textureSourceFormatOf('C:\\mod\\Mod\\supplied.DdS'), 'DDS');
 });
 
 test('an alias is not a resource class, however much it reads like one', () => {
@@ -48,15 +50,16 @@ test('an alias is not a resource class, however much it reads like one', () => {
 test('the native wire name maps back to the format a plan is written in', () => {
   assert.equal(textureSourceFormatOfWire('tiff'), 'TIFF');
   assert.equal(textureSourceFormatOfWire('jpg'), 'JPG');
+  assert.equal(textureSourceFormatOfWire('dds'), 'DDS');
   assert.equal(textureSourceFormatOfWire('jpeg'), undefined);
   assert.equal(textureSourceFormatOfWire('tif'), undefined);
 });
 
 test('refusals name the whole contract rather than a remembered pair', () => {
-  assert.equal(TEXTURE_SOURCE_EXTENSIONS, '.png, .tga, .jpg and .tiff');
-  assert.equal(TEXTURE_SOURCE_EXTENSIONS_EITHER, '.png, .tga, .jpg or .tiff');
-  assert.equal(TEXTURE_SOURCE_REFUSAL, 'Only .png, .tga, .jpg and .tiff source images are supported.');
-  assert.equal(TEXTURE_PRIMARY_REFUSAL, 'The primary source must be a PNG, TGA, JPG or TIFF image.');
+  assert.equal(TEXTURE_SOURCE_EXTENSIONS, '.png, .tga, .jpg, .tiff and .dds');
+  assert.equal(TEXTURE_SOURCE_EXTENSIONS_EITHER, '.png, .tga, .jpg, .tiff or .dds');
+  assert.equal(TEXTURE_SOURCE_REFUSAL, 'Only .png, .tga, .jpg, .tiff and .dds source images are supported.');
+  assert.equal(TEXTURE_PRIMARY_REFUSAL, 'The primary source must be a PNG, TGA, JPG, TIFF or DDS image.');
 });
 
 /**

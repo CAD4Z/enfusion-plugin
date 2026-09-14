@@ -1,11 +1,11 @@
 import type { EddsConversion, EddsInspection, EddsPreview } from './edds';
-import type {
-  TextureCompression,
-  TextureConversionPlan,
-  TextureProfile,
+import {
+  withActiveMipSettings,
+  type TextureConversionPlan,
+  type TextureProfile,
+  type TextureSourceFormat,
 } from './textureConversion';
 import {
-  type TextureConversion,
   isTextureQuality,
   textureConversionCapabilityOf,
 } from './textureConversions';
@@ -33,7 +33,10 @@ export interface TextureProfileField {
  * a value other than the default would be refused before any preview. The editor says that rather
  * than leaving a live control that quietly changes nothing.
  */
-export function textureProfileFieldsOf(profile: TextureProfile): readonly TextureProfileField[] {
+export function textureProfileFieldsOf(
+  profile: TextureProfile,
+  sourceFormat: TextureSourceFormat = 'PNG',
+): readonly TextureProfileField[] {
   const conversion = textureConversionCapabilityOf(profile.Conversion);
   return [
     {
@@ -43,6 +46,7 @@ export function textureProfileFieldsOf(profile: TextureProfile): readonly Textur
     },
     { key: 'FormatCompress', editable: true },
     { key: 'CompressTreshold', editable: true },
+    { key: 'RemoveMips', editable: true },
     { key: 'Conversion', editable: true },
     conversion?.usesQuality === true
       ? { key: 'ConversionQuality', editable: true }
@@ -56,17 +60,37 @@ export function textureProfileFieldsOf(profile: TextureProfile): readonly Textur
       editable: false,
       reason: 'This conversion slice supports None only.',
     },
-    { key: 'GenerateMips', editable: true },
-    {
-      key: 'MipMapFunction',
-      editable: false,
-      reason: 'GenerateMips uses Filter in this conversion slice.',
-    },
-    {
-      key: 'MipMapFilter',
-      editable: false,
-      reason: 'MipMapFunction=Filter uses Box in this conversion slice.',
-    },
+    sourceFormat === 'DDS'
+      ? { key: 'ContainsMips', editable: true }
+      : {
+          key: 'ContainsMips',
+          editable: false,
+          reason: 'ContainsMips is available only for a DDS source.',
+        },
+    profile.ContainsMips
+      ? {
+          key: 'GenerateMips',
+          editable: false,
+          reason: 'GenerateMips is disabled while ContainsMips supplies the chain.',
+        }
+      : { key: 'GenerateMips', editable: true },
+    { key: 'Normalize', editable: true },
+    profile.GenerateMips
+      ? { key: 'MipMapFunction', editable: true }
+      : {
+          key: 'MipMapFunction',
+          editable: false,
+          reason: 'MipMapFunction applies only while GenerateMips is enabled.',
+        },
+    profile.GenerateMips && profile.MipMapFunction === 'Filter'
+      ? { key: 'MipMapFilter', editable: true }
+      : {
+          key: 'MipMapFilter',
+          editable: false,
+          reason: profile.GenerateMips
+            ? 'MipMapFilter applies only to MipMapFunction=Filter.'
+            : 'MipMapFilter applies only while GenerateMips is enabled.',
+        },
     {
       key: 'TiledTexture',
       editable: false,
@@ -105,34 +129,30 @@ export type TextureAuthoringState =
       readonly rendered: TextureRendering;
     };
 
+type EditableProfileKey =
+  | 'FormatCompress'
+  | 'CompressTreshold'
+  | 'RemoveMips'
+  | 'ContainsMips'
+  | 'GenerateMips'
+  | 'Normalize'
+  | 'MipMapFunction'
+  | 'MipMapFilter'
+  | 'Conversion'
+  | 'ConversionQuality';
+
+type TextureProfileChange = {
+  readonly [Key in EditableProfileKey]: {
+    readonly kind: 'change-profile';
+    readonly field: Key;
+    readonly value: TextureProfile[Key];
+  };
+}[EditableProfileKey];
+
 export type TextureAuthoringEvent =
   | { readonly kind: 'loaded'; readonly plan: TextureConversionPlan }
   | { readonly kind: 'load-failed'; readonly reason: string }
-  | {
-      readonly kind: 'change-profile';
-      readonly field: 'FormatCompress';
-      readonly value: TextureCompression;
-    }
-  | {
-      readonly kind: 'change-profile';
-      readonly field: 'CompressTreshold';
-      readonly value: number;
-    }
-  | {
-      readonly kind: 'change-profile';
-      readonly field: 'GenerateMips';
-      readonly value: boolean;
-    }
-  | {
-      readonly kind: 'change-profile';
-      readonly field: 'Conversion';
-      readonly value: TextureConversion;
-    }
-  | {
-      readonly kind: 'change-profile';
-      readonly field: 'ConversionQuality';
-      readonly value: number;
-    }
+  | TextureProfileChange
   | { readonly kind: 'draft-rendered'; readonly revision: number; readonly rendered: TextureRendering }
   | { readonly kind: 'draft-failed'; readonly revision: number; readonly reason: string }
   | { readonly kind: 'run' }
@@ -241,6 +261,15 @@ function changedProfile(
   if (event.field === 'CompressTreshold' && (event.value < 0 || event.value > 100)) {
     return unchanged(state);
   }
+  if (
+    event.field === 'RemoveMips' &&
+    (!Number.isInteger(event.value) || event.value < 0 || event.value > 14)
+  ) {
+    return unchanged(state);
+  }
+  if (event.field === 'ContainsMips' && state.plan.sourceFormat !== 'DDS') {
+    return unchanged(state);
+  }
   if (event.field === 'ConversionQuality' && !isTextureQuality(event.value)) {
     return unchanged(state);
   }
@@ -258,12 +287,14 @@ function changedProfile(
     return unchanged(state);
   }
 
-  const draft: TextureProfile = {
+  const draft: TextureProfile = withActiveMipSettings({
     ...state.draft,
     [event.field]: event.value,
+    /* Supplied and generated chains are mutually exclusive in every public profile seam. */
+    ...(event.field === 'ContainsMips' && event.value ? { GenerateMips: false } : {}),
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
-  };
+  });
   const revision = state.revision + 1;
   const plan: ReadyPlan = { ...state.plan, profile: draft };
   return {

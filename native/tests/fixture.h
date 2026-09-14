@@ -22,6 +22,22 @@ test_bytes fixture_odd_fourcc(void);
  * whose fourth colour a BC1 decoder would turn into a hole.
  */
 test_bytes fixture_dxt5_low_endpoints(void);
+/** A standard DDS, not ENF1, whose three levels carry independently chosen pixels. */
+test_bytes fixture_dds_bgrx_mips(void);
+/** The same standard DDS with only its top level, suitable for generated-mip coverage. */
+test_bytes fixture_dds_bgrx_top(void);
+/** Controlled compressed legacy and DX10 source-header paths. */
+test_bytes fixture_dds_dxt1_top(void);
+test_bytes fixture_dds_dxt5_top(void);
+test_bytes fixture_dds_bgra_alpha_mips(void);
+test_bytes fixture_dds_dx10_r8_mips(void);
+/** A controlled four-by-four, top-only DX10 DDS for one exact payload format. */
+test_bytes fixture_dds_dx10_top(
+    uint32_t dxgi_format,
+    const uint8_t *payload,
+    size_t payload_size,
+    uint32_t bytes_per_pixel
+);
 test_bytes fixture_integer_overflow(void);
 test_bytes fixture_png_rgba(void);
 test_bytes fixture_png_rgba_gamma(void);

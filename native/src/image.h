@@ -12,12 +12,21 @@
 #include <stdint.h>
 #include <stdio.h>
 
+typedef struct edds_decoded_mip {
+    uint32_t width;
+    uint32_t height;
+    uint8_t *rgba;
+} edds_decoded_mip;
+
 /** One decoded source image, always straight RGBA8 with alpha declared by the source itself. */
 typedef struct edds_decoded_source {
     uint32_t width;
     uint32_t height;
     int has_alpha;
     uint8_t *rgba;
+    /** Zero for ordinary images; DDS supplies a complete chain including level zero. */
+    uint32_t supplied_mip_count;
+    edds_decoded_mip supplied_mips[EDDS_MAX_MIPS];
 } edds_decoded_source;
 
 void edds_fail(edds_error *error, const char *code, const char *format, ...);
@@ -43,5 +52,6 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
 edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error *error);
 edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error *error);
 edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error *error);
+edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error *error);
 
 #endif

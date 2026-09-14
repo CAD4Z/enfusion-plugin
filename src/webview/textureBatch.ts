@@ -94,7 +94,12 @@ function render(state: TextureBatchAuthoringState): void {
   const sidebar = element('aside', 'batch-sidebar');
   const heading = document.createElement('h2');
   heading.textContent = 'Common texture profile';
-  sidebar.append(heading, profileForm(state.draft, state.kind !== 'authoring'));
+  const allDds = state.plan.jobs.length > 0 &&
+    state.plan.jobs.every((job) => job.sourceFormat === 'DDS');
+  sidebar.append(
+    heading,
+    profileForm(state.draft, allDds ? 'DDS' : 'PNG', state.kind !== 'authoring'),
+  );
   if (state.kind === 'running' || state.kind === 'result') {
     const overall = document.createElement('progress');
     overall.className = 'overall-progress';
@@ -126,12 +131,21 @@ function render(state: TextureBatchAuthoringState): void {
   root.replaceChildren(list, workspace, sidebar);
 }
 
-function profileForm(profile: TextureProfile, locked: boolean): HTMLElement {
+function profileForm(
+  profile: TextureProfile,
+  sourceFormat: 'PNG' | 'DDS',
+  locked: boolean,
+): HTMLElement {
   const form = element('div', 'profile-form');
-  form.append(...profileFormControls(profile, locked, {
+  form.append(...profileFormControls(profile, sourceFormat, locked, {
     compression: (value) => host.postMessage({ type: 'change-compression', value }),
     threshold: (value) => host.postMessage({ type: 'change-threshold', value }),
+    removeMips: (value) => host.postMessage({ type: 'change-remove-mips', value }),
+    containsMips: (value) => host.postMessage({ type: 'change-contains-mips', value }),
     mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
+    mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
+    mipFilter: (value) => host.postMessage({ type: 'change-mipmap-filter', value }),
     conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
     quality: (value) => host.postMessage({ type: 'change-quality', value }),
   }));

@@ -68,7 +68,7 @@ function render(next: TextureAuthoringState): void {
   }
 
   const properties = element('aside', 'properties');
-  properties.append(heading('Texture profile'), profileForm(profile, locked));
+  properties.append(heading('Texture profile'), profileForm(profile, plan.sourceFormat, locked));
   const action = document.createElement('button');
   action.type = 'button';
   action.className = 'primary-action';
@@ -142,12 +142,21 @@ function toolbar(
   return bar;
 }
 
-function profileForm(profile: TextureProfile, locked: boolean): HTMLElement {
+function profileForm(
+  profile: TextureProfile,
+  sourceFormat: 'PNG' | 'TGA' | 'JPG' | 'TIFF' | 'DDS',
+  locked: boolean,
+): HTMLElement {
   const form = element('div', 'profile-form');
-  form.append(...profileFormControls(profile, locked, {
+  form.append(...profileFormControls(profile, sourceFormat, locked, {
     compression: (value) => host.postMessage({ type: 'change-compression', value }),
     threshold: (value) => host.postMessage({ type: 'change-threshold', value }),
+    removeMips: (value) => host.postMessage({ type: 'change-remove-mips', value }),
+    containsMips: (value) => host.postMessage({ type: 'change-contains-mips', value }),
     mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
+    mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
+    mipFilter: (value) => host.postMessage({ type: 'change-mipmap-filter', value }),
     conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
     quality: (value) => host.postMessage({ type: 'change-quality', value }),
   }));

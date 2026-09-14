@@ -168,7 +168,7 @@
         },
         {
           "command": "enfusion.texture.convert",
-          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff)$/i",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff|dds)$/i",
           "group": "navigation@20"
         }
       ]

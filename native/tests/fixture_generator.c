@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-enum { EDDS_FIXTURES = 5, SOURCE_FIXTURES = 6 };
+enum { EDDS_FIXTURES = 5, SOURCE_FIXTURES = 7 };
 
 int main(int argc, char **argv) {
     test_bytes fixtures[EDDS_FIXTURES + SOURCE_FIXTURES];
@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     int produced;
     int ok;
     if (argc != argc_without_sources && argc != argc_with_sources) {
-        fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF GPU_TGA GPU_FLAT_TGA]\n",
+        fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF GPU_TGA GPU_FLAT_TGA DDS]\n",
             stderr);
         return 2;
     }
@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
         fixtures[8] = fixture_tiff_rgb();
         fixtures[9] = fixture_tga_gpu_gradient();
         fixtures[10] = fixture_tga_gpu_flat();
+        fixtures[11] = fixture_dds_bgrx_mips();
         produced = EDDS_FIXTURES + SOURCE_FIXTURES;
     }
     ok = 1;

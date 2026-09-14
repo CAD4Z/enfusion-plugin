@@ -716,9 +716,58 @@ done:
     return ok;
 }
 
+static int mip_equals(
+    const bytes *file,
+    uint32_t level,
+    uint32_t width,
+    uint32_t height,
+    uint32_t mips,
+    const uint8_t *expected,
+    size_t expected_size
+) {
+    bytes decoded = { NULL, 0 };
+    const int ok = selected_mip(file, level, width, height, mips, "COPY", &decoded) &&
+        decoded.size == expected_size && memcmp(decoded.data, expected, expected_size) == 0;
+    free(decoded.data);
+    return ok;
+}
+
+/** Exact bytes for the controlled 3x2 TGA after each new mip-processing stage. */
+static int verify_mip_modes(const char *kaiser_path, const char *pre_path, const char *post_path) {
+    static const uint8_t source[] = {
+        30, 20, 10, 255, 60, 50, 40, 255, 90, 80, 70, 255,
+        120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
+    };
+    static const uint8_t kaiser_smallest[] = { 105, 95, 85, 255 };
+    static const uint8_t pre_normalized[] = {
+        61, 54, 47, 255, 64, 54, 45, 255, 70, 55, 40, 255,
+        100, 61, 22, 255, 238, 190, 142, 255, 217, 200, 183, 255
+    };
+    static const uint8_t post_normalized_smallest[] = { 78, 56, 34, 255 };
+    bytes kaiser = { NULL, 0 };
+    bytes pre = { NULL, 0 };
+    bytes post = { NULL, 0 };
+    const int loaded = load(kaiser_path, &kaiser) && load(pre_path, &pre) && load(post_path, &post);
+    const int ok = loaded &&
+        mip_equals(&kaiser, 0, 3, 2, 2, source, sizeof source) &&
+        mip_equals(&kaiser, 1, 3, 2, 2, kaiser_smallest, sizeof kaiser_smallest) &&
+        mip_equals(&pre, 0, 3, 2, 1, pre_normalized, sizeof pre_normalized) &&
+        mip_equals(&post, 0, 3, 2, 2, source, sizeof source) &&
+        mip_equals(&post, 1, 3, 2, 2,
+            post_normalized_smallest, sizeof post_normalized_smallest);
+    free(kaiser.data);
+    free(pre.data);
+    free(post.data);
+    if (!ok) fputs("independent reader rejected a mip-mode golden output\n", stderr);
+    return ok;
+}
+
 int main(int argc, char **argv) {
     if (argc == 6 && strcmp(argv[1], "--gpu") == 0) {
         return verify_gpu(argv[2], argv[3], argv[4], (unsigned)strtoul(argv[5], NULL, 10)) ? 0 : 1;
+    }
+    if (argc == 5 && strcmp(argv[1], "--mips") == 0) {
+        return verify_mip_modes(argv[2], argv[3], argv[4]) ? 0 : 1;
     }
     static const uint8_t copy_expected[] = { 30, 20, 10, 40 };
     static const uint8_t lz4_expected[] = { 3, 2, 1, 0, 6, 5, 4, 17 };
@@ -729,9 +778,11 @@ int main(int argc, char **argv) {
     bytes tga = { NULL, 0 };
     bytes jpg = { NULL, 0 };
     bytes tiff = { NULL, 0 };
+    bytes dds = { NULL, 0 };
     int ok;
-    if (argc != 3 && argc != 7) {
-        fputs("usage: edds-reference-reader COPY LZ4 [PNG_RESULT TGA_RESULT JPG_RESULT TIFF_RESULT]\n", stderr);
+    if (argc != 3 && argc != 8) {
+        fputs("usage: edds-reference-reader COPY LZ4 [PNG_RESULT TGA_RESULT JPG_RESULT TIFF_RESULT DDS_RESULT]\n"
+            "       edds-reference-reader --mips KAISER PRE_NORMALIZE POST_NORMALIZE\n", stderr);
         return 2;
     }
     if (!load(argv[1], &copy) || !load(argv[2], &lz4)) {
@@ -751,12 +802,16 @@ int main(int argc, char **argv) {
     free(decoded.data);
     decoded.data = NULL;
     decoded.size = 0;
-    if (argc == 7) {
+    if (argc == 8) {
         static const uint8_t png_level_zero[] = {
             30, 20, 10, 40, 70, 60, 50, 80, 110, 100, 90, 120,
             130, 120, 110, 140, 170, 160, 150, 180, 210, 200, 190, 220
         };
-        static const uint8_t png_level_one[] = { 100, 90, 80, 110 };
+        static const uint8_t png_level_one[] = { 120, 110, 100, 130 };
+        static const uint8_t dds_level_zero[] = {
+            33, 22, 11, 255, 66, 55, 44, 255
+        };
+        static const uint8_t dds_level_one[] = { 99, 88, 77, 255 };
         static const uint8_t three_by_two_level_zero[] = {
             30, 20, 10, 255, 60, 50, 40, 255, 90, 80, 70, 255,
             120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
@@ -813,6 +868,19 @@ int main(int argc, char **argv) {
             decoded.size == sizeof three_by_two_level_zero &&
             memcmp(decoded.data, three_by_two_level_zero, sizeof three_by_two_level_zero) == 0;
         free(decoded.data);
+        decoded.data = NULL;
+        decoded.size = 0;
+        ok = ok && load(argv[7], &dds) &&
+            selected_mip(&dds, 0, 2, 1, 2, "COPY", &decoded) &&
+            decoded.size == sizeof dds_level_zero &&
+            memcmp(decoded.data, dds_level_zero, sizeof dds_level_zero) == 0;
+        free(decoded.data);
+        decoded.data = NULL;
+        decoded.size = 0;
+        ok = ok && selected_mip(&dds, 1, 2, 1, 2, "COPY", &decoded) &&
+            decoded.size == sizeof dds_level_one &&
+            memcmp(decoded.data, dds_level_one, sizeof dds_level_one) == 0;
+        free(decoded.data);
     }
     free(copy.data);
     free(lz4.data);
@@ -820,6 +888,7 @@ int main(int argc, char **argv) {
     free(tga.data);
     free(jpg.data);
     free(tiff.data);
+    free(dds.data);
     if (!ok) {
         fputs("independent EDDS reference reader disagreed with the fixture\n", stderr);
     }

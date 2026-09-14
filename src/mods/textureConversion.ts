@@ -8,19 +8,27 @@ import type { TextureConversion } from './textureConversions';
 
 export type { TextureSourceFormat };
 export type TextureCompression = 'Copy' | 'Fastest' | 'Medium' | 'Best';
+export type TextureMipFunction = 'Filter' | 'Normalize';
+export type TextureMipFilter = 'Box' | 'Kaiser';
 
 /** The entire supported Workbench recipe. There are no implicit preset fields. */
 export interface TextureProfile {
   readonly TargetFormat: 'EnfusionDDS';
   readonly FormatCompress: TextureCompression;
   readonly CompressTreshold: number;
+  /** Larger mip levels removed after a generated or supplied chain is complete. */
+  readonly RemoveMips: number;
   readonly Conversion: TextureConversion;
   /** A fraction of one, to three decimals; only a compressed conversion reads it. */
   readonly ConversionQuality: number;
   readonly Swizzling: 'None';
+  /** True only when the DDS source proves a complete supplied mip chain. */
+  readonly ContainsMips: boolean;
   readonly GenerateMips: boolean;
-  readonly MipMapFunction: 'Filter';
-  readonly MipMapFilter: 'Box';
+  /** Normalizes the source before the chain stage; distinct from MipMapFunction=Normalize. */
+  readonly Normalize: boolean;
+  readonly MipMapFunction: TextureMipFunction;
+  readonly MipMapFilter: TextureMipFilter;
   readonly TiledTexture: true;
 }
 
@@ -28,14 +36,27 @@ export const DEFAULT_TEXTURE_PROFILE: TextureProfile = {
   TargetFormat: 'EnfusionDDS',
   FormatCompress: 'Fastest',
   CompressTreshold: 80,
+  RemoveMips: 0,
   Conversion: 'None',
   ConversionQuality: 1,
   Swizzling: 'None',
+  ContainsMips: false,
   GenerateMips: true,
+  Normalize: false,
   MipMapFunction: 'Filter',
   MipMapFilter: 'Box',
   TiledTexture: true,
 };
+
+/** Keeps disabled mip controls at their canonical defaults across single and batch authoring. */
+export function withActiveMipSettings(profile: TextureProfile): TextureProfile {
+  if (!profile.GenerateMips) {
+    return { ...profile, MipMapFunction: 'Filter', MipMapFilter: 'Box' };
+  }
+  return profile.MipMapFunction === 'Filter'
+    ? profile
+    : { ...profile, MipMapFilter: 'Box' };
+}
 
 export interface TextureIdentity {
   readonly guid: string;

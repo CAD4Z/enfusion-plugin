@@ -246,7 +246,12 @@ static int bool_value(json_scan *scan, int *result) {
     return 0;
 }
 
-static int profile_value(json_scan *scan, edds_profile *profile) {
+static int profile_value(
+    json_scan *scan,
+    edds_profile *profile,
+    edds_status *profile_status,
+    edds_error *profile_error
+) {
     unsigned fields = 0;
     if (!take(scan, '{')) return 0;
     edds_default_profile(profile);
@@ -268,35 +273,49 @@ static int profile_value(json_scan *scan, edds_profile *profile) {
             else return 0;
         } else if (strcmp(key, "CompressTreshold") == 0) {
             bit = 1u << 2; if (!unsigned_value(scan, &number) || number > 100u) return 0; profile->compress_threshold = number;
+        } else if (strcmp(key, "RemoveMips") == 0) {
+            bit = 1u << 3; if (!unsigned_value(scan, &number)) return 0; profile->remove_mips = number;
         } else if (strcmp(key, "Conversion") == 0) {
             const edds_conversion_capability *capability;
-            bit = 1u << 3; if (!string_value(scan, value, sizeof value)) return 0;
+            bit = 1u << 4; if (!string_value(scan, value, sizeof value)) return 0;
             capability = edds_conversion_of_workbench_name(value);
             if (capability == NULL || !capability->supported) return 0;
             profile->conversion = capability->conversion;
         } else if (strcmp(key, "ConversionQuality") == 0) {
-            bit = 1u << 4; if (!quality_value(scan, &profile->conversion_quality)) return 0;
+            bit = 1u << 5; if (!quality_value(scan, &profile->conversion_quality)) return 0;
         } else if (strcmp(key, "Swizzling") == 0) {
-            bit = 1u << 5; if (!string_value(scan, value, sizeof value) || strcmp(value, "None") != 0) return 0;
+            bit = 1u << 6; if (!string_value(scan, value, sizeof value) || strcmp(value, "None") != 0) return 0;
+        } else if (strcmp(key, "ContainsMips") == 0) {
+            bit = 1u << 7; if (!bool_value(scan, &boolean)) return 0; profile->contains_mips = boolean;
         } else if (strcmp(key, "GenerateMips") == 0) {
-            bit = 1u << 6; if (!bool_value(scan, &boolean)) return 0; profile->generate_mips = boolean;
+            bit = 1u << 8; if (!bool_value(scan, &boolean)) return 0; profile->generate_mips = boolean;
+        } else if (strcmp(key, "Normalize") == 0) {
+            bit = 1u << 9; if (!bool_value(scan, &boolean)) return 0; profile->normalize = boolean;
         } else if (strcmp(key, "MipMapFunction") == 0) {
-            bit = 1u << 7; if (!string_value(scan, value, sizeof value) || strcmp(value, "Filter") != 0) return 0;
+            bit = 1u << 10; if (!string_value(scan, value, sizeof value)) return 0;
+            if (strcmp(value, "Filter") == 0) profile->mipmap_function = EDDS_MIPMAP_FILTER;
+            else if (strcmp(value, "Normalize") == 0) profile->mipmap_function = EDDS_MIPMAP_NORMALIZE;
+            else if (strcmp(value, "ColorNoise") == 0) profile->mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
+            else return 0;
         } else if (strcmp(key, "MipMapFilter") == 0) {
-            bit = 1u << 8; if (!string_value(scan, value, sizeof value) || strcmp(value, "Box") != 0) return 0;
+            bit = 1u << 11; if (!string_value(scan, value, sizeof value)) return 0;
+            if (strcmp(value, "Box") == 0) profile->mipmap_filter = EDDS_FILTER_BOX;
+            else if (strcmp(value, "Kaiser") == 0) profile->mipmap_filter = EDDS_FILTER_KAISER;
+            else if (strcmp(value, "Triangle") == 0) profile->mipmap_filter = EDDS_FILTER_TRIANGLE;
+            else return 0;
         } else if (strcmp(key, "TiledTexture") == 0) {
-            bit = 1u << 9; if (!bool_value(scan, &boolean) || !boolean) return 0;
+            bit = 1u << 12; if (!bool_value(scan, &boolean)) return 0; profile->tiled_texture = boolean;
         } else return 0;
         if ((fields & bit) != 0u) return 0;
         fields |= bit;
         if (take(scan, '}')) break;
         if (!take(scan, ',')) return 0;
     }
-    if (fields != 0x3ffu) return 0;
+    if (fields != 0x1fffu) return 0;
     {
         /* A quality against the conversion it would reach is only decidable once both are read. */
-        edds_error combination;
-        return edds_profile_check(profile, &combination) == EDDS_OK;
+        *profile_status = edds_profile_check(profile, profile_error);
+        return *profile_status == EDDS_OK;
     }
 }
 
@@ -371,7 +390,13 @@ static int simple_record(const char *line, size_t size, const char *expected_kin
     return scan.at == scan.end && fields == (count == NULL ? 3u : 7u);
 }
 
-static int job_record(const char *line, size_t size, edds_batch_job *job) {
+static int job_record(
+    const char *line,
+    size_t size,
+    edds_batch_job *job,
+    edds_status *profile_status,
+    edds_error *profile_error
+) {
     json_scan scan = { line, line + size };
     unsigned fields = 0;
     memset(job, 0, sizeof *job);
@@ -399,7 +424,8 @@ static int job_record(const char *line, size_t size, edds_batch_job *job) {
         } else if (strcmp(key, "identity") == 0) {
             bit = 1u << 6; if (!identity_value(&scan, job)) return 0;
         } else if (strcmp(key, "profile") == 0) {
-            bit = 1u << 7; if (!profile_value(&scan, &job->profile)) return 0;
+            bit = 1u << 7;
+            if (!profile_value(&scan, &job->profile, profile_status, profile_error)) return 0;
         } else if (strcmp(key, "expected") == 0) {
             bit = 1u << 8; if (!expected_value(&scan, job)) return 0;
         } else return 0;
@@ -424,6 +450,7 @@ edds_status edds_batch_parse_line(
 ) {
     uint32_t version = 0;
     char kind[32] = { 0 };
+    edds_status profile_status = EDDS_OK;
     if (line == NULL || record == NULL || error == NULL || size == 0u ||
         size > EDDS_BATCH_MAX_LINE_BYTES) {
         return fail(error, "batch-line-size", "A batch NDJSON record is empty or exceeds the hard line limit.");
@@ -442,7 +469,10 @@ edds_status edds_batch_parse_line(
     }
     if (strcmp(kind, "job") == 0) {
         record->kind = EDDS_BATCH_JOB;
-        if (!job_record(line, size, &record->job)) goto malformed;
+        if (!job_record(line, size, &record->job, &profile_status, error)) {
+            if (profile_status != EDDS_OK) return profile_status;
+            goto malformed;
+        }
         return EDDS_OK;
     }
     if (strcmp(kind, "end") == 0) {
