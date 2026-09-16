@@ -5,6 +5,7 @@ import {
   appManifestPath,
   appPath,
   installDirOf,
+  libraryCandidatesOf,
   libraryFoldersPath,
   libraryOf,
   parseKeyValues,
@@ -43,6 +44,17 @@ test('the library holding an app is the one whose apps list names it', () => {
 
 test('an app no library holds is nowhere, not the first library', () => {
   assert.equal(libraryOf(LIBRARIES, '107410'), undefined);
+});
+
+test('manifest lookup still checks every library when the apps cache omits an installed app', () => {
+  assert.deepEqual(libraryCandidatesOf(LIBRARIES, STEAM_APP.dayzExperimental), [
+    'C:\\Program Files (x86)\\Steam',
+    'F:\\SteamLibrary',
+  ]);
+  assert.deepEqual(libraryCandidatesOf(LIBRARIES, STEAM_APP.dayz), [
+    'F:\\SteamLibrary',
+    'C:\\Program Files (x86)\\Steam',
+  ]);
 });
 
 test('a file that is not there, or is halfway written, leaves the app nowhere', () => {

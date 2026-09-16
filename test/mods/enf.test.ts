@@ -132,6 +132,9 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         "mod": "CADCore",
         "map": "sakhal",
         "run": "both",
+        "experimental": true,
+        "clientMods": ["@TargetCF"],
+        "serverMods": [],
         "serverConfig": "Profiles/Dev/server.cfg"
       },
       { "name": "Server only", "run": "server" },
@@ -151,6 +154,9 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         mod: 'CADCore',
         map: 'sakhal',
         run: 'both',
+        experimental: true,
+        clientMods: ['@TargetCF'],
+        serverMods: [],
         serverConfig: 'Profiles/Dev/server.cfg',
       },
       {
@@ -158,6 +164,9 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         mod: undefined,
         map: undefined,
         run: 'server',
+        experimental: false,
+        clientMods: undefined,
+        serverMods: undefined,
         serverConfig: undefined,
       },
       {
@@ -165,6 +174,9 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         mod: undefined,
         map: undefined,
         run: 'both',
+        experimental: false,
+        clientMods: undefined,
+        serverMods: undefined,
         serverConfig: undefined,
       },
     ],
@@ -207,6 +219,17 @@ test('a run mode nobody supports is reported and falls back to running both', ()
   assert.equal(read.value.launch?.targets[0]?.run, 'both');
 });
 
+test('an Experimental flag of the wrong type is reported and stays off', () => {
+  const read = readMod(
+    '{ "launch": { "targets": [{ "name": "Exp", "experimental": "yes" }] } }',
+  );
+
+  assert.deepEqual(read.problems, [
+    { message: '"experimental" must be a boolean.', line: 1, column: 60 },
+  ]);
+  assert.equal(read.value.launch?.targets[0]?.experimental, false);
+});
+
 test('a workspace manifest carries the launch block and nothing about a single mod', () => {
   const read = readWorkspace(`{
   "launch": {
@@ -235,7 +258,16 @@ test('a mod on its own owns its launch block', () => {
       clientMods: [],
       serverMods: [],
       targets: [
-        { name: 'Sakhal', mod: undefined, map: undefined, run: 'both', serverConfig: undefined },
+        {
+          name: 'Sakhal',
+          mod: undefined,
+          map: undefined,
+          run: 'both',
+          experimental: false,
+          clientMods: undefined,
+          serverMods: undefined,
+          serverConfig: undefined,
+        },
       ],
     },
   });
@@ -258,7 +290,16 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
     clientMods: [],
     serverMods: [],
     targets: [
-      { name: 'Namalsk', mod: undefined, map: undefined, run: 'both', serverConfig: undefined },
+      {
+        name: 'Namalsk',
+        mod: undefined,
+        map: undefined,
+        run: 'both',
+        experimental: false,
+        clientMods: undefined,
+        serverMods: undefined,
+        serverConfig: undefined,
+      },
     ],
   });
 });

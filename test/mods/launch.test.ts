@@ -573,6 +573,37 @@ test('the server gets -serverMod= from serverMods and none of the client’s -mo
   );
 });
 
+test('a target-specific mod list replaces the launch list whole', () => {
+  const plan = launchPlanOf(
+    input({
+      mods: [CORE, MAP],
+      target: target({
+        clientMods: ['CADMap'],
+        launch: launch({ clientMods: ['CADCore'] }),
+      }),
+      found: ['P:\\Mods\\@CADMap\\Addons\\CADMap.pbo'],
+    }),
+  );
+  const arguments_ = plan.processes[0]?.arguments ?? [];
+  const mods = arguments_.find((argument) => argument.startsWith('-mod='));
+
+  assert.deepEqual(plan.refusals, []);
+  assert.equal(mods, '-mod=P:\\Mods\\@CADMap');
+  assert.ok(!mods?.includes('CADCore'), arguments_.join(' '));
+});
+
+test('an explicitly empty target mod list overrides inherited mods with none', () => {
+  const plan = launchPlanOf(
+    input({
+      target: target({ clientMods: [], launch: launch({ clientMods: ['CADCore'] }) }),
+      found: [],
+    }),
+  );
+
+  assert.deepEqual(plan.refusals, []);
+  assert.ok(!plan.processes[0]?.arguments.some((argument) => argument.startsWith('-mod=')));
+});
+
 /**
  * The engine only half honours `-debuggerPort`: it reads the argument, then writes over it once it
  * knows which process it is, and a server ends up on 1001 whatever it was told. So the client is
@@ -1124,6 +1155,37 @@ test('a target names the mod it launches, and defaults to the one that declared 
   );
 });
 
+test('a target inherits launch mods until it supplies either list itself', () => {
+  const targets = targetsOf([
+    source({
+      launch: launch({
+        clientMods: ['@CF'],
+        serverMods: ['@ServerTools'],
+        targets: [
+          named('Inherited'),
+          { ...named('Own'), clientMods: [], serverMods: ['@TargetServer'] },
+        ],
+      }),
+    }),
+  ]);
+
+  assert.deepEqual(
+    targets.map((target) => [target.clientMods, target.serverMods]),
+    [
+      [['@CF'], ['@ServerTools']],
+      [[], ['@TargetServer']],
+    ],
+  );
+});
+
+test('the Experimental flag follows the target into the launch model', () => {
+  const targets = targetsOf([
+    source({ launch: launch({ targets: [{ ...named('Exp'), experimental: true }] }) }),
+  ]);
+
+  assert.equal(targets[0]?.experimental, true);
+});
+
 test('a mod with no manifest at all brings no targets', () => {
   assert.deepEqual(targetsOf([source({ owner: '', launch: launch({ targets: [named('X')] }) })]), []);
 });
@@ -1198,14 +1260,19 @@ function programs(build: GameBuild): LaunchInput['game']['programs'] {
 }
 
 function target(over: Partial<LaunchTarget> = {}): LaunchTarget {
+  const launch_ = over.launch ?? launch();
+
   return {
     id: 'Chernarus',
     name: 'Chernarus',
     mod: 'CADCore',
     map: 'chernarusplus',
     run: 'client',
+    experimental: false,
+    clientMods: over.clientMods ?? launch_.clientMods,
+    serverMods: over.serverMods ?? launch_.serverMods,
     serverConfig: undefined,
-    launch: launch(),
+    launch: launch_,
     configuredIn: 'F:\\Code\\cad4z\\CADCore',
     configuredBy: 'mod.enf',
     ...over,
@@ -1238,16 +1305,28 @@ function source(over: Partial<TargetSource> = {}): TargetSource {
 }
 
 function named(name: string): Target {
-  return { name, mod: undefined, map: undefined, run: 'both', serverConfig: undefined };
+  return {
+    name,
+    mod: undefined,
+    map: undefined,
+    run: 'both',
+    experimental: false,
+    clientMods: undefined,
+    serverMods: undefined,
+    serverConfig: undefined,
+  };
 }
 
 function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   return {
     dayz: GAME,
+    dayzExperimental: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Exp',
     executable: '',
     dayzServer: SERVER_GAME,
+    dayzExperimentalServer: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Server Exp',
     dayzTools: 'F:\\DayZ Tools',
     pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
+    signing: true,
     privateKey: '',
     workDrive: 'F:\\Workdrive',
     workDriveLetter: 'P:',

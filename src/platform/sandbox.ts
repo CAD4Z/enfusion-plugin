@@ -29,6 +29,7 @@ import {
   steamAccountIdOf,
   steamConnectedSinceOf,
   steamCommandOf,
+  steamConfigPathOf,
 } from '../mods/sandbox';
 import type { GameProcess } from './launch';
 
@@ -67,14 +68,18 @@ export interface SandboxRuntime {
     signal?: AbortSignal,
   ): Promise<number | undefined>;
   startSteam(sandbox: Sandbox): void;
-  accountId(users: string, account: string, signal?: AbortSignal): Promise<string | undefined>;
+  accountId(
+    files: readonly string[],
+    account: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined>;
   readConnectionLogs(logs: readonly string[], signal?: AbortSignal): Promise<string>;
   sleep(milliseconds: number, signal?: AbortSignal): Promise<void>;
 }
 
 /** The boxed Steam files needed to distinguish current identity from live readiness. */
 export interface SandboxSteamFiles {
-  readonly loginUsers: string;
+  readonly identityFiles: readonly string[];
   /** The rotated predecessor first, then the live connection log. */
   readonly connectionLogs: readonly string[];
 }
@@ -87,7 +92,7 @@ const SYSTEM_RUNTIME: SandboxRuntime = {
   imageIsUp,
   imageStartedAt,
   startSteam,
-  accountId,
+  accountId: readSteamAccountId,
   readConnectionLogs,
   sleep,
 };
@@ -231,8 +236,8 @@ async function waitForSteam(
  * The four independent facts that make the boxed Steam usable by a game.
  *
  * `steam.exe` alone is also the bootstrap updater. `steamwebhelper.exe` appears only with the
- * final client, but before logon completes. `loginusers.vdf` maps the requested name to an account
- * id, while the connection log says that same account is live. None of the four is sufficient alone.
+ * final client, but before logon completes. Steam's account files map the requested name to an
+ * account id, while the connection log says that same account is live. None is sufficient alone.
  */
 async function steamReady(
   sandbox: Sandbox,
@@ -242,7 +247,7 @@ async function steamReady(
 ): Promise<boolean> {
   const [client, accountId] = await Promise.all([
     runtime.imageIsUp(sandbox, STEAM_CLIENT_IMAGE, signal),
-    runtime.accountId(files.loginUsers, sandbox.account, signal),
+    runtime.accountId(files.identityFiles, sandbox.account, signal),
   ]);
   signal?.throwIfAborted();
 
@@ -414,12 +419,15 @@ async function steamFiles(
     process.env.SystemDrive ?? 'C:',
   );
   const loginUsers = loginUsersPathOf(root, sandbox.steam);
+  const config = steamConfigPathOf(root, sandbox.steam);
   const connectionLog = connectionLogPathOf(root, sandbox.steam);
   const previousConnectionLog = previousConnectionLogPathOf(root, sandbox.steam);
 
-  return loginUsers === undefined || connectionLog === undefined || previousConnectionLog === undefined
-    ? undefined
-    : { loginUsers, connectionLogs: [previousConnectionLog, connectionLog] };
+  if (loginUsers === undefined || config === undefined || connectionLog === undefined || previousConnectionLog === undefined) {
+    return undefined;
+  }
+
+  return { identityFiles: [loginUsers, config], connectionLogs: [previousConnectionLog, connectionLog] };
 }
 
 /** Where Sandboxie puts its boxes, which is nothing at all on an installation nobody has moved. */
@@ -443,17 +451,25 @@ async function fileRootPath(sandbox: Sandbox, signal?: AbortSignal): Promise<str
  * This establishes identity only. `steamReady` also requires that exact id in the successful live
  * connection state, so another remembered account cannot answer for the requested one.
  */
-async function accountId(
-  users: string,
+export async function readSteamAccountId(
+  files: readonly string[],
   account: string,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  try {
-    return steamAccountIdOf(await readFile(users, { encoding: 'utf8', signal }), account);
-  } catch {
-    // A box that has never had a Steam in it has no such file, which is simply "not yet".
-    return undefined;
+  for (const file of files) {
+    signal?.throwIfAborted();
+    try {
+      const id = steamAccountIdOf(await readFile(file, { encoding: 'utf8', signal }), account);
+      if (id !== undefined) {
+        return id;
+      }
+    } catch {
+      signal?.throwIfAborted();
+      // A successful first sign-in need not write loginusers.vdf. Try the boxed config too.
+    }
   }
+
+  return undefined;
 }
 
 /** The rotated predecessor and live log, in chronological order. Either may be absent. */

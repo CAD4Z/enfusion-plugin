@@ -311,8 +311,15 @@ is retried exactly once, after which the path to the packing log is shown. A fou
 during that re-check: pboProject pointed at a folder that does not exist quietly does nothing —
 which is why the folders of the built mod are made before it is started.
 
-Signing is a separate step through `DSSignFile.exe`, the same for both builders; an empty key means
-"do not sign", while a key with no `DSSignFile.exe` is a refusal rather than a quietly unsigned pbo.
+Signing is a separate step through `DSSignFile.exe`, the same for both builders, and it happens
+unless `enfusion.signing.enabled` is turned off: a mod is packed to be run somewhere, and a server
+that checks signatures takes nothing else. The key is whatever `enfusion.signing.privateKey` names —
+`DSCreateKey.exe` in DayZ Tools is what makes a pair — and signing left on with no key named packs
+the pbo anyway and says out loud that they went out bare, because the next thing that would ever
+notice is somebody else's server turning the mod away. A key with no `DSSignFile.exe` behind it is a
+refusal rather than a quietly unsigned pbo. Signing turned off leaves out the public key as well as
+the signature: a `.bikey` shipped in `Keys` beside unsigned pbos claims a signing that never
+happened.
 The packing exclusions come out of `exclude` in `mod.enf` and replace the default list whole;
 AddonBuilder is not given them, because `-exclude=` brings it down (1.0.240639) with an
 `ArgumentNullException` on any list at all, its own example included. Build errors are read out of
@@ -373,7 +380,9 @@ Which program that is, is what **Debug** and **Release** decide. Debug is everyt
 `DayZDiag_x64.exe` playing both parts, started in the mirror, given `-filePatching`,
 `-scriptDebug=true` and `-newErrorsAreWarnings=1`, reading the mods off the sources. The name or the
 path of that one executable is changed by the `enfusion.dayz.executable` setting, for a diag build
-kept outside the installation. Release is the pair a player and a host run: `DayZ_x64.exe` out of
+kept outside the stable installation. Experimental targets always take `DayZDiag_x64.exe` from
+their separate installation so that an absolute stable override cannot silently defeat the
+checkbox. Release is the pair a player and a host run: `DayZ_x64.exe` out of
 the DayZ folder for the client, `DayZServer_x64.exe` out of the DayZ Server folder for the server,
 each started where it is installed and given none of those three arguments — no mirror is built for
 it at all, because a retail game reads its mods out of the packed pbo and out of nothing else. Which
@@ -386,6 +395,13 @@ recording nothing in the registry the way the client does. So it is found throug
 of libraries, the folder beside DayZ is what is settled for, and `enfusion.dayzServer.path` names it
 outright on a machine where neither answer is right. A Release launch of a client-only target never
 asks about it: the refusal is only ever about a program that launch would actually start.
+
+A target's **Experimental** checkbox switches that target as a whole to the separate DayZ
+Experimental applications: Steam app 1024020 for the client and diag executable, and app 1042420
+for the release server. Their manifests are found across Steam's libraries automatically;
+`enfusion.dayzExperimental.path` and `enfusion.dayzExperimentalServer.path` are the machine-local
+overrides. Debug still means `DayZDiag_x64.exe` with file patching and Release still means the
+retail pair, but both now come from the Experimental installation for that target.
 
 BattlEye is left to the game. The retail client is started directly, the way DayZ's own launcher
 starts it with the BattlEye tick off, and neither side is given anything about it. There is nothing
@@ -417,6 +433,12 @@ of ours to move it earlier loaded it twice instead of moving it, and there was n
 a mod the workspace happens to hold. A mod of the workspace is checked more strictly than a
 third-party one: what one of ours packs into is known, so "not built" names the missing pbo, while
 of a third-party one only the folder can be asked about.
+
+`clientMods` and `serverMods` may also be written on an individual target. An absent target list
+inherits the list on `launch`; a present target list replaces it whole. That distinction includes
+an explicit empty list, which means that side of this target loads no mods even when the shared
+launch list names some. The form therefore shows empty target rows until a target actually
+overrides them, while the shared lists remain the default for every other target.
 
 Each `clientMods` or `serverMods` entry names exactly one folder directly under `modsDirectory`.
 Spaces and hyphens are allowed there because these are folder references rather than class names;
@@ -498,6 +520,10 @@ state is `[Logged On, ...] [U:1:<id>] RecvMsgClientLogOnResponse() : processing 
 `<id>` belongs to the requested account — a box that remembers two accounts and signed the other
 one in is not ready for this launch. The line's timestamp must not predate the current boxed
 `steam.exe` process, so a success left by the preceding process cannot release the game.
+The first sign-in can leave the boxed `loginusers.vdf` absent or unchanged. In that case the
+account's SteamID is read from the boxed `config\config.vdf`, under
+`InstallConfigStore/Software/Valve/Steam/Accounts/<account>`. Both files establish identity only;
+the same process and live-connection checks still apply.
 Both `logs\connection_log.previous.txt` and `connection_log.txt` are read because Steam rotates the
 live log while it is running. Third: `Start.exe` without `/wait` hands the program to Sandboxie's
 service and exits at once, so the game is started with `/wait` — otherwise the session reports the

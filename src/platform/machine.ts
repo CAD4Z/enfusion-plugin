@@ -32,8 +32,8 @@ import {
   appManifestPath,
   appPath,
   installDirOf,
+  libraryCandidatesOf,
   libraryFoldersPath,
-  libraryOf,
 } from '../mods/steam';
 
 const run = promisify(execFile);
@@ -54,16 +54,28 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
     const value: unknown = settings.get(id);
     return typeof value === 'string' ? value.trim() : '';
   };
+  // A hand-edited settings file can hold anything at all under a name the package declares as a
+  // flag, and a mod going out unsigned because a string was read as one is worth the two lines.
+  const flag = (id: string, unset: boolean): boolean => {
+    const value: unknown = settings.get(id);
+    return typeof value === 'boolean' ? value : unset;
+  };
 
   return {
     dayz: text(SETTING.dayz) || (await installed(DAYZ, STEAM_APP.dayz)),
+    dayzExperimental:
+      text(SETTING.dayzExperimental) || (await fromSteam(STEAM_APP.dayzExperimental)),
     executable: text(SETTING.executable),
     // Through Steam alone: DayZ Server's installer writes no key of the kind the client's does,
     // so where it is is what Steam's own list of libraries says. A machine Steam cannot answer for
     // is left empty here, and `dayzServerRootOf` falls back to the folder beside DayZ.
     dayzServer: text(SETTING.dayzServer) || (await fromSteam(STEAM_APP.dayzServer)),
+    dayzExperimentalServer:
+      text(SETTING.dayzExperimentalServer) ||
+      (await fromSteam(STEAM_APP.dayzExperimentalServer)),
     dayzTools: text(SETTING.dayzTools) || (await installed(DAYZ_TOOLS, STEAM_APP.dayzTools)),
     pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
+    signing: flag(SETTING.signing, true),
     privateKey: text(SETTING.privateKey),
     workDrive: text(SETTING.workDrive),
     workDriveLetter: text(SETTING.workDriveLetter),
@@ -200,14 +212,16 @@ async function lookUpSteam(appId: string): Promise<string> {
     return '';
   }
 
-  const library = libraryOf(await readText(libraryFoldersPath(steam)), appId);
-  if (library === undefined) {
-    return '';
+  const folders = await readText(libraryFoldersPath(steam));
+
+  for (const library of libraryCandidatesOf(folders, appId)) {
+    const installDir = installDirOf(await readText(appManifestPath(library, appId)));
+    if (installDir !== undefined) {
+      return appPath(library, installDir);
+    }
   }
 
-  const installDir = installDirOf(await readText(appManifestPath(library, appId)));
-
-  return installDir === undefined ? '' : appPath(library, installDir);
+  return '';
 }
 
 /** Steam writes its own path in forward slashes; everything downstream of here is a Windows path. */

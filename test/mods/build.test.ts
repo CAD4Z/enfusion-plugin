@@ -191,11 +191,30 @@ test('the manifest excludes what it names, and the default list is what it repla
   );
 });
 
-/** An unsigned pbo is a pbo, and a developer who set no key asked for exactly that. */
-test('with no key set there is no signing step and no key copied, and no complaint either', () => {
+/**
+ * Signing is on until it is turned off, so a build with no key is one that was asked for a
+ * signature it has nothing to make. The pbo still comes out — an unsigned mod loads perfectly well
+ * on the machine that packed it — and the one thing that would otherwise never be said is said,
+ * because the next thing to notice is a server turning the mod away.
+ */
+test('signing on with no key packs anyway, copies no public key, and says the pbo went bare', () => {
   const plan = buildPlanOf([job()], settings({ privateKey: '' }));
 
   assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(
+    plan.steps.map((step) => step.kind),
+    ['pack', 'copy', 'copy'],
+  );
+  assert.equal(plan.warnings.length, 1);
+  assert.ok(plan.warnings[0]?.includes('unsigned'), plan.warnings[0]);
+});
+
+/** An unsigned pbo somebody asked for is a pbo, and there is nothing about it worth a word. */
+test('signing turned off leaves out the step, the public key and the complaint alike', () => {
+  const plan = buildPlanOf([job()], settings({ signing: false }));
+
+  assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(plan.warnings, []);
   assert.deepEqual(
     plan.steps.map((step) => step.kind),
     ['pack', 'copy', 'copy'],
@@ -209,6 +228,14 @@ test('a key with no DSSignFile to use it stops the build rather than quietly ski
   assert.deepEqual(plan.steps, []);
   assert.equal(plan.refusals.length, 1);
   assert.ok(plan.refusals[0]?.reason.includes('DSSignFile'), plan.refusals[0]?.reason);
+});
+
+/** Nothing is going to run it, so a machine without it is a machine with nothing missing. */
+test('signing turned off does not refuse over a DSSignFile the build has no use for', () => {
+  const plan = buildPlanOf([job()], settings({ signing: false, dayzTools: '' }));
+
+  assert.deepEqual(plan.refusals, []);
+  assert.equal(plan.steps.filter((step) => step.kind === 'pack').length, 1);
 });
 
 test('a machine with no builder on it builds nothing, and says which one it wanted', () => {
@@ -471,10 +498,13 @@ function job(over: Partial<BuildJob> = {}): BuildJob {
 function settings(over: Partial<MachineSettings> = {}): MachineSettings {
   return {
     dayz: 'F:\\DayZ',
+    dayzExperimental: 'F:\\DayZ Exp',
     executable: '',
     dayzServer: '',
+    dayzExperimentalServer: '',
     dayzTools: TOOLS,
     pboProject: PBOPROJECT,
+    signing: true,
     privateKey: KEY,
     workDrive: 'F:\\Workdrive',
     workDriveLetter: 'P:',

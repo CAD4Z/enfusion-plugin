@@ -18,6 +18,7 @@ import {
   steamAccountIdOf,
   steamConnectedSinceOf,
   steamCommandOf,
+  steamConfigPathOf,
   steamExecutableOf,
 } from '../../src/mods/sandbox';
 
@@ -142,6 +143,10 @@ test('the box holds Steam’s record of the sign-in under a folder per drive let
     'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\loginusers.vdf',
   );
   assert.equal(loginUsersPathOf('C:\\Sandbox\\Ilya\\steam2', '\\\\server\\Steam'), undefined);
+  assert.equal(
+    steamConfigPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
+    'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\config.vdf',
+  );
 });
 
 test('the box holds Steam’s connection log beside the rest of its installation', () => {
@@ -187,6 +192,23 @@ test('every account the box remembers keeps an id of its own', () => {
 
   assert.equal(steamAccountIdOf(vdf, 'first'), '1');
   assert.equal(steamAccountIdOf(vdf, 'second'), '2');
+});
+
+test('config.vdf identifies a signed-in account even before loginusers.vdf is written', () => {
+  const vdf = `"InstallConfigStore" {
+    "Software" { "Valve" { "Steam" { "Accounts" {
+      "first" { "SteamID" "76561197960265729" }
+      "second" { "SteamID" "76561197960265851" }
+      "invalid" { "SteamID" "pending" }
+    } } } }
+  }`;
+
+  assert.equal(steamAccountIdOf(vdf, 'second'), ACCOUNT_ID);
+  assert.equal(steamAccountIdOf(vdf, 'SECOND'), ACCOUNT_ID);
+  assert.equal(steamAccountIdOf(vdf, 'first'), '1');
+  assert.equal(steamAccountIdOf(vdf, 'absent'), undefined);
+  assert.equal(steamAccountIdOf(vdf, 'invalid'), undefined);
+  assert.equal(steamAccountIdOf('"second" { "SteamID" "76561197960265851" }', 'second'), undefined);
 });
 
 test('Steam is connected only after its latest session finishes logging on', () => {

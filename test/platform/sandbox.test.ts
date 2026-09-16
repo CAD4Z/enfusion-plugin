@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Sandbox } from '../../src/mods/sandbox';
-import { openSandbox, type SandboxRuntime } from '../../src/platform/sandbox';
+import { openSandbox, readSteamAccountId, type SandboxRuntime } from '../../src/platform/sandbox';
 
 /** The Steam3 account id the boxed Steam signs `second` in as. */
 const ACCOUNT_ID = '123';
@@ -133,6 +136,46 @@ test('an already running Steam cannot reuse a successful logon from its previous
   }
 });
 
+test('a first boxed sign-in opens with config.vdf while loginusers.vdf is absent or unchanged', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'enfusion-steam-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const users = join(directory, 'loginusers.vdf');
+  const config = join(directory, 'config.vdf');
+  await writeFile(config, `"InstallConfigStore" {
+    "Software" { "Valve" { "Steam" { "Accounts" {
+      "first" { "SteamID" "76561197960265729" }
+      "second" { "SteamID" "76561197960265851" }
+    } } } }
+  }`);
+
+  for (const previousUsers of [undefined, '"users" { "76561197960265729" { "AccountName" "first" } }']) {
+    if (previousUsers !== undefined) {
+      await writeFile(users, previousUsers);
+    }
+    const runtime = new ControlledRuntime('ready');
+    const host: SandboxRuntime = runtime;
+    host.accountId = readSteamAccountId;
+    host.steamFiles = () => Promise.resolve({ identityFiles: [users, config], connectionLogs: [] });
+    const cancelled = new AbortController();
+    const opening = openSandbox(SANDBOX, () => undefined, cancelled.signal, host);
+
+    try {
+      assert.equal(
+        await Promise.race([
+          opening.then((result) => result ?? 'ready'),
+          runtime.waitForSleep(1).then(() => 'waiting'),
+        ]),
+        'ready',
+        'config.vdf and the live log must suffice without a freshly written loginusers.vdf',
+      );
+      assert.equal(runtime.starts, 0);
+    } finally {
+      cancelled.abort();
+      await opening.catch(() => undefined);
+    }
+  }
+});
+
 class ControlledRuntime implements SandboxRuntime {
   private clock = new Date(2026, 8, 8, 0, 3, 0).getTime();
   private sleeps = 0;
@@ -177,11 +220,14 @@ class ControlledRuntime implements SandboxRuntime {
   }
 
   steamFiles(): Promise<{
-    readonly loginUsers: string;
+    readonly identityFiles: readonly string[];
     readonly connectionLogs: readonly string[];
   }> {
     return Promise.resolve({
-      loginUsers: 'C:\\Sandbox\\steam2\\drive\\C\\Steam\\config\\loginusers.vdf',
+      identityFiles: [
+        'C:\\Sandbox\\steam2\\drive\\C\\Steam\\config\\loginusers.vdf',
+        'C:\\Sandbox\\steam2\\drive\\C\\Steam\\config\\config.vdf',
+      ],
       connectionLogs: [
         'C:\\Sandbox\\steam2\\drive\\C\\Steam\\logs\\connection_log.previous.txt',
         'C:\\Sandbox\\steam2\\drive\\C\\Steam\\logs\\connection_log.txt',

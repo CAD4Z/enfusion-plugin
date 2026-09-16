@@ -35,6 +35,7 @@ import {
   builderExecutableOf,
   missingBuilderOf,
   signToolOf,
+  signingKeyOf,
 } from './machine';
 import { isModNameOf, type ModName, modNameProblemOf, modPathOf } from './modName';
 import { CONFIG_FILE, type Mod } from './model';
@@ -203,10 +204,18 @@ export interface CopyStep extends Step {
  * `config.cpp`, so the manifest is packed, and neither the mask nor the file's own name excludes
  * it (measured on pboProject 429, both ways). The old Workbench project excluded `*.enf` and
  * believed it worked. The file is a few hundred bytes the game never reads.
+ *
+ * `*.hpp` was on it once and is off it now, which is the one mask here that a tradition asks for
+ * and DayZ cannot have. A DayZ pbo carries its `config.cpp` as text, so every `#include` written
+ * in it is resolved by the engine at load, from inside the pbo — not by the builder at pack time,
+ * the way a binarised Arma config resolves its includes into `config.bin` and leaves the sources
+ * behind. Excluding an included file therefore does not drop a source from the pbo: it drops a
+ * file the game goes looking for and does not find, and the mod refuses to load with the include's
+ * own path in the box. `*.h` is still on the list and is exactly the same trap for a config that
+ * includes one; it stays only because nothing here does.
  */
 export const DEFAULT_EXCLUDE: readonly string[] = [
   '*.h',
-  '*.hpp',
   '*.cpp',
   '*.png',
   '*.tga',
@@ -270,7 +279,7 @@ export function buildPlanOf(jobs: readonly BuildJob[], settings: MachineSettings
 
   const steps = building.flatMap((job, index) => [
     packOf(job, settings),
-    ...(settings.privateKey === '' ? [] : [signOf(job, settings)]),
+    ...(signingKeyOf(settings) === '' ? [] : [signOf(job, settings)]),
     // The root files belong to the mod rather than to one of its addons, so they are copied once,
     // after the last addon of it that is actually being built. Counting over the refused ones too
     // would hang them off an addon that produces no steps, and lose them.
@@ -345,6 +354,35 @@ export function configOf(job: BuildJob): string {
  * it to be honoured, and the one place they would find out otherwise is the documentation.
  */
 function warningsOf(jobs: readonly BuildJob[], settings: MachineSettings): string[] {
+  if (jobs.length === 0) {
+    return [];
+  }
+
+  return [...unsignedOf(settings), ...unexcludedOf(jobs, settings)];
+}
+
+/**
+ * Signing is on and there is no key to do it with, so every pbo of this build comes out bare.
+ *
+ * Said every build rather than once, because of what it costs to find out any other way: a mod
+ * loads off a developer's own machine whether it is signed or not, and the first thing that ever
+ * disagrees is somebody else's server turning it away. Signing being on by default is what makes
+ * the sentence worth its noise — a developer who has no key and wants none turns the flag off, and
+ * is never told again.
+ */
+function unsignedOf(settings: MachineSettings): string[] {
+  if (!settings.signing || settings.privateKey !== '') {
+    return [];
+  }
+
+  return [
+    'The pbo are going out unsigned: signing is on and no private key is set. Name a ' +
+      '.biprivatekey with enfusion.signing.privateKey — DSCreateKey.exe in DayZ Tools makes a ' +
+      'pair — or turn enfusion.signing.enabled off.',
+  ];
+}
+
+function unexcludedOf(jobs: readonly BuildJob[], settings: MachineSettings): string[] {
   if (PACKING[settings.builder].excludes || !jobs.some((job) => job.exclude.length > 0)) {
     return [];
   }
@@ -372,10 +410,10 @@ function stoppagesOf(settings: MachineSettings): string[] {
     stopping.push(missingBuilderOf(settings.builder));
   }
 
-  if (settings.privateKey !== '' && signToolOf(settings) === '') {
+  if (signingKeyOf(settings) !== '' && signToolOf(settings) === '') {
     stopping.push(
-      'A private key is set, but DSSignFile.exe was not found: set the DayZ Tools path, or clear ' +
-        'the key to leave the pbo unsigned.',
+      'A private key is set and signing is on, but DSSignFile.exe was not found: set the DayZ ' +
+        'Tools path, or turn enfusion.signing.enabled off to leave the pbo unsigned.',
     );
   }
 
@@ -577,11 +615,15 @@ function signOf(job: BuildJob, settings: MachineSettings): SignStep {
     subject: subjectOf(job),
     what: `Signing ${packedNameOf(job)}.pbo`,
     program: signToolOf(settings),
-    arguments: [settings.privateKey, pboOf(job)],
+    arguments: [signingKeyOf(settings), pboOf(job)],
   };
 }
 
-/** `mod.cpp`, `meta.cpp` and the public key: the built mod's own files, none of them packed. */
+/**
+ * `mod.cpp`, `meta.cpp` and the public key: the built mod's own files, none of them packed. The
+ * key goes only where there are signatures for it to answer for — one shipped beside unsigned pbo
+ * says the mod was signed by a key that never touched it.
+ */
 function copiesOf(job: BuildJob, settings: MachineSettings): CopyStep[] {
   const built = builtModOf(job);
   const mod = job.link.name;
@@ -594,7 +636,7 @@ function copiesOf(job: BuildJob, settings: MachineSettings): CopyStep[] {
     to: windowsPath(built, file),
   }));
 
-  const key = publicKeyOf(settings.privateKey);
+  const key = publicKeyOf(signingKeyOf(settings));
   if (key === '') {
     return roots;
   }

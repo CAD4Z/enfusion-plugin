@@ -54,6 +54,9 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
       mod: undefined,
       map: 'ChernarusPlus',
       run: 'client',
+      experimental: false,
+      clientMods: undefined,
+      serverMods: undefined,
       serverConfig: undefined,
     },
   ]);
@@ -148,6 +151,15 @@ test('the same holds for a plain list, and for the file a workspace is configure
       'launch.clientMods',
     ),
   );
+});
+
+test('an unreadable target-specific mod keeps later target rows from being misaddressed', () => {
+  const source =
+    '{ "launch": { "targets": [{ "name": "A", "clientMods": [2, "@CF"] }] } }';
+  const form = formOf('mod', source);
+
+  assert.deepEqual(form.launch.targets[0]?.clientMods, ['@CF']);
+  assert.ok(form.refusal?.includes('launch.targets.0.clientMods'), form.refusal);
 });
 
 test('a list of the wrong type altogether shows no rows, so there is nothing to misaddress', () => {
@@ -395,6 +407,63 @@ test('a target is taken out whole, and its fields are written inside it', () => 
     value: 'both',
   });
   assert.equal(formOf('mod', written).launch.targets[0]?.run, 'both');
+});
+
+test('the Experimental checkbox writes true and removes the default false again', () => {
+  const checked = edited(MANIFEST, {
+    kind: 'toggle',
+    path: ['launch', 'targets', 0, 'experimental'],
+    value: true,
+  });
+
+  assert.equal(formOf('mod', checked).launch.targets[0]?.experimental, true);
+  assert.ok(checked.includes('"run": "client",\n        "experimental": true'), checked);
+
+  const unchecked = edited(checked, {
+    kind: 'toggle',
+    path: ['launch', 'targets', 0, 'experimental'],
+    value: false,
+  });
+  assert.equal(unchecked, MANIFEST);
+});
+
+test('a target mod list is made inside that target and stays distinct from the launch list', () => {
+  const written = edited(MANIFEST, {
+    kind: 'append',
+    path: ['launch', 'targets', 0, 'clientMods'],
+    value: '@CF',
+  });
+
+  assert.deepEqual(formOf('mod', written).launch.targets[0]?.clientMods, ['@CF']);
+  assert.deepEqual(formOf('mod', written).launch.clientMods, []);
+  assert.ok(written.includes('"clientMods": [\n          "@CF"\n        ]'), written);
+});
+
+test('removing the last target mod removes its override and restores inheritance', () => {
+  const source = `{
+  "launch": {
+    "clientMods": ["@Workspace"],
+    "serverMods": ["@WorkspaceServer"],
+    "targets": [{
+      "name": "Client",
+      "clientMods": ["@Target"],
+      "serverMods": ["@TargetServer"]
+    }]
+  }
+}`;
+
+  for (const field of ['clientMods', 'serverMods'] as const) {
+    for (const edit of [
+      { kind: 'set', path: ['launch', 'targets', 0, field, 0], value: '' },
+      { kind: 'clear', path: ['launch', 'targets', 0, field, 0] },
+    ] as const) {
+      const written = edited(source, edit);
+      const form = formOf('mod', written);
+
+      assert.deepEqual(form.launch[field], field === 'clientMods' ? ['@Workspace'] : ['@WorkspaceServer']);
+      assert.equal(form.launch.targets[0]?.[field], undefined, written);
+    }
+  }
 });
 
 test('a field of a target is written where the schema writes it, not at the end', () => {

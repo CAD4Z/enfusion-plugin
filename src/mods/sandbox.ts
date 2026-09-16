@@ -18,6 +18,7 @@
 
 import type { SecondClient } from './machine';
 import { windowsPath } from './paths';
+import { parseKeyValues, type KeyValues } from './steam';
 
 /** The box the second client runs in, and the Steam that signs its account in. */
 export const BOX = 'steam2';
@@ -31,6 +32,9 @@ const STEAM = 'steam.exe';
 
 /** Where Steam records who is signed in, counted from the folder Steam is installed in. */
 const LOGIN_USERS: readonly string[] = ['config', 'loginusers.vdf'];
+
+/** Steam writes account-name/SteamID pairs here even without a boxed loginusers.vdf. */
+const STEAM_CONFIG: readonly string[] = ['config', 'config.vdf'];
 
 /** Where Steam records the live connection state of the client. */
 const CONNECTION_LOG: readonly string[] = ['logs', 'connection_log.txt'];
@@ -272,6 +276,11 @@ export function loginUsersPathOf(boxRoot: string, steam: string): string | undef
   return steamFileInBoxOf(boxRoot, steam, ...LOGIN_USERS);
 }
 
+/** The boxed installation config, another record of account names and their SteamIDs. */
+export function steamConfigPathOf(boxRoot: string, steam: string): string | undefined {
+  return steamFileInBoxOf(boxRoot, steam, ...STEAM_CONFIG);
+}
+
 /** Where the boxed Steam appends its live connection state. */
 export function connectionLogPathOf(boxRoot: string, steam: string): string | undefined {
   return steamFileInBoxOf(boxRoot, steam, ...CONNECTION_LOG);
@@ -305,7 +314,8 @@ function steamFileInBoxOf(
  * The Steam3 account id belonging to a remembered account.
  *
  * `loginusers.vdf` files each account under its SteamID64. The low 32 bits are the account id in
- * the `[U:1:<id>]` Steam3 form used by the live connection log.
+ * the `[U:1:<id>]` Steam3 form used by the live connection log. A first boxed sign-in can leave
+ * that file absent while `config.vdf` already records the same mapping under Steam/Accounts.
  */
 export function steamAccountIdOf(vdf: string, account: string): string | undefined {
   const wanted = account.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -320,7 +330,17 @@ export function steamAccountIdOf(vdf: string, account: string): string | undefin
     }
   }
 
-  return undefined;
+  let field: KeyValues | string | undefined = parseKeyValues(vdf);
+  for (const key of ['InstallConfigStore', 'Software', 'Valve', 'Steam', 'Accounts', account, 'SteamID']) {
+    if (typeof field !== 'object') {
+      return undefined;
+    }
+    field = Object.entries(field).find(([name]) => name.toLowerCase() === key.toLowerCase())?.[1];
+  }
+
+  return typeof field === 'string' && /^\d+$/.test(field)
+    ? (BigInt(field) & 0xffffffffn).toString()
+    : undefined;
 }
 
 /** A first sign-in includes a password and often Steam Guard, so it gets five full minutes. */

@@ -16,6 +16,7 @@
  */
 
 import '@vscode-elements/elements/dist/vscode-button/index.js';
+import '@vscode-elements/elements/dist/vscode-checkbox/index.js';
 import '@vscode-elements/elements/dist/vscode-form-group/index.js';
 import '@vscode-elements/elements/dist/vscode-form-helper/index.js';
 import '@vscode-elements/elements/dist/vscode-label/index.js';
@@ -287,6 +288,43 @@ function targetOf(target: Target, at: number, writable: boolean): HTMLElement {
       },
       writable,
     ),
+    flag(
+      {
+        path: [...path, 'experimental'],
+        label: 'Experimental',
+        help:
+          'Start this target from the separately installed DayZ Experimental client and server ' +
+          'applications.',
+        value: target.experimental,
+      },
+      writable,
+    ),
+    list(
+      {
+        path: [...path, 'clientMods'],
+        label: 'Client mods',
+        help:
+          'Mods for this target alone. Until this list is written, the launch-level client mods ' +
+          'are inherited. Removing its last row restores inheritance; an explicitly empty list ' +
+          'written as text overrides them with none.',
+        items: target.clientMods ?? [],
+        placeholder: '@CF',
+      },
+      writable,
+    ),
+    list(
+      {
+        path: [...path, 'serverMods'],
+        label: 'Server mods',
+        help:
+          'Server mods for this target alone. Until this list is written, the launch-level ' +
+          'server mods are inherited. Removing its last row restores inheritance; an explicitly ' +
+          'empty list written as text overrides them with none.',
+        items: target.serverMods ?? [],
+        placeholder: '@VPPAdminTools',
+      },
+      writable,
+    ),
     field(
       {
         path: [...path, 'serverConfig'],
@@ -310,6 +348,30 @@ interface FieldView {
   readonly value: string | undefined;
   /** What the field means when nobody answered it, which is not the same as what it holds. */
   readonly placeholder?: string;
+}
+
+interface FlagView {
+  readonly path: FormPath;
+  readonly label: string;
+  readonly help: string;
+  readonly value: boolean;
+}
+
+/** A boolean kept out of the file while it is false, which is the target's default. */
+function flag(view: FlagView, writable: boolean): HTMLElement {
+  const input = document.createElement('vscode-checkbox');
+  input.id = idOf(view.path);
+  input.textContent = view.label;
+  input.checked = view.value;
+  input.disabled = !writable;
+  input.addEventListener('change', () => {
+    host.postMessage({
+      type: 'edit',
+      edit: { kind: 'toggle', path: view.path, value: input.checked },
+    });
+  });
+
+  return group(input, helper(view.help));
 }
 
 /**
@@ -512,4 +574,3 @@ function restore(id: string): void {
 
   document.getElementById(id)?.focus();
 }
-

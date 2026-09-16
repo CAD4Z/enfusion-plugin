@@ -42,14 +42,20 @@ export function gameBuildOf(value: unknown): GameBuild {
 export interface MachineSettings {
   /** The DayZ installation — the folder the client and the diag executable sit in. */
   readonly dayz: string;
+  /** The separately installed DayZ Experimental client and diag build. */
+  readonly dayzExperimental: string;
   /** The diag executable, as a name in that folder or as a path of its own. */
   readonly executable: string;
   /** The DayZ Server installation; empty is the folder Steam puts it in beside DayZ. */
   readonly dayzServer: string;
+  /** The separately installed DayZ Experimental Server application. */
+  readonly dayzExperimentalServer: string;
   readonly dayzTools: string;
   /** `pboProject.exe`, or the folder holding it; see `pboProjectExecutableOf`. */
   readonly pboProject: string;
-  /** The `.biprivatekey` to sign with; empty means the pbo goes unsigned. */
+  /** Whether a build signs what it packed. On, and turned off by a developer who has no use for it. */
+  readonly signing: boolean;
+  /** The `.biprivatekey` to sign with; empty means the pbo goes unsigned. See `signingKeyOf`. */
   readonly privateKey: string;
   /** The folder the work drive is mounted from. */
   readonly workDrive: string;
@@ -91,9 +97,12 @@ export interface SecondClient {
 /** The settings, by the ids the editor knows them under, so the panel can open the right one. */
 export const SETTING = {
   dayz: 'enfusion.dayz.path',
+  dayzExperimental: 'enfusion.dayzExperimental.path',
   executable: 'enfusion.dayz.executable',
   dayzServer: 'enfusion.dayzServer.path',
+  dayzExperimentalServer: 'enfusion.dayzExperimentalServer.path',
   dayzTools: 'enfusion.dayzTools.path',
+  signing: 'enfusion.signing.enabled',
   privateKey: 'enfusion.signing.privateKey',
   workDrive: 'enfusion.workDrive.source',
   workDriveLetter: 'enfusion.workDrive.letter',
@@ -197,6 +206,20 @@ export function signToolOf(settings: MachineSettings): string {
     : windowsPath(settings.dayzTools, 'Bin', 'DsUtils', 'DSSignFile.exe');
 }
 
+/**
+ * The key this machine signs with, and empty where nothing is going to be signed at all — signing
+ * turned off, or left on with no key named.
+ *
+ * One answer, because every part of a build that turns on whether there will be a signature turns
+ * on the same thing: the step that makes it, the public key copied in beside it for a server to
+ * check it against, and the refusal over a `DSSignFile.exe` that is not there. Two of those
+ * agreeing and the third not is a mod that ships a key it was never signed with, or one that
+ * refuses to build over a signature nobody asked for.
+ */
+export function signingKeyOf(settings: MachineSettings): string {
+  return settings.signing ? settings.privateKey : '';
+}
+
 /** The build of the game that reads scripts off the disk rather than out of a pbo. */
 export const DEFAULT_EXECUTABLE = 'DayZDiag_x64.exe';
 
@@ -206,6 +229,9 @@ const RELEASE_SERVER = 'DayZServer_x64.exe';
 
 /** What Steam calls the DayZ Server folder, which it installs beside DayZ rather than inside it. */
 const SERVER_FOLDER = 'DayZServer';
+
+/** Steam's default install folder for the experimental server. */
+const EXPERIMENTAL_SERVER_FOLDER = 'DayZ Server Exp';
 
 /** Which role's part of a launch is being started, as far as choosing a program goes. */
 export type GameSide = 'client' | 'server';
@@ -231,27 +257,35 @@ export interface GameProgram {
  * retail build is two — `DayZ_x64.exe` out of DayZ, `DayZServer_x64.exe` out of DayZ Server —
  * because Steam sells and installs them as two things.
  *
- * `enfusion.dayz.executable` names the diag build only. It is there for a developer whose diag
- * build sits outside the installation, and a retail launch has nothing to override: those two
- * programs are what the installations hold, under the names Bohemia ships them under.
+ * `enfusion.dayz.executable` names the stable diag build only. It is there for a developer whose
+ * diag build sits outside the installation. An Experimental target takes the shipped diag name
+ * from its own installation so an absolute stable override cannot defeat the target; a retail
+ * launch has nothing to override either.
  */
 export function gameProgramOf(
   settings: MachineSettings,
   build: GameBuild,
   side: GameSide,
+  experimental = false,
 ): GameProgram {
+  const clientRoot = experimental ? settings.dayzExperimental : settings.dayz;
+
   if (build === 'Debug') {
-    const executable = settings.executable === '' ? DEFAULT_EXECUTABLE : settings.executable;
+    // The override belongs to the ordinary development installation. An Experimental target is
+    // specifically a request for the executable Steam installed into DayZ Exp, so an absolute
+    // stable/custom diag path must not quietly win over that target choice.
+    const executable =
+      settings.executable === '' || experimental ? DEFAULT_EXECUTABLE : settings.executable;
 
     return {
-      root: settings.dayz,
+      root: clientRoot,
       name: windowsName(executable),
-      path: resolveWindows(settings.dayz, executable),
+      path: resolveWindows(clientRoot, executable),
     };
   }
 
   if (side === 'server') {
-    const root = dayzServerRootOf(settings);
+    const root = dayzServerRootOf(settings, experimental);
 
     return {
       root,
@@ -261,9 +295,9 @@ export function gameProgramOf(
   }
 
   return {
-    root: settings.dayz,
+    root: clientRoot,
     name: RELEASE_CLIENT,
-    path: settings.dayz === '' ? '' : windowsPath(settings.dayz, RELEASE_CLIENT),
+    path: clientRoot === '' ? '' : windowsPath(clientRoot, RELEASE_CLIENT),
   };
 }
 
@@ -273,30 +307,53 @@ export function gameProgramOf(
  * does — so with nothing set the folder beside DayZ is the guess, and it is a good one on a
  * machine where both came from Steam. A setting overrides it for a machine where they did not.
  */
-export function dayzServerRootOf(settings: MachineSettings): string {
-  if (settings.dayzServer !== '') {
-    return settings.dayzServer;
+export function dayzServerRootOf(settings: MachineSettings, experimental = false): string {
+  const configured = experimental ? settings.dayzExperimentalServer : settings.dayzServer;
+  if (configured !== '') {
+    return configured;
   }
 
-  const library = windowsFolder(settings.dayz);
+  const library = windowsFolder(experimental ? settings.dayzExperimental : settings.dayz);
+  const folder = experimental ? EXPERIMENTAL_SERVER_FOLDER : SERVER_FOLDER;
 
-  return library === '' ? '' : windowsPath(library, SERVER_FOLDER);
+  return library === '' ? '' : windowsPath(library, folder);
 }
 
 /** Why a release launch cannot start that side of itself, in the words that say what to do. */
-export function missingProgramOf(build: GameBuild, side: GameSide, program: string): string {
+export function missingProgramOf(
+  build: GameBuild,
+  side: GameSide,
+  program: string,
+  experimental = false,
+): string {
   if (build === 'Debug') {
+    if (!experimental) {
+      return (
+        `${program} is not there. File patching needs the diag build of the game, which comes ` +
+        `with DayZ Tools; ${SETTING.executable} names the one to start.`
+      );
+    }
+
     return (
-      `${program} is not there. File patching needs the diag build of the game, which comes with ` +
-      `DayZ Tools; ${SETTING.executable} names the one to start.`
+      `${program} is not there. File patching needs the diag build of DayZ Experimental; ` +
+      `install it, or name its folder with ${SETTING.dayzExperimental}.`
     );
   }
 
+  if (!experimental) {
+    return side === 'server'
+      ? `${program} is not there. DayZ Server is a Steam application of its own — install it, or ` +
+          `name the folder it is in with ${SETTING.dayzServer}.`
+      : `${program} is not there. A Release launch starts the game a player starts, out of the ` +
+          `installation ${SETTING.dayz} names.`;
+  }
+
   return side === 'server'
-    ? `${program} is not there. DayZ Server is a Steam application of its own — install it, or ` +
-        `name the folder it is in with ${SETTING.dayzServer}.`
+    ? `${program} is not there. DayZ Experimental Server is a Steam application of its own — ` +
+        `install it, or name the folder it is in with ` +
+        `${SETTING.dayzExperimentalServer}.`
     : `${program} is not there. A Release launch starts the game a player starts, out of the ` +
-        `installation ${SETTING.dayz} names.`;
+        `installation ${SETTING.dayzExperimental} names.`;
 }
 
 export type EnvironmentKind = 'dayz' | 'dayzTools' | 'privateKey' | 'workDrive' | 'builder';
@@ -311,7 +368,11 @@ export interface EnvironmentEntry {
   readonly setting: string;
   readonly path: string;
   readonly state: EnvironmentState;
-  /** True where being unset is a choice rather than a gap: an unsigned pbo is a pbo. */
+  /**
+   * True where being unset is a choice rather than a gap. Only the private key is ever that, and
+   * only with signing turned off: an unsigned pbo somebody asked for is a pbo, and an unsigned pbo
+   * out of a build that says it signs is a mod no server will take.
+   */
   readonly optional: boolean;
 }
 
@@ -324,15 +385,18 @@ const ENTRIES: readonly {
   /** The setting that fills it in, which for the builder is whichever one names the one chosen. */
   readonly setting: (settings: MachineSettings) => string;
   readonly of: (settings: MachineSettings) => string;
-  readonly optional?: boolean;
+  /** Whether leaving this one empty is a choice, which for the key depends on the signing flag. */
+  readonly optional?: (settings: MachineSettings) => boolean;
 }[] = [
   { kind: 'dayz', setting: () => SETTING.dayz, of: (settings) => settings.dayz },
   { kind: 'dayzTools', setting: () => SETTING.dayzTools, of: (settings) => settings.dayzTools },
+  // A gap while signing is on, and a choice once it is off, which is the same fact read twice: the
+  // key is wanted exactly as much as the signature it would make.
   {
     kind: 'privateKey',
     setting: () => SETTING.privateKey,
     of: (settings) => settings.privateKey,
-    optional: true,
+    optional: (settings) => !settings.signing,
   },
   { kind: 'workDrive', setting: () => SETTING.workDrive, of: (settings) => settings.workDrive },
   // The chosen builder rather than both of them: the one that is not going to pack anything is
@@ -367,12 +431,12 @@ export function environmentOf(
       setting: entry.setting(settings),
       path,
       state: stateOf(path, found),
-      optional: entry.optional ?? false,
+      optional: entry.optional?.(settings) ?? false,
     };
   });
 }
 
-/** An unset private key is a choice — the pbo goes unsigned — and everything else is a gap. */
+/** A gap wants attention; a thing left unset on purpose does not. */
 export function isWanting(entry: EnvironmentEntry): boolean {
   return entry.state === 'missing' || (entry.state === 'unset' && !entry.optional);
 }

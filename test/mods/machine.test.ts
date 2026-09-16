@@ -14,16 +14,21 @@ import {
 } from '../../src/mods/machine';
 
 const DAYZ = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
+const DAYZ_EXPERIMENTAL = 'F:\\SteamLibrary\\steamapps\\common\\DayZ Exp';
 
 /** Steam's own name for the folder it puts DayZ Server in, beside DayZ and never inside it. */
 const DAYZ_SERVER = 'F:\\SteamLibrary\\steamapps\\common\\DayZServer';
+const DAYZ_EXPERIMENTAL_SERVER = 'F:\\SteamLibrary\\steamapps\\common\\DayZ Server Exp';
 
 const SETTINGS: MachineSettings = {
   dayz: DAYZ,
+  dayzExperimental: DAYZ_EXPERIMENTAL,
   executable: '',
   dayzServer: '',
+  dayzExperimentalServer: '',
   dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
+  signing: true,
   privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
   workDrive: 'F:\\DayZ\\Workdrive',
   workDriveLetter: 'P:',
@@ -62,7 +67,7 @@ test('everything the machine was asked for is there', () => {
       setting: 'enfusion.signing.privateKey',
       path: SETTINGS.privateKey,
       state: 'ok',
-      optional: true,
+      optional: false,
     },
     {
       kind: 'workDrive',
@@ -123,8 +128,8 @@ test('a builder nobody can find is unset rather than missing, which is a differe
   assert.equal(none.at(-1)?.state, 'unset');
 });
 
-test('an unset private key means the pbo goes unsigned, so it is the one thing that is optional', () => {
-  const environment = environmentOf({ ...SETTINGS, privateKey: '' }, []);
+test('signing turned off means the pbo goes unsigned, so the key is the one thing that is optional', () => {
+  const environment = environmentOf({ ...SETTINGS, signing: false, privateKey: '' }, []);
 
   assert.deepEqual(
     environment.filter((entry) => entry.optional).map((entry) => [entry.kind, entry.state]),
@@ -132,8 +137,22 @@ test('an unset private key means the pbo goes unsigned, so it is the one thing t
   );
 });
 
+/**
+ * The key is wanted exactly as much as the signature it would make. Signing left on and no key set
+ * is a build that will hand back an unsigned mod, so the gap is one, and it is shown as one.
+ */
+test('signing left on makes a key nobody set a gap like any other', () => {
+  const environment = environmentOf({ ...SETTINGS, privateKey: '' }, []);
+
+  assert.deepEqual(
+    environment.filter((entry) => entry.optional),
+    [],
+  );
+  assert.ok(environment.filter(isWanting).some((entry) => entry.kind === 'privateKey'));
+});
+
 test('what wants attention is a gap, not a choice: an unsigned pbo is nobody in the way', () => {
-  const environment = environmentOf({ ...SETTINGS, privateKey: '', dayzTools: '' }, [
+  const environment = environmentOf({ ...SETTINGS, signing: false, privateKey: '', dayzTools: '' }, [
     SETTINGS.dayz,
   ]);
 
@@ -225,6 +244,32 @@ test('a Release launch is the two programs a player and a host run, out of their
   });
 });
 
+test('an Experimental target takes both builds from the separate experimental applications', () => {
+  assert.deepEqual(
+    gameProgramOf(
+      { ...SETTINGS, executable: 'D:\\StableDiag\\DayZDiag_x64.exe' },
+      'Debug',
+      'client',
+      true,
+    ),
+    {
+      root: DAYZ_EXPERIMENTAL,
+      name: 'DayZDiag_x64.exe',
+      path: `${DAYZ_EXPERIMENTAL}\\DayZDiag_x64.exe`,
+    },
+  );
+  assert.deepEqual(gameProgramOf(SETTINGS, 'Release', 'client', true), {
+    root: DAYZ_EXPERIMENTAL,
+    name: 'DayZ_x64.exe',
+    path: `${DAYZ_EXPERIMENTAL}\\DayZ_x64.exe`,
+  });
+  assert.deepEqual(gameProgramOf(SETTINGS, 'Release', 'server', true), {
+    root: DAYZ_EXPERIMENTAL_SERVER,
+    name: 'DayZServer_x64.exe',
+    path: `${DAYZ_EXPERIMENTAL_SERVER}\\DayZServer_x64.exe`,
+  });
+});
+
 /** A machine with no installation set still knows what it would have started, which is the line. */
 test('a program with no installation behind it keeps the name it would have been started under', () => {
   const nowhere = gameProgramOf({ ...SETTINGS, dayz: '' }, 'Release', 'server');
@@ -255,6 +300,11 @@ test('DayZ Server is the folder beside DayZ until a setting says another one', (
     'D:\\Servers\\DayZ',
   );
   assert.equal(dayzServerRootOf({ ...SETTINGS, dayz: '' }), '');
+  assert.equal(dayzServerRootOf(SETTINGS, true), DAYZ_EXPERIMENTAL_SERVER);
+  assert.equal(
+    dayzServerRootOf({ ...SETTINGS, dayzExperimentalServer: 'D:\\Servers\\DayZ Exp' }, true),
+    'D:\\Servers\\DayZ Exp',
+  );
 });
 
 /** Each of the three sends a developer somewhere different, so each says which one it is. */
@@ -265,4 +315,8 @@ test('a program that is not there says which setting or install would put it the
     /enfusion\.dayzServer\.path/,
   );
   assert.match(missingProgramOf('Release', 'client', 'DayZ_x64.exe'), /enfusion\.dayz\.path/);
+  assert.match(
+    missingProgramOf('Release', 'server', 'DayZServer_x64.exe', true),
+    /enfusion\.dayzExperimentalServer\.path/,
+  );
 });

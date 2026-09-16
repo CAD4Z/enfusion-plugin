@@ -48,16 +48,18 @@ export function localAppData(): string {
 export async function readGameRoot(
   settings: MachineSettings,
   build: GameBuild,
+  experimental = false,
 ): Promise<GameRoot> {
+  const path = experimental ? settings.dayzExperimental : settings.dayz;
   const [client, server] = await Promise.all([
-    programOf(settings, build, 'client'),
-    programOf(settings, build, 'server'),
+    programOf(settings, build, 'client', experimental),
+    programOf(settings, build, 'server', experimental),
   ]);
 
   return {
-    path: settings.dayz,
+    path,
     programs: { client, server },
-    entries: await entriesOf(settings.dayz),
+    entries: await entriesOf(path),
   };
 }
 
@@ -65,8 +67,9 @@ async function programOf(
   settings: MachineSettings,
   build: GameBuild,
   side: GameSide,
+  experimental: boolean,
 ): Promise<GameProgramFacts> {
-  const program = gameProgramOf(settings, build, side);
+  const program = gameProgramOf(settings, build, side, experimental);
 
   return {
     ...program,

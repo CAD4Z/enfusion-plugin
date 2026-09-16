@@ -112,6 +112,11 @@ export interface LaunchTarget {
   readonly mod: string;
   readonly map: string | undefined;
   readonly run: Run;
+  /** Whether this target starts DayZ Experimental rather than the stable applications. */
+  readonly experimental: boolean;
+  /** The effective lists: the target's own where present, otherwise the launch block's. */
+  readonly clientMods: readonly string[];
+  readonly serverMods: readonly string[];
   readonly serverConfig: string | undefined;
   /** The block the target was declared in: where the mods directory and the mod lists come from. */
   readonly launch: Launch;
@@ -159,6 +164,9 @@ function draftOf(target: Target, source: TargetSource): LaunchTarget {
     mod: target.mod ?? source.mod,
     map: target.map,
     run: target.run,
+    experimental: target.experimental,
+    clientMods: target.clientMods ?? source.launch.clientMods,
+    serverMods: target.serverMods ?? source.launch.serverMods,
     serverConfig: target.serverConfig,
     launch: source.launch,
     configuredIn: source.configuredIn,
@@ -717,11 +725,19 @@ function loadedModNameRefusalsOf(
  * a developer off to install something they do not need.
  */
 function gameRefusalOf(input: LaunchInput, roles: readonly LaunchRole[]): string[] {
-  if (input.settings.dayz === '' && input.settings.executable === '') {
-    return [
-      'No DayZ installation is set: fill in enfusion.dayz.path, which is otherwise read from the ' +
-        'registry its installer wrote it to.',
-    ];
+  if (
+    input.game.path === '' &&
+    (input.target.experimental || input.settings.executable === '')
+  ) {
+    return input.target.experimental
+      ? [
+          'No DayZ Experimental installation is set: fill in ' +
+            'enfusion.dayzExperimental.path, which is otherwise read from Steam.',
+        ]
+      : [
+          'No DayZ installation is set: fill in enfusion.dayz.path, which is otherwise read from ' +
+            'the registry its installer wrote it to.',
+        ];
   }
 
   return sidesOf(roles).flatMap((side) => {
@@ -731,7 +747,14 @@ function gameRefusalOf(input: LaunchInput, roles: readonly LaunchRole[]): string
     // would come out of: "DayZServer_x64.exe is not there" is still the sentence to read.
     return program.present
       ? []
-      : [missingProgramOf(input.build, side, program.path === '' ? program.name : program.path)];
+      : [
+          missingProgramOf(
+            input.build,
+            side,
+            program.path === '' ? program.name : program.path,
+            input.target.experimental,
+          ),
+        ];
   });
 }
 
@@ -841,8 +864,8 @@ function serverRefusalsOf(input: LaunchInput): string[] {
 function unquotableOf(target: LaunchTarget): string[] {
   const value = [
     target.launch.modsDirectory ?? '',
-    ...target.launch.clientMods,
-    ...target.launch.serverMods,
+    ...target.clientMods,
+    ...target.serverMods,
     target.serverConfig ?? '',
   ].find((text) => text.includes('"'));
 
@@ -934,7 +957,7 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
       `-config=${serverConfigOf(input) ?? ''}`,
       `-profiles=${profile}`,
       `-mission=${mission}`,
-      ...listArgumentOf('-serverMod', pathsOf(input.target, input.target.launch.serverMods)),
+      ...listArgumentOf('-serverMod', pathsOf(input.target, input.target.serverMods)),
     ],
     cwd: workingDirectoryOf(input, 'server'),
   };
@@ -1031,7 +1054,7 @@ function offlineMissionOf(input: LaunchInput): string[] {
  * leaving it out.
  */
 function loadedOf(input: LaunchInput): string[] {
-  return pathsOf(input.target, input.target.launch.clientMods);
+  return pathsOf(input.target, input.target.clientMods);
 }
 
 /**
@@ -1044,8 +1067,8 @@ function loadedNamesOf(target: LaunchTarget, roles: readonly LaunchRole[]): stri
   const server = roles.includes('server');
 
   return [
-    ...(client ? target.launch.clientMods : []),
-    ...(server ? target.launch.serverMods : []),
+    ...(client ? target.clientMods : []),
+    ...(server ? target.serverMods : []),
   ];
 }
 

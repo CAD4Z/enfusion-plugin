@@ -90,6 +90,12 @@ export interface Target {
   /** The world the server loads, which is the tail of the mission folder's name. */
   readonly map: string | undefined;
   readonly run: Run;
+  /** Whether this target starts the separately installed DayZ Experimental applications. */
+  readonly experimental: boolean;
+  /** The client mods for this target; absent inherits the launch block's list. */
+  readonly clientMods: readonly string[] | undefined;
+  /** The server mods for this target; absent inherits the launch block's list. */
+  readonly serverMods: readonly string[] | undefined;
   /** The `server.cfg` to launch with, relative to the target's mod. */
   readonly serverConfig: string | undefined;
 }
@@ -253,7 +259,16 @@ export const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'launch'];
 
 export const LAUNCH_FIELDS = ['modsDirectory', 'clientMods', 'serverMods', 'targets'];
 
-export const TARGET_FIELDS = ['name', 'mod', 'map', 'run', 'serverConfig'];
+export const TARGET_FIELDS = [
+  'name',
+  'mod',
+  'map',
+  'run',
+  'experimental',
+  'clientMods',
+  'serverMods',
+  'serverConfig',
+];
 
 const RUN: readonly Run[] = ['client', 'server', 'both'];
 
@@ -292,6 +307,9 @@ function targetOf(reading: Reading, node: Node): Target[] {
     mod: reading.text(node, 'mod'),
     map: reading.text(node, 'map'),
     run: reading.choice(node, 'run', RUN, 'both'),
+    experimental: reading.flag(node, 'experimental', false),
+    clientMods: reading.optionalTexts(node, 'clientMods', loadedModNameProblemOf),
+    serverMods: reading.optionalTexts(node, 'serverMods', loadedModNameProblemOf),
     serverConfig: reading.text(node, 'serverConfig'),
   };
   reading.only(node, TARGET_FIELDS);
@@ -319,6 +337,12 @@ interface Reading {
     field: string,
     problemOf?: (value: string) => string | undefined,
   ): string[];
+  optionalTexts(
+    object: Node | undefined,
+    field: string,
+    problemOf?: (value: string) => string | undefined,
+  ): string[] | undefined;
+  flag(object: Node | undefined, field: string, fallback: boolean): boolean;
   choice<T extends string>(
     object: Node | undefined,
     field: string,
@@ -386,27 +410,55 @@ function read(source: string): Reading {
     return node.children ?? [];
   };
 
+  const optionalTexts = (
+    object: Node | undefined,
+    field: string,
+    problemOf?: (value: string) => string | undefined,
+  ): string[] | undefined => {
+    const items = array(object, field, 'an array of strings');
+    if (items === undefined) {
+      return undefined;
+    }
+
+    return items.flatMap((item) => {
+      if (item.type !== 'string') {
+        report(item, `Every item of "${field}" must be a string.`);
+        return [];
+      }
+
+      const value = textOf(item);
+      const problem = problemOf?.(value);
+      if (problem !== undefined) {
+        report(item, problem);
+      }
+
+      return [value];
+    });
+  };
+
   return {
     root,
     problems,
     report,
     text,
 
-    texts: (object, field, problemOf) =>
-      (array(object, field, 'an array of strings') ?? []).flatMap((item) => {
-        if (item.type !== 'string') {
-          report(item, `Every item of "${field}" must be a string.`);
-          return [];
-        }
+    texts: (object, field, problemOf) => optionalTexts(object, field, problemOf) ?? [],
 
-        const value = textOf(item);
-        const problem = problemOf?.(value);
-        if (problem !== undefined) {
-          report(item, problem);
-        }
+    optionalTexts,
 
-        return [value];
-      }),
+    flag: (object, field, fallback) => {
+      const node = memberOf(object, field);
+      if (node === undefined) {
+        return fallback;
+      }
+
+      if (node.type !== 'boolean') {
+        report(node, `"${field}" must be a boolean.`);
+        return fallback;
+      }
+
+      return node.value === true;
+    },
 
     choice: (object, field, allowed, fallback) => {
       const value = text(object, field);

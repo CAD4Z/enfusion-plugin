@@ -115,6 +115,25 @@
           ],
           "default": "both"
         },
+        "experimental": {
+          "type": "boolean",
+          "description": "Start this target from the separately installed DayZ Experimental client and server applications instead of the stable ones.",
+          "default": false
+        },
+        "clientMods": {
+          "type": "array",
+          "description": "The client mods for this target alone. Left out, the launch block's clientMods are inherited; when present, this list replaces them whole, including when it is empty.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "serverMods": {
+          "type": "array",
+          "description": "The server mods for this target alone. Left out, the launch block's serverMods are inherited; when present, this list replaces them whole, including when it is empty.",
+          "items": {
+            "type": "string"
+          }
+        },
         "serverConfig": {
           "type": "string",
           "description": "The server.cfg the dev server is started with, relative to the target's mod. Left out, the mod's own server.cfg is used, and failing that the one beside the file that owns this launch block."

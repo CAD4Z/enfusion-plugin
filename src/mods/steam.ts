@@ -19,11 +19,15 @@
 
 import { windowsPath } from './paths';
 
-/** The two apps a mod is built and run with, by the id Steam knows them under. */
+/** The game applications a mod is built and run with, by the ids Steam knows them under. */
 export const STEAM_APP = {
   dayz: '221100',
+  /** DayZ Experimental, installed as a separate beta application. */
+  dayzExperimental: '1024020',
   /** DayZ Server, which Steam sells and installs as an application of its own. */
   dayzServer: '223350',
+  /** The server paired with DayZ Experimental. */
+  dayzExperimentalServer: '1042420',
   dayzTools: '830640',
 } as const;
 
@@ -54,6 +58,24 @@ export function appPath(library: string, installDir: string): string {
  */
 export function libraryOf(vdf: string, appId: string): string | undefined {
   return librariesOf(vdf).find((library) => library.apps.includes(appId))?.path;
+}
+
+/**
+ * Libraries worth looking in for an app manifest, the one Steam currently claims first.
+ *
+ * `libraryfolders.vdf` can temporarily omit an installed app from a library's `apps` block while
+ * its `appmanifest_<id>.acf` and installation are already there (notably while an Experimental
+ * update is staged). The claim remains the fast path, and every other known library is a bounded
+ * fallback rather than treating that cache as the only truth.
+ */
+export function libraryCandidatesOf(vdf: string, appId: string): string[] {
+  const libraries = librariesOf(vdf).map((library) => library.path);
+  const claimed = libraryOf(vdf, appId);
+
+  return [
+    ...(claimed === undefined ? [] : [claimed]),
+    ...libraries.filter((library) => library !== claimed),
+  ];
 }
 
 /** One library folder as the file describes it: where it is, and what is installed into it. */

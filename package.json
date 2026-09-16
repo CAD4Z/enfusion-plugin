@@ -2,7 +2,7 @@
   "name": "enfusion-plugin",
   "displayName": "Enfusion",
   "description": "Enfusion mod tooling for VS Code: the mods of the open workspace, without the Workbench",
-  "version": "0.0.24",
+  "version": "0.0.26",
   "publisher": "hurfy",
   "license": "MIT",
   "private": true,
@@ -240,39 +240,60 @@
           "order": 1,
           "markdownDescription": "Where DayZ is installed — the folder holding `DayZDiag_x64.exe`. Left empty, it is read from the registry, which is where the installer put it."
         },
-        "enfusion.dayz.executable": {
+        "enfusion.dayzExperimental.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
           "order": 2,
-          "markdownDescription": "The diag build a Debug launch starts, as a name inside the DayZ folder or as a path of its own. Left empty, `DayZDiag_x64.exe` is started: the diag build is the one that honours `-filePatching`. A Release launch has nothing to override here — it starts `DayZ_x64.exe` and `DayZServer_x64.exe` under the names they ship as."
+          "markdownDescription": "Where DayZ Experimental is installed — the separate Steam application whose folder holds `DayZDiag_x64.exe` and `DayZ_x64.exe`. Left empty, Steam's library manifests are read for app 1024020."
+        },
+        "enfusion.dayz.executable": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 3,
+          "markdownDescription": "The diag build a non-Experimental Debug launch starts, as a name inside the DayZ folder or as a path of its own. Left empty, `DayZDiag_x64.exe` is started: the diag build is the one that honours `-filePatching`. An Experimental target always starts `DayZDiag_x64.exe` from its separate installation, and a Release launch starts the shipped retail names."
         },
         "enfusion.dayzServer.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 3,
+          "order": 4,
           "markdownDescription": "Where DayZ Server is installed — the folder holding `DayZServer_x64.exe`, which a Release launch starts the server with. DayZ Server is a Steam application of its own, so it is neither inside the DayZ folder nor recorded in the registry the way the client is: left empty, Steam's own list of libraries is read for it, and the folder beside DayZ is what is settled for."
+        },
+        "enfusion.dayzExperimentalServer.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 5,
+          "markdownDescription": "Where DayZ Experimental Server is installed — the separate Steam application whose folder holds `DayZServer_x64.exe`. Left empty, Steam's library manifests are read for app 1042420, then the `DayZ Server Exp` folder beside DayZ Experimental is used."
         },
         "enfusion.dayzTools.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 4,
+          "order": 6,
           "markdownDescription": "Where DayZ Tools is installed — the folder holding `bin\\AddonBuilder` and `bin\\DSUtils`. Left empty, it is read from the registry."
+        },
+        "enfusion.signing.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "order": 7,
+          "markdownDescription": "Whether a build signs the pbo it just packed, which it does unless this is turned off: a server that checks signatures takes nothing else, and a mod is packed to be run somewhere. The signature is made by `DSSignFile.exe` out of DayZ Tools, with the key `enfusion.signing.privateKey` names — and with no key named there is nothing to sign with, so the build says the pbo went unsigned and carries on. Off leaves the pbo bare and the built mod's `Keys` folder empty, which is a server of your own with `verifySignatures = 0` and nothing else."
         },
         "enfusion.signing.privateKey": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 5,
-          "markdownDescription": "The `.biprivatekey` every pbo is signed with. Left empty, the pbo go unsigned, which a server checking signatures will not take."
+          "order": 8,
+          "markdownDescription": "The `.biprivatekey` the pbo are signed with; the `.bikey` beside it is the public half, and it is what goes into the built mod's `Keys` folder for a server to check against. Left empty, the pbo go unsigned however `enfusion.signing.enabled` is set — which a server checking signatures will not take. `DSCreateKey.exe`, in `Bin\\DsUtils` of DayZ Tools, is what makes a pair."
         },
         "enfusion.workDrive.source": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 6,
+          "order": 9,
           "markdownDescription": "The folder the work drive is mounted from — the one holding the unpacked vanilla data."
         },
         "enfusion.workDrive.letter": {
@@ -281,21 +302,21 @@
           "pattern": "^$|^[A-Za-z]:?[\\\\/]?$",
           "patternErrorMessage": "A drive letter, on its own or with a colon after it: P, P: or P:\\. Left empty, the work drive goes up under P:.",
           "scope": "machine",
-          "order": 7,
+          "order": 10,
           "markdownDescription": "The letter the work drive is mounted under. Every prefix in the game is counted from the root of it, which is why `P:` is what the tools and the documentation assume."
         },
         "enfusion.filePatching.root": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 8,
+          "order": 11,
           "markdownDescription": "Where the run folders are built — one per workspace, each holding the folder the game is started in, the profiles and the mission of the dev server. Left empty, they go under `%LOCALAPPDATA%\\Enfusion\\run`, so that neither the game folder nor the work drive is touched to launch."
         },
         "enfusion.launch.profiles": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 9,
+          "order": 12,
           "markdownDescription": "Where the profiles a launch builds are put, as `<this>\\<Mod>\\client` and `<this>\\<Mod>\\server`. Left empty, they go inside the run folder beside the file patching root. It is the one part of a launch that gets read rather than only run — the `.RPT`, the `.ADM`, whatever a server mod keeps its configuration in — so it is worth being able to put somewhere reachable. `P:\\Profiles` is where the Workbench plugins put theirs, and pointing this at the same folder leaves one profile for both instead of two that drift. Only the profiles move: the file patching root stays in the run folder whatever this says, because it mirrors the whole game installation and the work drive is the one place that must not be."
         },
         "enfusion.builder": {
@@ -310,35 +331,35 @@
             "AddonBuilder, which comes with DayZ Tools. It ignores the exclude list: the option it takes one through crashes it."
           ],
           "scope": "machine",
-          "order": 10,
+          "order": 13,
           "markdownDescription": "The program that packs an addon into a pbo."
         },
         "enfusion.pboProject.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 11,
+          "order": 14,
           "markdownDescription": "`pboProject.exe`, or the folder holding it — a path that names no executable is taken as the folder and completed. Left empty, it is read from the registry, which is where its installer put it."
         },
         "enfusion.launch.secondAccount": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 12,
+          "order": 15,
           "markdownDescription": "The Steam account the second client signs in as.\n\nTwo clients on one machine are two Steam accounts, and Steam signs one account in per Windows session — so the second client is run inside the Sandboxie box `steam2`, which has a Steam of its own. All that is needed for that is Sandboxie-Plus installed: the box is made the first time the second client is asked for, with Sandboxie's own defaults plus `NeverRemove` and `AutoDelete=n`, so that the sign-in inside it survives and is asked for once rather than once a launch. The first press shows that Steam's login window; every press after it goes straight to the game.\n\nLeft empty, the second client is simply another client: useful for offline missions, and unable to join a server the first one is already signed in to."
         },
         "enfusion.sandboxie.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 13,
+          "order": 16,
           "markdownDescription": "Where Sandboxie-Plus is installed — the folder holding `Start.exe` and `SbieIni.exe`. Left empty, it is read from the registry, which is where its installer put it. Only the second client uses it, and only when `enfusion.launch.secondAccount` names an account."
         },
         "enfusion.steam.path": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "order": 14,
+          "order": 17,
           "markdownDescription": "Where Steam is installed — the folder holding `steam.exe`. Left empty, it is read from the registry. Only the second client uses it: it is the same installation, run sandboxed and signed in as another account."
         }
       }

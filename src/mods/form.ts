@@ -67,6 +67,8 @@ export interface Form {
 export type FormEdit =
   /** Writes the field; an empty value clears it, an empty box being a field left unanswered. */
   | { readonly kind: 'set'; readonly path: FormPath; readonly value: string }
+  /** Writes a checked flag, or takes the field out again when it is unchecked. */
+  | { readonly kind: 'toggle'; readonly path: FormPath; readonly value: boolean }
   /** Takes out whatever is at this path: a field, an item of a list, a whole target. */
   | { readonly kind: 'clear'; readonly path: FormPath }
   /** Adds to the end of the list at this path. */
@@ -251,7 +253,7 @@ function readOf(kind: ManifestKind, source: string): Read {
 /** Where the write lands and what goes there; `undefined` takes out whatever is there now. */
 interface Write {
   readonly path: FormPath;
-  readonly value: string | Record<string, string> | undefined;
+  readonly value: string | boolean | Record<string, string> | undefined;
   readonly appending: boolean;
 }
 
@@ -259,13 +261,16 @@ function writeOf(kind: ManifestKind, source: string, edit: FormEdit): Write | un
   switch (edit.kind) {
     case 'set':
       return {
-        path: edit.path,
+        path: edit.value === '' ? clearedPathOf(source, edit.path) : edit.path,
         value: edit.value === '' ? undefined : edit.value,
         appending: false,
       };
 
+    case 'toggle':
+      return { path: edit.path, value: edit.value ? true : undefined, appending: false };
+
     case 'clear':
-      return { path: edit.path, value: undefined, appending: false };
+      return { path: clearedPathOf(source, edit.path), value: undefined, appending: false };
 
     // An empty box added nothing, so nothing is written: the row was a place to type, not a value.
     case 'append':
@@ -280,6 +285,33 @@ function writeOf(kind: ManifestKind, source: string, edit: FormEdit): Write | un
         appending: true,
       };
   }
+}
+
+/**
+ * Removing the last mod of a target takes out its whole override, so the target inherits the
+ * launch list again. An explicitly written empty list still means "override with no mods"; it is
+ * only the form action that reverses the override it made by adding the first row.
+ */
+function clearedPathOf(source: string, path: FormPath): FormPath {
+  if (
+    path.length !== 5 ||
+    path[0] !== LAUNCH ||
+    path[1] !== TARGETS ||
+    typeof path[2] !== 'number' ||
+    (path[3] !== 'clientMods' && path[3] !== 'serverMods') ||
+    typeof path[4] !== 'number'
+  ) {
+    return path;
+  }
+
+  const root = parseTree(source, [], PARSING);
+  const listPath = path.slice(0, -1);
+  const list = root === undefined ? undefined : findNodeAtLocation(root, [...listPath]);
+  const item = root === undefined ? undefined : findNodeAtLocation(root, [...path]);
+
+  return list?.type === 'array' && list.children?.length === 1 && item?.parent === list
+    ? listPath
+    : path;
 }
 
 /** Everything but taking something out, which the parser's own editing side does right. */
@@ -482,19 +514,50 @@ function droppedFrom(
   }
 
   const read = readOf(kind, source);
-  const shown = new Map<string, number>([
-    ['exclude', read.mod?.exclude.length ?? 0],
-    [`${LAUNCH}.clientMods`, read.launch.clientMods.length],
-    [`${LAUNCH}.serverMods`, read.launch.serverMods.length],
-    [`${LAUNCH}.${TARGETS}`, read.launch.targets.length],
-  ]);
+  const lists = [
+    ...(kind === 'mod' ? MOD_LISTS : WORKSPACE_LISTS).map((path) => ({
+      path,
+      length: shownListLengthOf(read, path),
+    })),
+    ...read.launch.targets.flatMap((target, at) => [
+      {
+        path: [LAUNCH, TARGETS, at, 'clientMods'] as FormPath,
+        length: target.clientMods?.length ?? 0,
+      },
+      {
+        path: [LAUNCH, TARGETS, at, 'serverMods'] as FormPath,
+        length: target.serverMods?.length ?? 0,
+      },
+    ]),
+  ];
 
-  return (kind === 'mod' ? MOD_LISTS : WORKSPACE_LISTS)
-    .map((path) => ({ name: path.join('.'), node: findNodeAtLocation(root, [...path]) }))
+  return lists
+    .map(({ path, length }) => ({
+      name: path.join('.'),
+      length,
+      node: findNodeAtLocation(root, [...path]),
+    }))
     .find(
-      ({ name, node }) =>
-        node?.type === 'array' && (node.children ?? []).length !== shown.get(name),
+      ({ length, node }) => node?.type === 'array' && (node.children ?? []).length !== length,
     )?.name;
+}
+
+function shownListLengthOf(read: Read, path: FormPath): number {
+  const field = path.at(-1);
+  if (field === 'exclude') {
+    return read.mod?.exclude.length ?? 0;
+  }
+  if (field === TARGETS) {
+    return read.launch.targets.length;
+  }
+  if (field === 'clientMods') {
+    return read.launch.clientMods.length;
+  }
+  if (field === 'serverMods') {
+    return read.launch.serverMods.length;
+  }
+
+  return 0;
 }
 
 /**

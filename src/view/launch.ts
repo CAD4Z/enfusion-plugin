@@ -546,7 +546,7 @@ class Launcher {
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),
-        readGameRoot(settings, build),
+        readGameRoot(settings, build, target.experimental),
         readLinkFacts(filePatchingRootOf(runRoot)),
         // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
         // for by the plan itself, so that the two can never go looking at different paths.
@@ -677,7 +677,7 @@ class Launcher {
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),
-        readGameRoot(settings, build),
+        readGameRoot(settings, build, target.experimental),
         readLinkFacts(filePatchingRootOf(runRoot)),
         readFound(launchPathsOf(target, mods)),
       ]);
