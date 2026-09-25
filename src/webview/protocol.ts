@@ -68,6 +68,7 @@ export interface ToolsView {
   readonly secondClient: ActionView;
   readonly build: ActionView;
   readonly workDrive: readonly WorkDriveActionView[];
+  readonly workbench: ActionView;
 }
 
 export interface WorkDriveActionView extends ActionView {
@@ -140,6 +141,8 @@ export type PanelRequest =
   | { readonly type: 'launchSecondClient' }
   /** Runs the work drive command of that action, which the palette runs the same way. */
   | { readonly type: 'workDrive'; readonly action: WorkDriveAction }
+  /** Opens the selected target mod's `.gproj` in DayZ Workbench. */
+  | { readonly type: 'workbench' }
   /** Builds one addon, named the way the panel was given it. */
   | { readonly type: 'build'; readonly mod: string; readonly addon: string }
   /** Builds every addon of the workspace, in the order the graph puts them. */

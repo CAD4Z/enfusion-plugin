@@ -11,6 +11,8 @@ import {
   isWanting,
   missingProgramOf,
   pboProjectExecutableOf,
+  workbenchExecutableOf,
+  workDriveToolOf,
 } from '../../src/mods/machine';
 
 const DAYZ = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
@@ -37,6 +39,22 @@ const SETTINGS: MachineSettings = {
   secondClient: { account: '', sandboxie: '', steam: '' },
   builder: 'pboProject',
 };
+
+test('DayZ WorkDrive is found inside the configured tools installation', () => {
+  assert.equal(
+    workDriveToolOf(SETTINGS),
+    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\WorkDrive\\WorkDrive.exe',
+  );
+  assert.equal(workDriveToolOf({ ...SETTINGS, dayzTools: '' }), '');
+});
+
+test('DayZ Workbench is found inside the configured tools installation', () => {
+  assert.equal(
+    workbenchExecutableOf(SETTINGS),
+    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\Workbench\\workbenchApp.exe',
+  );
+  assert.equal(workbenchExecutableOf({ ...SETTINGS, dayzTools: '' }), '');
+});
 
 test('everything the machine was asked for is there', () => {
   const environment = environmentOf(SETTINGS, [

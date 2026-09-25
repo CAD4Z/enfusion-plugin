@@ -185,10 +185,10 @@ function launchSection(message: ManifestMessage, writable: boolean): HTMLElement
     ),
     list(
       {
-        path: ['launch', 'clientMods'],
-        label: 'Client mods',
-        help: 'Third-party mods to hand the client, by the name of their folder.',
-        items: message.launch.clientMods,
+        path: ['launch', 'mods'],
+        label: 'Mods',
+        help: 'Mods loaded by both the client and server, by the name of their folder.',
+        items: message.launch.mods,
         placeholder: '@CF',
       },
       writable,
@@ -196,8 +196,8 @@ function launchSection(message: ManifestMessage, writable: boolean): HTMLElement
     list(
       {
         path: ['launch', 'serverMods'],
-        label: 'Server mods',
-        help: 'Third-party mods to hand the server alone, by the name of their folder.',
+        label: 'Server Mods',
+        help: 'Additional mods loaded only by the server, by the name of their folder.',
         items: message.launch.serverMods,
         placeholder: '@Expansion-Core',
       },
@@ -301,13 +301,13 @@ function targetOf(target: Target, at: number, writable: boolean): HTMLElement {
     ),
     list(
       {
-        path: [...path, 'clientMods'],
-        label: 'Client mods',
+        path: [...path, 'mods'],
+        label: 'Mods',
         help:
-          'Mods for this target alone. Until this list is written, the launch-level client mods ' +
-          'are inherited. Removing its last row restores inheritance; an explicitly empty list ' +
-          'written as text overrides them with none.',
-        items: target.clientMods ?? [],
+          'Mods loaded by both the client and server for this target. Until this list is written, ' +
+          'the launch-level mods are inherited. Removing its last row restores inheritance; an ' +
+          'explicitly empty list written as text overrides them with none.',
+        items: target.mods ?? [],
         placeholder: '@CF',
       },
       writable,
@@ -315,9 +315,9 @@ function targetOf(target: Target, at: number, writable: boolean): HTMLElement {
     list(
       {
         path: [...path, 'serverMods'],
-        label: 'Server mods',
+        label: 'Server Mods',
         help:
-          'Server mods for this target alone. Until this list is written, the launch-level ' +
+          'Additional mods loaded only by the server. Until this list is written, the launch-level ' +
           'server mods are inherited. Removing its last row restores inheritance; an explicitly ' +
           'empty list written as text overrides them with none.',
         items: target.serverMods ?? [],

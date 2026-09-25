@@ -10,11 +10,11 @@
 
 import { execFile } from 'node:child_process';
 import type { Stats } from 'node:fs';
-import { lstat, readlink, rmdir, symlink, unlink } from 'node:fs/promises';
+import { access, lstat, readlink, rmdir, symlink, unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { MachineSettings } from '../mods/machine';
 import { isModNameOf } from '../mods/modName';
-import { mountArguments, mountedAt, unmountArguments } from '../mods/subst';
+import { mountCommandOf, mountedAt, unmountCommandOf } from '../mods/subst';
 import {
   type Link,
   type LinkFact,
@@ -83,12 +83,28 @@ export async function readLinks(
   return linksOf(prefixes, drive, new Map(facts));
 }
 
-export async function mount(drive: WorkDrive): Promise<void> {
-  await run('subst', mountArguments(drive.letter, drive.source));
+export async function mount(drive: WorkDrive, workDriveTool: string): Promise<void> {
+  const command = mountCommandOf(drive.letter, drive.source, await existing(workDriveTool));
+  await run(command.file, command.args);
 }
 
-export async function unmount(drive: WorkDrive): Promise<void> {
-  await run('subst', unmountArguments(drive.letter));
+export async function unmount(drive: WorkDrive, workDriveTool: string): Promise<void> {
+  const command = unmountCommandOf(drive.letter, await existing(workDriveTool));
+  await run(command.file, command.args);
+}
+
+/** A missing optional helper means the old local-token `subst`, not a failed mount command. */
+async function existing(path: string): Promise<string> {
+  if (path === '') {
+    return '';
+  }
+
+  try {
+    await access(path);
+    return path;
+  } catch {
+    return '';
+  }
 }
 
 /**

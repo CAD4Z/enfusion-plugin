@@ -40,7 +40,6 @@ const CLIENT_ARGUMENTS: readonly string[] = [
   '-adminlog',
   '-nopause',
   '-nosplash',
-  '-window',
   '-debugger=127.0.0.1',
   '-debuggerPort=41000',
 ];
@@ -88,6 +87,7 @@ test('a client target comes out as the run folder, its links and one command lin
       { from: `${CORE.root}\\Profiles\\Dev`, to: `${RUN}\\profiles\\CADCore\\client` },
       { from: `${CORE.root}\\Profiles\\Client`, to: `${RUN}\\profiles\\CADCore\\client` },
     ],
+    windowSettings: [`${RUN}\\profiles\\CADCore\\client\\Users\\dev\\DayZ.cfg`],
     processes: [
       {
         role: 'client',
@@ -148,6 +148,7 @@ test('a target that puts up both starts the server and a client that joins it', 
         `-config=${CORE.root}\\server.cfg`,
         `-profiles=${RUN}\\profiles\\CADCore\\server`,
         `-mission=${RUN}\\missions\\CADCore.chernarusplus`,
+        '-mod=P:\\Mods\\@CADCore',
       ],
       cwd: `${RUN}\\game`,
     },
@@ -208,6 +209,7 @@ test('a Release target starts the retail pair where they are installed, and patc
         `-config=${CORE.root}\\server.cfg`,
         `-profiles=${RUN}\\profiles\\CADCore\\server`,
         `-mission=${RUN}\\missions\\CADCore.chernarusplus`,
+        '-mod=P:\\Mods\\@CADCore',
       ],
       cwd: SERVER_GAME,
     },
@@ -220,7 +222,6 @@ test('a Release target starts the retail pair where they are installed, and patc
         '-adminlog',
         '-nopause',
         '-nosplash',
-        '-window',
         '-name=SurvivorA',
         `-profiles=${RUN}\\profiles\\CADCore\\client`,
         '-mod=P:\\Mods\\@CADCore',
@@ -248,6 +249,43 @@ test('a second client is of whichever build the launch it joins is', () => {
   assert.ok(release?.arguments.includes('-client2'));
   assert.ok(!release?.arguments.some((argument) => argument.startsWith('-debugger')));
   assert.ok(!release?.arguments.includes('-filePatching'));
+});
+
+/**
+ * The window a client comes up in is asked for in its own settings rather than on its command
+ * line: `-window` forced a title bar, so no client is given it, and each client's settings file is
+ * put right before it starts. The server has no window of that kind and no such file.
+ */
+test('every client has its window settings put right, and none is started with -window', () => {
+  const both = launchPlanOf(input({ target: target({ run: 'both' }) }));
+  const second = launchPlanOf(input(), ['client2']);
+  const experimental = launchPlanOf(input({ target: target({ experimental: true }) }));
+  const server = launchPlanOf(input({ target: target({ run: 'server' }) }));
+
+  assert.deepEqual(both.windowSettings, [`${RUN}\\profiles\\CADCore\\client\\Users\\dev\\DayZ.cfg`]);
+  assert.deepEqual(second.windowSettings, [
+    `${RUN}\\profiles\\CADCore\\client2\\Users\\dev\\DayZ.cfg`,
+  ]);
+  assert.deepEqual(experimental.windowSettings, [
+    `${RUN}\\profiles\\CADCore\\client\\Users\\dev\\DayZ Exp.cfg`,
+  ]);
+  assert.deepEqual(server.windowSettings, []);
+  assert.ok(
+    [...both.processes, ...second.processes].every((process_) => !process_.arguments.includes('-window')),
+  );
+});
+
+/** A settings file under a folder with no name would be one the game never reads. */
+test('without a Windows account to file them under, no window settings are touched', () => {
+  assert.deepEqual(launchPlanOf(input({ user: '' })).windowSettings, []);
+});
+
+/** A refused launch touches nothing, the settings included. */
+test('a refused launch puts no window settings right', () => {
+  const plan = launchPlanOf(input({ target: target({ mod: 'Elsewhere' }) }));
+
+  assert.notDeepEqual(plan.refusals, []);
+  assert.deepEqual(plan.windowSettings, []);
 });
 
 test('a target that puts up the server alone starts the server and nothing else', () => {
@@ -513,7 +551,7 @@ test('the mods reach the command line in the order the list wrote them, ours amo
     input({
       mods: [CORE, MAP],
       target: target({
-        launch: launch({ clientMods: ['@CF', 'CADMap', 'Community-Online-Tools', 'CADCore'] }),
+        launch: launch({ mods: ['@CF', 'CADMap', 'Community-Online-Tools', 'CADCore'] }),
       }),
     }),
   );
@@ -535,7 +573,7 @@ test('a mod of the workspace that no list names is not loaded at all', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
-      target: target({ launch: launch({ clientMods: ['CADCore'] }) }),
+      target: target({ launch: launch({ mods: ['CADCore'] }) }),
     }),
   );
   const said = plan.processes.flatMap((process_) => process_.arguments).join(' ');
@@ -545,63 +583,88 @@ test('a mod of the workspace that no list names is not loaded at all', () => {
   assert.ok(!said.includes('CADMap'), said);
 });
 
-/** The server reads its own list, `serverMods`, and nothing the client's `clientMods` names. */
-test('the server gets -serverMod= from serverMods and none of the clientâ€™s -mod=', () => {
-  const plan = launchPlanOf(
-    input({
-      mods: [CORE, MAP],
-      target: target({
-        run: 'both',
-        launch: launch({
-          clientMods: ['@CF', 'CADCore'],
-          serverMods: ['DayZ-Expansion-Licensed', '@VPPAdminTools'],
+for (const build of ['Debug', 'Release'] as const) {
+  for (const run of ['client', 'server', 'both'] as const) {
+    test(`${build} ${run} loads shared mods and reserves serverMods for the server`, () => {
+      const input_ = input({
+        build,
+        target: target({
+          run,
+          launch: launch({
+            mods: ['@CF', 'CADCore'],
+            serverMods: ['DayZ-Expansion-Licensed', '@VPPAdminTools'],
+          }),
         }),
-      }),
-    }),
-  );
-  const server = plan.processes.find((process_) => process_.role === 'server');
+      });
+      const plan = launchPlanOf(input_);
+      const second = launchPlanOf(input_, ['client2']);
 
-  assert.ok(
-    !server?.arguments.some((argument) => argument.startsWith('-mod=')),
-    server?.arguments.join(' '),
-  );
-  assert.ok(
-    server?.arguments.includes(
-      '-serverMod=P:\\Mods\\@DayZ-Expansion-Licensed;P:\\Mods\\@VPPAdminTools',
-    ),
-    server?.arguments.join(' '),
-  );
-});
+      assert.deepEqual(plan.refusals, []);
+      assert.deepEqual(second.refusals, []);
+      assert.equal(plan.processes.length, run === 'both' ? 2 : 1);
+      assert.equal(second.processes.length, 1);
+      for (const process_ of [...plan.processes, ...second.processes]) {
+        assert.deepEqual(
+          process_.arguments.filter((argument) => argument.startsWith('-mod=')),
+          ['-mod=P:\\Mods\\@CF;P:\\Mods\\@CADCore'],
+        );
+        assert.deepEqual(
+          process_.arguments.filter((argument) => argument.startsWith('-serverMod=')),
+          process_.role === 'server'
+            ? ['-serverMod=P:\\Mods\\@DayZ-Expansion-Licensed;P:\\Mods\\@VPPAdminTools']
+            : [],
+        );
+      }
+    });
+  }
+}
 
 test('a target-specific mod list replaces the launch list whole', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
       target: target({
-        clientMods: ['CADMap'],
-        launch: launch({ clientMods: ['CADCore'] }),
+        run: 'both',
+        mods: ['CADMap'],
+        launch: launch({ mods: ['CADCore'] }),
       }),
-      found: ['P:\\Mods\\@CADMap\\Addons\\CADMap.pbo'],
+      found: ['P:\\Mods\\@CADMap\\Addons\\CADMap.pbo', `${CORE.root}\\server.cfg`],
     }),
   );
-  const arguments_ = plan.processes[0]?.arguments ?? [];
-  const mods = arguments_.find((argument) => argument.startsWith('-mod='));
-
   assert.deepEqual(plan.refusals, []);
-  assert.equal(mods, '-mod=P:\\Mods\\@CADMap');
-  assert.ok(!mods?.includes('CADCore'), arguments_.join(' '));
+  assert.equal(plan.processes.length, 2);
+  for (const process_ of plan.processes) {
+    assert.equal(
+      process_.arguments.find((argument) => argument.startsWith('-mod=')),
+      '-mod=P:\\Mods\\@CADMap',
+    );
+  }
 });
 
 test('an explicitly empty target mod list overrides inherited mods with none', () => {
   const plan = launchPlanOf(
     input({
-      target: target({ clientMods: [], launch: launch({ clientMods: ['CADCore'] }) }),
-      found: [],
+      target: target({
+        run: 'both',
+        mods: [],
+        launch: launch({ mods: ['CADCore'], serverMods: ['@ServerTools'] }),
+      }),
+      found: [`${CORE.root}\\server.cfg`, 'P:\\Mods\\@ServerTools'],
     }),
   );
 
   assert.deepEqual(plan.refusals, []);
-  assert.ok(!plan.processes[0]?.arguments.some((argument) => argument.startsWith('-mod=')));
+  assert.equal(plan.processes.length, 2);
+  assert.ok(
+    !plan.processes.some((process_) =>
+      process_.arguments.some((argument) => argument.startsWith('-mod=')),
+    ),
+  );
+  assert.ok(
+    plan.processes.find((process_) => process_.role === 'server')?.arguments.includes(
+      '-serverMod=P:\\Mods\\@ServerTools',
+    ),
+  );
 });
 
 /**
@@ -669,7 +732,7 @@ test('a second client is planned alone, with -client2, its own profile and a ser
 test('a mod list nobody filled in is left off the command line rather than passed empty', () => {
   const plan = launchPlanOf(
     input({
-      target: target({ run: 'both', launch: launch({ clientMods: [], serverMods: [] }) }),
+      target: target({ run: 'both', launch: launch({ mods: [], serverMods: [] }) }),
       found: [`${CORE.root}\\server.cfg`, `${CORE.root}\\Missions\\CADCore.chernarusplus`],
     }),
   );
@@ -793,7 +856,7 @@ test('a mod that is not built stops the launch and is named', () => {
   const plan = launchPlanOf(
     input({
       mods: [CORE, MAP],
-      target: target({ launch: launch({ clientMods: ['CADCore', 'CADMap'] }) }),
+      target: target({ launch: launch({ mods: ['CADCore', 'CADMap'] }) }),
       found: [],
     }),
   );
@@ -822,7 +885,7 @@ test('a mod of several addons is not built until every one of its pbo is there',
 test('a third-party mod that is not in the mods directory stops the launch and is named', () => {
   const plan = launchPlanOf(
     input({
-      target: target({ run: 'both', launch: launch({ clientMods: ['CF'], serverMods: ['@VPPAdminTools'] }) }),
+      target: target({ run: 'both', launch: launch({ mods: ['CF'], serverMods: ['@VPPAdminTools'] }) }),
       found: [
         'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
         `${CORE.root}\\server.cfg`,
@@ -835,6 +898,18 @@ test('a third-party mod that is not in the mods directory stops the launch and i
     '@CF is not in the mods directory: nothing is at P:\\Mods\\@CF.',
     '@VPPAdminTools is not in the mods directory: nothing is at P:\\Mods\\@VPPAdminTools.',
   ]);
+});
+
+test('a missing shared mod stops a server-only launch and is checked before starting', () => {
+  const target_ = target({ run: 'server', launch: launch({ mods: ['CADMap'] }) });
+  const missing = 'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo';
+  assert.ok(launchPathsOf(target_, [CORE, MAP]).includes(missing));
+
+  const plan = launchPlanOf(
+    input({ target: target_, mods: [CORE, MAP], found: [`${CORE.root}\\server.cfg`] }),
+  );
+  assert.ok(plan.refusals.some((refusal) => refusal.includes(missing)));
+  assert.deepEqual(plan.processes, []);
 });
 
 /** Only the server ever loads them, so a client-only target is not held up over one. */
@@ -872,7 +947,7 @@ test('a world the targetâ€™s mod keeps no mission for is a warning, not a refusa
 test('the paths a launch asks the disk about are the built mods and the serverâ€™s own files', () => {
   assert.deepEqual(
     launchPathsOf(
-      target({ run: 'client', launch: launch({ clientMods: ['CADCore', 'CADMap'] }) }),
+      target({ run: 'client', launch: launch({ mods: ['CADCore', 'CADMap'] }) }),
       [CORE, MAP],
     ),
     ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo', 'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo'],
@@ -885,7 +960,7 @@ test('the paths a launch asks the disk about are the built mods and the serverâ€
       target({
         run: 'both',
         configuredIn: 'F:\\Code\\cad4z',
-        launch: launch({ clientMods: ['@CF', 'CADCore'] }),
+        launch: launch({ mods: ['@CF', 'CADCore'] }),
       }),
       [CORE],
     ),
@@ -903,7 +978,7 @@ test('the paths a launch asks the disk about are the built mods and the serverâ€
 test('the same server.cfg looked for twice is asked about once', () => {
   assert.deepEqual(
     launchPathsOf(
-      target({ run: 'server', launch: launch({ clientMods: [], serverMods: ['CADCore'] }) }),
+      target({ run: 'server', launch: launch({ mods: [], serverMods: ['CADCore'] }) }),
       [CORE],
     ),
     [
@@ -946,14 +1021,14 @@ test('a checked name belonging to another raw mod is refused before launch paths
 
 test('an invalid but folder-safe workspace name is not probed as a third-party mod', () => {
   const invalid = { ...CORE, name: 'Bad-Mod', modName: undefined };
-  const target_ = target({ mod: 'Bad-Mod', launch: launch({ clientMods: ['Bad-Mod'] }) });
+  const target_ = target({ mod: 'Bad-Mod', launch: launch({ mods: ['Bad-Mod'] }) });
 
   assert.deepEqual(launchPathsOf(target_, [invalid]), []);
   assert.deepEqual(launchPlanOf(input({ target: target_, mods: [invalid] })).processes, []);
 });
 
 test('a loaded-mod traversal is reported and never becomes a path to probe or launch', () => {
-  const target_ = target({ launch: launch({ clientMods: ['../Victim', 'Community-Online-Tools'] }) });
+  const target_ = target({ launch: launch({ mods: ['../Victim', 'Community-Online-Tools'] }) });
   const plan = launchPlanOf(input({ target: target_ }));
   const paths = launchPathsOf(target_, [CORE]);
 
@@ -964,7 +1039,7 @@ test('a loaded-mod traversal is reported and never becomes a path to probe or la
 });
 
 test('an empty loaded-mod reference is refused rather than silently omitted', () => {
-  const target_ = target({ launch: launch({ clientMods: [''] }) });
+  const target_ = target({ launch: launch({ mods: [''] }) });
   const plan = launchPlanOf(input({ target: target_ }));
 
   assert.ok(plan.refusals.some((refusal) => refusal.includes('needs one folder name')));
@@ -1064,7 +1139,7 @@ test('a launch refuses when nobody said where the built mods are', () => {
 
 test('a quotation mark in what the manifest puts on a command line is refused', () => {
   const plan = launchPlanOf(
-    input({ target: target({ launch: launch({ clientMods: ['@CF" -connect=elsewhere'] }) }) }),
+    input({ target: target({ launch: launch({ mods: ['@CF" -connect=elsewhere'] }) }) }),
   );
 
   assert.ok(
@@ -1159,18 +1234,18 @@ test('a target inherits launch mods until it supplies either list itself', () =>
   const targets = targetsOf([
     source({
       launch: launch({
-        clientMods: ['@CF'],
+        mods: ['@CF'],
         serverMods: ['@ServerTools'],
         targets: [
           named('Inherited'),
-          { ...named('Own'), clientMods: [], serverMods: ['@TargetServer'] },
+          { ...named('Own'), mods: [], serverMods: ['@TargetServer'] },
         ],
       }),
     }),
   ]);
 
   assert.deepEqual(
-    targets.map((target) => [target.clientMods, target.serverMods]),
+    targets.map((target) => [target.mods, target.serverMods]),
     [
       [['@CF'], ['@ServerTools']],
       [[], ['@TargetServer']],
@@ -1232,6 +1307,7 @@ function input(
     present: new Map(),
     found: launchPathsOf(chosen, mods),
     debugPorts: { client: 41000, server: 41001, client2: 41002 },
+    user: 'dev',
     ...over,
     game: {
       path: GAME,
@@ -1269,7 +1345,7 @@ function target(over: Partial<LaunchTarget> = {}): LaunchTarget {
     map: 'chernarusplus',
     run: 'client',
     experimental: false,
-    clientMods: over.clientMods ?? launch_.clientMods,
+    mods: over.mods ?? launch_.mods,
     serverMods: over.serverMods ?? launch_.serverMods,
     serverConfig: undefined,
     launch: launch_,
@@ -1286,7 +1362,7 @@ function target(over: Partial<LaunchTarget> = {}): LaunchTarget {
 function launch(over: Partial<Launch> = {}): Launch {
   return {
     modsDirectory: 'P:\\Mods',
-    clientMods: ['CADCore'],
+    mods: ['CADCore'],
     serverMods: [],
     targets: [],
     ...over,
@@ -1311,7 +1387,7 @@ function named(name: string): Target {
     map: undefined,
     run: 'both',
     experimental: false,
-    clientMods: undefined,
+    mods: undefined,
     serverMods: undefined,
     serverConfig: undefined,
   };

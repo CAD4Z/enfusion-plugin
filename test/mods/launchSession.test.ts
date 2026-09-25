@@ -72,6 +72,46 @@ test('the coordinator gives every entry point one workspace-wide launch slot', a
   await next.stop();
 });
 
+test('an orphaned adapter can be stopped before a fresh panel launch claims the slot', async () => {
+  const coordinator = new LaunchCoordinator();
+  const orphan = coordinator.session(events());
+  const primary = controlledLaunch('client');
+
+  await orphan.start(started(primary.active));
+  assert.equal(coordinator.busy, true);
+
+  assert.equal(await coordinator.stopOrphan(), true);
+  assert.equal(primary.process.kills, 1);
+  assert.equal(primary.listener.closes, 1);
+  assert.equal(coordinator.busy, false);
+  assert.equal(await coordinator.stopOrphan(), false);
+});
+
+test('a launch in cleanup is busy but no longer active', async () => {
+  const coordinator = new LaunchCoordinator();
+  const session = coordinator.session(events());
+  const exit = deferred<LaunchExit>();
+  const cleanup = deferred<readonly unknown[]>();
+
+  await session.start(() =>
+    Promise.resolve({
+      kind: 'started',
+      launch: { ended: exit.promise, stop: () => cleanup.promise },
+    }),
+  );
+  assert.equal(coordinator.active, true);
+
+  exit.resolve({ role: 'client', outcome: EXIT_ZERO });
+  await turn();
+  assert.equal(coordinator.busy, true);
+  assert.equal(coordinator.active, false);
+
+  const finishing = coordinator.stopOrphan();
+  cleanup.resolve([]);
+  assert.equal(await finishing, false);
+  assert.equal(coordinator.busy, false);
+});
+
 test('a refused or failed primary start ends its session and releases the slot', async () => {
   const coordinator = new LaunchCoordinator();
   const refused = coordinator.session(events());

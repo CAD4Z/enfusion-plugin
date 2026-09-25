@@ -14,6 +14,7 @@ import { ModsPanel } from './view/modsPanel';
 import { registerTextureEditor } from './view/textureEditor';
 import { registerTextureConversionEditor } from './view/textureConversionEditor';
 import { registerWorkDriveCommands } from './view/workDrive';
+import { registerWorkbenchCommand } from './view/workbench';
 
 export function activate(context: vscode.ExtensionContext): void {
   const log = vscode.window.createOutputChannel('Enfusion', { log: true });
@@ -62,6 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerWorkDriveCommands(log, () => {
       panel.refresh();
     }),
+    registerWorkbenchCommand(launching, log),
     // A build writes outside the workspace, so nothing about the panel changes when one finishes.
     registerBuildCommands(log),
     // Making a mod does change the workspace, and the watcher will say so — but linking the new

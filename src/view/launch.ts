@@ -45,9 +45,10 @@ import {
   readGameRoot,
   readLinkFacts,
   startGame,
+  windowsUser,
 } from '../platform/launch';
 import { readMachineSettings } from '../platform/machine';
-import { openSandbox, sandboxedGame } from '../platform/sandbox';
+import { openSandbox, sandboxedGame, settleBoxedWindowSettings } from '../platform/sandbox';
 import {
   type ScriptDebugHandler,
   type ScriptDebugPort,
@@ -117,12 +118,21 @@ export function registerLaunch(
 ): Launching {
   const launcher = new Launcher(log);
   const coordinator = new LaunchCoordinator();
+  const active = new Set<string>();
   const bar = new LaunchBar(memento, launcher, onChosen);
   const configurations = new Configurations(launcher, bar);
-  const started = new Started(log, coordinator);
+  const started = new Started(log, coordinator, () => active.size > 0);
 
   const disposable = vscode.Disposable.from(
     bar,
+    vscode.debug.onDidStartDebugSession((session) => {
+      if (session.type === LAUNCH_TYPE) {
+        active.add(session.id);
+      }
+    }),
+    vscode.debug.onDidTerminateDebugSession((session) => {
+      active.delete(session.id);
+    }),
     // Twice on purpose: the dynamic registration is what fills the Run and Debug list, and the
     // ordinary one is what gets asked to resolve a configuration before it is launched.
     vscode.debug.registerDebugConfigurationProvider(
@@ -191,12 +201,12 @@ class Started {
   constructor(
     private readonly log: vscode.LogOutputChannel,
     private readonly coordinator: LaunchCoordinator,
+    private readonly hasDebugSession: () => boolean,
   ) {}
 
   async start(): Promise<void> {
-    if (this.starting || this.coordinator.busy) {
-      this.log.warn('the game is already up; this launch was not started');
-      await this.sayBusy();
+    if (this.starting) {
+      this.log.warn('a launch request is already in progress');
       return;
     }
 
@@ -204,6 +214,20 @@ class Started {
     this.starting = true;
 
     try {
+      if (this.coordinator.busy) {
+        if (this.coordinator.active && this.hasDebugSession()) {
+          this.log.warn('the game is already up; this launch was not started');
+          this.sayBusy();
+          return;
+        }
+
+        // Either the debug UI is gone, or its process has gone and only cleanup remains. Neither
+        // is a truthful "already running" launch. Finish what the adapter still owns, then let
+        // this same press start a fresh one.
+        this.log.warn('an inactive launch still owned the workspace slot; finishing its cleanup');
+        await this.coordinator.stopOrphan();
+      }
+
       await vscode.debug.startDebugging(vscode.workspace.workspaceFolders?.[0], {
         type: LAUNCH_TYPE,
         request: 'launch',
@@ -214,13 +238,16 @@ class Started {
     }
   }
 
-  private async sayBusy(): Promise<void> {
+  private sayBusy(): void {
     if (this.refused) {
       return;
     }
 
     this.refused = true;
-    await vscode.window.showWarningMessage(
+    // Notifications resolve only after the developer dismisses them. Waiting here kept
+    // `starting` true for that whole time, so every later press was ignored even after DayZ had
+    // exited. Showing the warning is UI only and must not own the launch-button lifecycle.
+    void vscode.window.showWarningMessage(
       'The game is already up. Stop it before starting it again.',
     );
   }
@@ -569,6 +596,7 @@ class Launcher {
         present,
         found,
         debugPorts: portsOf(listening),
+        user: windowsUser(),
       });
 
       if (plan.refusals.length > 0) {
@@ -576,13 +604,10 @@ class Launcher {
         return { kind: 'refused', message: plan.refusals.join(' ') };
       }
 
-      for (const warning of plan.warnings) {
-        this.log.warn(warning);
-        say(warning);
-      }
+      this.warn(plan.warnings, say);
 
       signal.throwIfAborted();
-      await prepareLaunch(plan);
+      this.warn(await prepareLaunch(plan), say);
       signal.throwIfAborted();
       this.log.info(
         `launch: ${build}, ${plan.filePatching.junctions.length} link(s) made, ` +
@@ -600,7 +625,7 @@ class Launcher {
         const command = `${process_.program} ${process_.arguments.join(' ')}`;
         this.log.info(command);
         say(command);
-        games.push(await startGame(process_));
+        games.push(await startGame(process_, [], this.windowSaid(process_.role)));
       }
 
       signal.throwIfAborted();
@@ -697,6 +722,7 @@ class Launcher {
           present,
           found,
           debugPorts: portsOf(listening),
+          user: windowsUser(),
         },
         ['client2'],
       );
@@ -713,14 +739,19 @@ class Launcher {
       }
 
       signal.throwIfAborted();
-      await prepareLaunch(plan);
+      this.warn(await prepareLaunch(plan), say);
+      // A boxed game reads the box's own copy of its settings once the box has made one, so that
+      // copy is put right as well.
+      if (sandbox.kind === 'box') {
+        this.warn(await settleBoxedWindowSettings(sandbox.sandbox, plan.windowSettings), say);
+      }
       signal.throwIfAborted();
 
       const command = [...prefix, process_.program, ...process_.arguments].join(' ');
       this.log.info(command);
       say(command);
 
-      const started = await startGame(process_, prefix);
+      const started = await startGame(process_, prefix, this.windowSaid(process_.role));
       games.push(
         sandbox.kind === 'box'
           ? sandboxedGame(started, sandbox.sandbox, windowsName(process_.program))
@@ -733,6 +764,24 @@ class Launcher {
       await this.rollback(games, listening);
       throw error;
     }
+  }
+
+  /** What was not done and did not stop the launch, in the log and in the console both. */
+  private warn(warnings: readonly string[], say: (text: string) => void): void {
+    for (const warning of warnings) {
+      this.log.warn(warning);
+      say(warning);
+    }
+  }
+
+  /**
+   * What the guard of a client's window did, in the log only: it is about the desktop rather than
+   * the game, and a launch that went as it should has nothing to show for it in the console.
+   */
+  private windowSaid(role: LaunchRole): (line: string) => void {
+    return (line) => {
+      this.log.info(`${role} window: ${line}`);
+    };
   }
 
   /** Rolls back handles that have not yet been transferred to a `LaunchSession`. */

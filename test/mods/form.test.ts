@@ -55,7 +55,7 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
       map: 'ChernarusPlus',
       run: 'client',
       experimental: false,
-      clientMods: undefined,
+      mods: undefined,
       serverMods: undefined,
       serverConfig: undefined,
     },
@@ -147,19 +147,19 @@ test('a list the reader could not read whole leaves rows that are not addresses'
 test('the same holds for a plain list, and for the file a workspace is configured by', () => {
   assert.ok(formOf('mod', '{ "exclude": [1, "*.psd"] }').refusal?.includes('exclude'));
   assert.ok(
-    formOf('workspace', '{ "launch": { "clientMods": ["@CF", 2] } }').refusal?.includes(
-      'launch.clientMods',
+    formOf('workspace', '{ "launch": { "mods": ["@CF", 2] } }').refusal?.includes(
+      'launch.mods',
     ),
   );
 });
 
 test('an unreadable target-specific mod keeps later target rows from being misaddressed', () => {
   const source =
-    '{ "launch": { "targets": [{ "name": "A", "clientMods": [2, "@CF"] }] } }';
+    '{ "launch": { "targets": [{ "name": "A", "mods": [2, "@CF"] }] } }';
   const form = formOf('mod', source);
 
-  assert.deepEqual(form.launch.targets[0]?.clientMods, ['@CF']);
-  assert.ok(form.refusal?.includes('launch.targets.0.clientMods'), form.refusal);
+  assert.deepEqual(form.launch.targets[0]?.mods, ['@CF']);
+  assert.ok(form.refusal?.includes('launch.targets.0.mods'), form.refusal);
 });
 
 test('a list of the wrong type altogether shows no rows, so there is nothing to misaddress', () => {
@@ -298,9 +298,9 @@ test('an item taken out of a list leaves the notes of the items around it', () =
 });
 
 test('a field of the launch block is written into the block rather than beside it', () => {
-  const written = edited(MANIFEST, { kind: 'set', path: ['launch', 'clientMods'], value: 'x' });
+  const written = edited(MANIFEST, { kind: 'set', path: ['launch', 'mods'], value: 'x' });
 
-  assert.ok(written.includes('"modsDirectory": "Addons",\n    "clientMods": "x",'), written);
+  assert.ok(written.includes('"modsDirectory": "Addons",\n    "mods": "x",'), written);
 });
 
 test('a launch block the file has not got is made to hold the field', () => {
@@ -430,29 +430,29 @@ test('the Experimental checkbox writes true and removes the default false again'
 test('a target mod list is made inside that target and stays distinct from the launch list', () => {
   const written = edited(MANIFEST, {
     kind: 'append',
-    path: ['launch', 'targets', 0, 'clientMods'],
+    path: ['launch', 'targets', 0, 'mods'],
     value: '@CF',
   });
 
-  assert.deepEqual(formOf('mod', written).launch.targets[0]?.clientMods, ['@CF']);
-  assert.deepEqual(formOf('mod', written).launch.clientMods, []);
-  assert.ok(written.includes('"clientMods": [\n          "@CF"\n        ]'), written);
+  assert.deepEqual(formOf('mod', written).launch.targets[0]?.mods, ['@CF']);
+  assert.deepEqual(formOf('mod', written).launch.mods, []);
+  assert.ok(written.includes('"mods": [\n          "@CF"\n        ]'), written);
 });
 
 test('removing the last target mod removes its override and restores inheritance', () => {
   const source = `{
   "launch": {
-    "clientMods": ["@Workspace"],
+    "mods": ["@Workspace"],
     "serverMods": ["@WorkspaceServer"],
     "targets": [{
       "name": "Client",
-      "clientMods": ["@Target"],
+      "mods": ["@Target"],
       "serverMods": ["@TargetServer"]
     }]
   }
 }`;
 
-  for (const field of ['clientMods', 'serverMods'] as const) {
+  for (const field of ['mods', 'serverMods'] as const) {
     for (const edit of [
       { kind: 'set', path: ['launch', 'targets', 0, field, 0], value: '' },
       { kind: 'clear', path: ['launch', 'targets', 0, field, 0] },
@@ -460,7 +460,7 @@ test('removing the last target mod removes its override and restores inheritance
       const written = edited(source, edit);
       const form = formOf('mod', written);
 
-      assert.deepEqual(form.launch[field], field === 'clientMods' ? ['@Workspace'] : ['@WorkspaceServer']);
+      assert.deepEqual(form.launch[field], field === 'mods' ? ['@Workspace'] : ['@WorkspaceServer']);
       assert.equal(form.launch.targets[0]?.[field], undefined, written);
     }
   }
@@ -505,14 +505,14 @@ test('what the form adds is indented the way the file already is', () => {
   const tabbed = '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons"\n\t}\n}';
 
   assert.equal(
-    edited(tabbed, { kind: 'set', path: ['launch', 'clientMods'], value: 'x' }),
-    '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"clientMods": "x"\n\t}\n}',
+    edited(tabbed, { kind: 'set', path: ['launch', 'mods'], value: 'x' }),
+    '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"mods": "x"\n\t}\n}',
   );
 
   const wide = '{\n    "launch": {\n        "modsDirectory": "Addons"\n    }\n}';
   assert.equal(
-    edited(wide, { kind: 'set', path: ['launch', 'clientMods'], value: 'x' }),
-    '{\n    "launch": {\n        "modsDirectory": "Addons",\n        "clientMods": "x"\n    }\n}',
+    edited(wide, { kind: 'set', path: ['launch', 'mods'], value: 'x' }),
+    '{\n    "launch": {\n        "modsDirectory": "Addons",\n        "mods": "x"\n    }\n}',
   );
 });
 

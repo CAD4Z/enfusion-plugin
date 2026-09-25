@@ -296,18 +296,24 @@ function steamFileInBoxOf(
   steam: string,
   ...file: readonly string[]
 ): string | undefined {
-  const drive = /^([A-Za-z]):[\\/]?(.*)$/.exec(steam);
+  return inBoxOf(boxRoot, windowsPath(steam, ...file));
+}
+
+/**
+ * Where the box keeps its own copy of a file: under `drive\<letter>`, the rest of the path as it
+ * is. A sandboxed program reads that copy once there is one, and the file on the disk until then.
+ *
+ * The path has to be the real one. A box files what is on a `subst` drive under the drive it is
+ * mapped from — `P:\Profiles` of a work drive mounted from `F:\Code\DayZ\PDrive` is kept under
+ * `drive\F\Code\DayZ\PDrive\Profiles` — so a path through the mount is resolved before it is asked.
+ */
+export function inBoxOf(boxRoot: string, path: string): string | undefined {
+  const drive = /^([A-Za-z]):[\\/]?(.*)$/.exec(path);
   if (drive === null) {
     return undefined;
   }
 
-  return windowsPath(
-    boxRoot,
-    'drive',
-    (drive[1] ?? '').toUpperCase(),
-    drive[2] ?? '',
-    ...file,
-  );
+  return windowsPath(boxRoot, 'drive', (drive[1] ?? '').toUpperCase(), drive[2] ?? '');
 }
 
 /**

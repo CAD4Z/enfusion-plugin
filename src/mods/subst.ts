@@ -1,9 +1,11 @@
 /**
- * Talking to `subst`, the program that puts a folder up under a drive letter.
+ * Talking to the two programs that put a folder up under a drive letter.
  *
- * It is the whole of what mounting a work drive is on Windows, and the one thing a developer
- * should not have to remember the syntax of — so the syntax is written down here, once, and both
- * the button and the command line come out of it.
+ * DayZ's `WorkDrive.exe` repeats the mapping in ordinary and elevated Windows token contexts;
+ * that is what keeps P: visible whether Workbench was started normally or through an elevated
+ * script. A bare `subst` is the fallback where DayZ Tools is absent, and remains the implementation
+ * for a nonstandard letter because the shipped helper's elevated unmount always defaults to P:.
+ * The syntax of both is written down here once.
  *
  * Only the shape of the output is read, never its words: `subst` speaks whatever language the
  * machine does, and a refusal in Russian has to mean what one in English means, which is
@@ -18,6 +20,43 @@ export function mountArguments(letter: string, source: string): string[] {
 /** And to take it back down, freeing the letter. */
 export function unmountArguments(letter: string): string[] {
   return [letter, '/D'];
+}
+
+/** One program invocation, kept plain so the platform only has to execute it. */
+export interface DriveCommand {
+  readonly file: string;
+  readonly args: string[];
+}
+
+/**
+ * The command that mounts a work drive. The DayZ helper launches its own elevated child and makes
+ * P: in both Windows token contexts; `subst` alone makes it only in the extension host's context.
+ */
+export function mountCommandOf(letter: string, source: string, workDriveTool: string): DriveCommand {
+  return useWorkDriveTool(letter, workDriveTool)
+    ? {
+        file: workDriveTool,
+        args: ['/y', '/Silent', '/nowarnings', '/mount', letter, source],
+      }
+    : { file: 'subst', args: mountArguments(letter, source) };
+}
+
+/** The matching unmount command, so neither Windows token context keeps a stale P: mapping. */
+export function unmountCommandOf(letter: string, workDriveTool: string): DriveCommand {
+  return useWorkDriveTool(letter, workDriveTool)
+    ? {
+        file: workDriveTool,
+        args: ['/y', '/Silent', '/nowarnings', '/unmount', letter],
+      }
+    : { file: 'subst', args: unmountArguments(letter) };
+}
+
+/**
+ * WorkDrive's elevated unmount child does not carry its caller's letter and falls back to P:, so
+ * using it for another letter would leave half of that mapping behind.
+ */
+function useWorkDriveTool(letter: string, workDriveTool: string): boolean {
+  return workDriveTool !== '' && letter.toUpperCase() === 'P:';
 }
 
 /**

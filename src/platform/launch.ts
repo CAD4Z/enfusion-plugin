@@ -11,9 +11,10 @@
  */
 
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { copyFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { copyFile, cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { tmpdir, userInfo } from 'node:os';
 import { promisify } from 'node:util';
+import { borderlessSettingsOf } from '../mods/gameWindow';
 import type {
   GameEntry,
   GameProgramFacts,
@@ -24,8 +25,9 @@ import type {
 import type { LaunchGame, ProcessExit } from '../mods/launchSession';
 import { gameProgramOf } from '../mods/machine';
 import type { GameBuild, GameSide, MachineSettings } from '../mods/machine';
-import { windowsFolder, windowsPath } from '../mods/paths';
+import { windowsFolder, windowsName, windowsPath } from '../mods/paths';
 import type { LinkFact } from '../mods/workDrive';
+import { guardGameWindow } from './windowGuard';
 import { linkFactAt, makeJunction, removeLink } from './workDrive';
 
 const run = promisify(execFile);
@@ -36,6 +38,18 @@ const run = promisify(execFile);
  */
 export function localAppData(): string {
   return process.env.LOCALAPPDATA ?? tmpdir();
+}
+
+/**
+ * The Windows account the game runs as, by the name the game files its display settings under:
+ * the one `GetUserName` answers, which is what `userInfo` asks too.
+ */
+export function windowsUser(): string {
+  try {
+    return userInfo().username;
+  } catch {
+    return process.env.USERNAME ?? '';
+  }
 }
 
 /**
@@ -105,11 +119,14 @@ export async function readFound(paths: readonly string[]): Promise<string[]> {
 
 /**
  * The run folder made ready: the folders, then the links that are in the way taken off, then the
- * links made, then the files carried over, then the profile and the mission laid down. In that
- * order, because a link cannot be made where one already is, and a layer cannot be copied into a
- * folder that has not been made yet.
+ * links made, then the files carried over, then the profile and the mission laid down, then each
+ * client's window settings put right. In that order, because a link cannot be made where one
+ * already is, and a layer cannot be copied into a folder that has not been made yet.
+ *
+ * What comes back is what could not be done and did not stop the launch: a client whose settings
+ * could not be written still starts, in whatever window it was last left in.
  */
-export async function prepareLaunch(plan: LaunchPlan): Promise<void> {
+export async function prepareLaunch(plan: LaunchPlan): Promise<string[]> {
   for (const folder of plan.folders) {
     await mkdir(folder, { recursive: true });
   }
@@ -130,6 +147,51 @@ export async function prepareLaunch(plan: LaunchPlan): Promise<void> {
   for (const copy of plan.copies) {
     await layer(copy.from, copy.to);
   }
+
+  return settleWindowSettings(plan.windowSettings);
+}
+
+/**
+ * Each of these settings files made to ask for the borderless window, and written only where that
+ * changes it. The file is the game's own, in its own encoding, so it is read and written byte for
+ * byte; one that is not there is made, because without it the game is not windowed at all.
+ */
+export async function settleWindowSettings(paths: readonly string[]): Promise<string[]> {
+  const said: string[] = [];
+
+  for (const path of paths) {
+    try {
+      const before = await readSettings(path);
+      const after = borderlessSettingsOf(before ?? '');
+      if (after !== before) {
+        await mkdir(windowsFolder(path), { recursive: true });
+        await writeFile(path, after, 'latin1');
+      }
+    } catch (error) {
+      said.push(
+        `The window settings in ${path} could not be written (${messageOf(error)}), so that ` +
+          'client comes up in whatever window it was last left in.',
+      );
+    }
+  }
+
+  return said;
+}
+
+async function readSettings(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'latin1');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -175,10 +237,14 @@ export interface GameProcess extends LaunchGame {
  * fills up and stops the process it belongs to. The returned promise confirms the OS accepted the
  * spawn; an earlier `error` rejects it, while every later way for the process to disappear is an
  * ordinary `ProcessExit`.
+ *
+ * A client is started with a guard beside it for the first seconds of its window, put up before it
+ * and put down with it — see `src/platform/windowGuard.ts`. What the guard did is said to `said`.
  */
 export async function startGame(
   process_: LaunchProcess,
   prefix: readonly string[] = [],
+  said: (line: string) => void = () => undefined,
 ): Promise<GameProcess> {
   // A prefix is another program that starts ours: Sandboxie's `Start.exe`, which is what gives the
   // second client a Steam of its own. It goes in front whole, so the thing that is actually spawned
@@ -186,6 +252,11 @@ export async function startGame(
   // handle kept here is one that lives as long as the game does. See `src/mods/sandbox.ts`.
   const [program = process_.program, ...before] = prefix;
   const argued = prefix.length === 0 ? [] : [...before, process_.program];
+
+  // The guard knows the game by its program and its start, not by this process: in a box, the game
+  // is a child of Sandboxie's service rather than of the `Start.exe` spawned here.
+  const guard =
+    process_.role === 'server' ? undefined : guardGameWindow(windowsName(process_.program), said);
 
   const child: ChildProcess = spawn(program, [...argued, ...process_.arguments], {
     cwd: process_.cwd,
@@ -207,27 +278,36 @@ export async function startGame(
     });
   });
 
-  await new Promise<void>((resolve, reject) => {
-    const onSpawn = (): void => {
-      spawned = true;
-      child.off('error', onError);
-      resolve();
-    };
-    const onError = (error: Error): void => {
-      child.off('spawn', onSpawn);
-      reject(error);
-    };
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onSpawn = (): void => {
+        spawned = true;
+        child.off('error', onError);
+        resolve();
+      };
+      const onError = (error: Error): void => {
+        child.off('spawn', onSpawn);
+        reject(error);
+      };
 
-    child.once('spawn', onSpawn);
-    child.once('error', onError);
-  });
+      child.once('spawn', onSpawn);
+      child.once('error', onError);
+    });
+  } catch (error) {
+    guard?.stop();
+    throw error;
+  }
   child.unref();
+  void exited.then(() => guard?.stop());
 
   return {
     role: process_.role,
     pid: child.pid,
     exited,
-    kill: () => kill(child),
+    kill: async () => {
+      guard?.stop();
+      await kill(child);
+    },
   };
 }
 

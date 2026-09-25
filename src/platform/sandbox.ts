@@ -11,9 +11,10 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { setTimeout as wait } from 'node:timers/promises';
 import { promisify } from 'node:util';
+import { windowsFolder, windowsName, windowsPath } from '../mods/paths';
 import {
   BOX_SETTINGS,
   SIGN_IN_PATIENCE,
@@ -24,6 +25,7 @@ import {
   boxRootOf,
   connectionLogPathOf,
   imagePidsOf,
+  inBoxOf,
   loginUsersPathOf,
   previousConnectionLogPathOf,
   steamAccountIdOf,
@@ -31,7 +33,7 @@ import {
   steamCommandOf,
   steamConfigPathOf,
 } from '../mods/sandbox';
-import type { GameProcess } from './launch';
+import { type GameProcess, settleWindowSettings } from './launch';
 
 const run = promisify(execFile);
 
@@ -407,17 +409,62 @@ function startSteam(sandbox: Sandbox): void {
   child.unref();
 }
 
-/** The boxed copies of Steam's current identity and live connection state. */
-async function steamFiles(
+/**
+ * The box's own copies of these window settings, put right the way the files on the disk are.
+ *
+ * A game in the box reads its settings through the box: the file on the disk until the game first
+ * writes them, and the box's copy ever after. Only a copy that is there is touched — where there is
+ * none, the file on the disk is the one read, and it has been put right already.
+ */
+export async function settleBoxedWindowSettings(
   sandbox: Sandbox,
-  signal?: AbortSignal,
-): Promise<SandboxSteamFiles | undefined> {
-  const root = boxRootOf(
+  paths: readonly string[],
+): Promise<string[]> {
+  const root = await boxRoot(sandbox);
+  const copies: string[] = [];
+
+  for (const path of paths) {
+    try {
+      // Through a `subst` drive to the folder it is mounted from, which is what the box files under.
+      // The promise `realpath` asks the operating system and resolves the mount; the JavaScript
+      // `realpathSync`, which walks the path itself, would hand the drive letter back.
+      const real = windowsPath(await realpath(windowsFolder(path)), windowsName(path));
+      const copy = inBoxOf(root, real);
+      if (copy !== undefined && (await isFile(copy))) {
+        copies.push(copy);
+      }
+    } catch {
+      // No folder, no copy: the game has not written its settings anywhere yet.
+    }
+  }
+
+  return settleWindowSettings(copies);
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** The folder the box keeps its files in. */
+async function boxRoot(sandbox: Sandbox, signal?: AbortSignal): Promise<string> {
+  return boxRootOf(
     await fileRootPath(sandbox, signal),
     sandbox.box,
     process.env.USERNAME ?? '',
     process.env.SystemDrive ?? 'C:',
   );
+}
+
+/** The boxed copies of Steam's current identity and live connection state. */
+async function steamFiles(
+  sandbox: Sandbox,
+  signal?: AbortSignal,
+): Promise<SandboxSteamFiles | undefined> {
+  const root = await boxRoot(sandbox, signal);
   const loginUsers = loginUsersPathOf(root, sandbox.steam);
   const config = steamConfigPathOf(root, sandbox.steam);
   const connectionLog = connectionLogPathOf(root, sandbox.steam);

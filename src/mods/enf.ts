@@ -68,15 +68,13 @@ export interface Launch {
   /** Where `@<Mod>` folders live: the builder writes here and `-mod=` reads from here. */
   readonly modsDirectory: string | undefined;
   /**
-   * Every mod the client loads, by folder name and in load order. Handed to the client alone as
-   * `-mod=`; the server reads none of it. Mods of the workspace are not added to it on their own:
+   * Mods both the client and server load as `-mod=`, by folder name and in load order.
+   * Mods of the workspace are not added to it on their own:
    * one is loaded because it is named here, exactly as a third-party one is.
    */
-  readonly clientMods: readonly string[];
+  readonly mods: readonly string[];
   /**
-   * Every mod the server loads, by folder name and in load order. Handed to the server alone as
-   * `-serverMod=`; the client reads none of it. The two lists are independent on purpose — a mod
-   * both sides need has to be named in both.
+   * Additional mods only the server loads as `-serverMod=`, by folder name and in load order.
    */
   readonly serverMods: readonly string[];
   readonly targets: readonly Target[];
@@ -92,9 +90,9 @@ export interface Target {
   readonly run: Run;
   /** Whether this target starts the separately installed DayZ Experimental applications. */
   readonly experimental: boolean;
-  /** The client mods for this target; absent inherits the launch block's list. */
-  readonly clientMods: readonly string[] | undefined;
-  /** The server mods for this target; absent inherits the launch block's list. */
+  /** The shared mods for this target; absent inherits the launch block's list. */
+  readonly mods: readonly string[] | undefined;
+  /** The server-only mods for this target; absent inherits the launch block's list. */
   readonly serverMods: readonly string[] | undefined;
   /** The `server.cfg` to launch with, relative to the target's mod. */
   readonly serverConfig: string | undefined;
@@ -231,7 +229,7 @@ export function workspaceFor(modRoot: string, files: readonly string[]): string 
 /** What a mod that configures no launch is launched by, which is nothing at all. */
 export const NO_LAUNCH: Launch = {
   modsDirectory: undefined,
-  clientMods: [],
+  mods: [],
   serverMods: [],
   targets: [],
 };
@@ -257,7 +255,7 @@ export const MOD_FIELDS = [
 
 export const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'launch'];
 
-export const LAUNCH_FIELDS = ['modsDirectory', 'clientMods', 'serverMods', 'targets'];
+export const LAUNCH_FIELDS = ['modsDirectory', 'mods', 'serverMods', 'targets'];
 
 export const TARGET_FIELDS = [
   'name',
@@ -265,7 +263,7 @@ export const TARGET_FIELDS = [
   'map',
   'run',
   'experimental',
-  'clientMods',
+  'mods',
   'serverMods',
   'serverConfig',
 ];
@@ -280,7 +278,7 @@ function launchOf(reading: Reading, root: Node | undefined): Launch | undefined 
 
   const launch: Launch = {
     modsDirectory: reading.text(node, 'modsDirectory'),
-    clientMods: reading.texts(node, 'clientMods', loadedModNameProblemOf),
+    mods: reading.texts(node, 'mods', loadedModNameProblemOf),
     serverMods: reading.texts(node, 'serverMods', loadedModNameProblemOf),
     targets: reading.items(node, 'targets').flatMap((item) => targetOf(reading, item)),
   };
@@ -308,7 +306,7 @@ function targetOf(reading: Reading, node: Node): Target[] {
     map: reading.text(node, 'map'),
     run: reading.choice(node, 'run', RUN, 'both'),
     experimental: reading.flag(node, 'experimental', false),
-    clientMods: reading.optionalTexts(node, 'clientMods', loadedModNameProblemOf),
+    mods: reading.optionalTexts(node, 'mods', loadedModNameProblemOf),
     serverMods: reading.optionalTexts(node, 'serverMods', loadedModNameProblemOf),
     serverConfig: reading.text(node, 'serverConfig'),
   };

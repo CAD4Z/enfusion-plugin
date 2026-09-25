@@ -147,31 +147,46 @@ export interface LaunchSession {
 
 /** One workspace-wide gate, and the factory for sessions that share it. */
 export class LaunchCoordinator {
-  private owner: object | undefined;
+  private owner: CoordinatedLaunchSession | undefined;
 
   /** True through startup, runtime and cleanup, including a cancelled starter rolling back. */
   get busy(): boolean {
     return this.owner !== undefined;
   }
 
-  session(events: LaunchSessionEvents): LaunchSession {
-    const key = {};
+  /** A process is starting or running; false while an old launch is only cleaning itself up. */
+  get active(): boolean {
+    return this.owner?.active ?? false;
+  }
 
-    return new CoordinatedLaunchSession(
+  session(events: LaunchSessionEvents): LaunchSession {
+    const session = new CoordinatedLaunchSession(
       events,
       () => {
         if (this.owner !== undefined) {
           return false;
         }
-        this.owner = key;
+        this.owner = session;
         return true;
       },
       () => {
-        if (this.owner === key) {
+        if (this.owner === session) {
           this.owner = undefined;
         }
       },
     );
+
+    return session;
+  }
+
+  /**
+   * Finishes the launch that still owns the slot after VS Code has already lost its debug session.
+   * The caller must establish that there is no live Enfusion session before using this recovery
+   * path; a running session remains the authority for its own Stop button.
+   */
+  async stopOrphan(): Promise<boolean> {
+    const owner = this.owner;
+    return owner === undefined ? false : owner.stop();
   }
 }
 
@@ -192,6 +207,10 @@ class CoordinatedLaunchSession implements LaunchSession {
     private readonly claim: () => boolean,
     private readonly release: () => void,
   ) {}
+
+  get active(): boolean {
+    return this.state === 'starting' || this.state === 'running';
+  }
 
   async start(starter: StartLaunch): Promise<LaunchStartOutcome> {
     if (this.state !== 'new') {

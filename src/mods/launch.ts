@@ -35,6 +35,7 @@
 
 import { sameName } from './config';
 import type { Launch, Run, Target } from './enf';
+import { windowSettingsOf } from './gameWindow';
 import { type GameBuild, type GameProgram, type GameSide, missingProgramOf } from './machine';
 import type { MachineSettings } from './machine';
 import {
@@ -115,7 +116,7 @@ export interface LaunchTarget {
   /** Whether this target starts DayZ Experimental rather than the stable applications. */
   readonly experimental: boolean;
   /** The effective lists: the target's own where present, otherwise the launch block's. */
-  readonly clientMods: readonly string[];
+  readonly mods: readonly string[];
   readonly serverMods: readonly string[];
   readonly serverConfig: string | undefined;
   /** The block the target was declared in: where the mods directory and the mod lists come from. */
@@ -165,7 +166,7 @@ function draftOf(target: Target, source: TargetSource): LaunchTarget {
     map: target.map,
     run: target.run,
     experimental: target.experimental,
-    clientMods: target.clientMods ?? source.launch.clientMods,
+    mods: target.mods ?? source.launch.mods,
     serverMods: target.serverMods ?? source.launch.serverMods,
     serverConfig: target.serverConfig,
     launch: source.launch,
@@ -395,6 +396,11 @@ export interface LaunchInput {
    * is: which port was free is a fact about the machine, and a plan does not go and find out.
    */
   readonly debugPorts: Readonly<Record<LaunchRole, number>>;
+  /**
+   * The Windows account the game runs as, which is the folder of a profile its display settings
+   * are kept in. A fact about the machine like the ports, and handed in the same way.
+   */
+  readonly user: string;
 }
 
 /**
@@ -432,6 +438,11 @@ export interface LaunchPlan {
   readonly folders: readonly string[];
   /** The profile and the mission, laid down layer by layer out of the target's own mod. */
   readonly copies: readonly FolderCopy[];
+  /**
+   * The display settings of each client being started, put right for a borderless window before it
+   * starts — see `src/mods/gameWindow.ts`.
+   */
+  readonly windowSettings: readonly string[];
   /** The processes to start, in the order they are started: the server before the client. */
   readonly processes: readonly LaunchProcess[];
 }
@@ -457,15 +468,18 @@ const DIAG_ARGUMENTS: readonly string[] = [
 /**
  * The arguments the client is started with whichever build it is. The logging is half the point of
  * launching from here — a script error belongs in a log the developer reads rather than in a
- * message the game swallows — and `-window` is what makes it possible to alt-tab back to the
- * editor that started it.
+ * message the game swallows.
+ *
+ * There is no `-window`. It used to be here so that the editor could be alt-tabbed back to, and it
+ * does keep the game out of exclusive fullscreen — but by forcing the one mode with a title bar,
+ * put wherever the game last left it. The game's own settings ask for a window instead, one the
+ * game makes borderless and lays over the whole monitor: see `src/mods/gameWindow.ts`.
  */
 const CLIENT_ARGUMENTS: readonly string[] = [
   '-doLogs',
   '-adminlog',
   '-nopause',
   '-nosplash',
-  '-window',
 ];
 
 /**
@@ -609,6 +623,7 @@ export function launchPlanOf(
       filePatching: nothing(patched),
       folders: [],
       copies: [],
+      windowSettings: [],
       processes: [],
     };
   }
@@ -645,6 +660,14 @@ export function launchPlanOf(
       ...roles.flatMap((role) => profileCopiesOf(input, role, profile(role))),
       ...(server ? missionCopiesOf(input, mission) : []),
     ],
+    // After the copies, so that a layer of the mod carrying a settings file of its own cannot put
+    // the title bar back.
+    windowSettings:
+      input.user === ''
+        ? []
+        : roles
+            .filter((role) => role !== 'server')
+            .map((role) => windowSettingsOf(profile(role), input.user, input.target.experimental)),
     processes: roles.map((role) =>
       role === 'server'
         ? serverProcessOf(input, profile('server'), mission)
@@ -864,7 +887,7 @@ function serverRefusalsOf(input: LaunchInput): string[] {
 function unquotableOf(target: LaunchTarget): string[] {
   const value = [
     target.launch.modsDirectory ?? '',
-    ...target.clientMods,
+    ...target.mods,
     ...target.serverMods,
     target.serverConfig ?? '',
   ].find((text) => text.includes('"'));
@@ -939,9 +962,8 @@ function clientProcessOf(
 }
 
 /**
- * The server. It gets `-serverMod=` out of `serverMods` and nothing out of `clientMods` — the two
- * lists are read independently, so nothing reaches the server for having been named to the client.
- * A mod both sides need is a mod named in both lists.
+ * The server loads the shared `mods` through `-mod=`, just like the clients, and additional
+ * server-only mods through `-serverMod=`.
  */
 function serverProcessOf(input: LaunchInput, profile: string, mission: string): LaunchProcess {
   return {
@@ -957,6 +979,7 @@ function serverProcessOf(input: LaunchInput, profile: string, mission: string): 
       `-config=${serverConfigOf(input) ?? ''}`,
       `-profiles=${profile}`,
       `-mission=${mission}`,
+      ...listArgumentOf('-mod', loadedOf(input)),
       ...listArgumentOf('-serverMod', pathsOf(input.target, input.target.serverMods)),
     ],
     cwd: workingDirectoryOf(input, 'server'),
@@ -1043,31 +1066,29 @@ function offlineMissionOf(input: LaunchInput): string[] {
 }
 
 /**
- * The mods every client process loads: `clientMods`, the list the manifest wrote, in the order it
- * wrote it, and nothing else. The server never sees this list — see `serverProcessOf`.
+ * The shared mods every client and server process loads: `mods`, the list the manifest wrote,
+ * in the order it wrote it, and nothing else.
  *
  * Nothing of the workspace is added to it. A mod of ours reaches the command line because it was
- * named in `clientMods`, exactly the way a third-party one does. It was once the other way round —
+ * named in `mods`, exactly the way a third-party one does. It was once the other way round —
  * every mod of the workspace was appended to whatever the manifest said — and that had the two
  * faults a developer meets in the same afternoon: naming one of ours to move it earlier loaded it
  * twice instead of moving it, and a workspace that held a mod no launch wanted had no way of
  * leaving it out.
  */
 function loadedOf(input: LaunchInput): string[] {
-  return pathsOf(input.target, input.target.clientMods);
+  return pathsOf(input.target, input.target.mods);
 }
 
 /**
- * Every mod this launch names, so a plan can ask the disk whether it was built: `clientMods` where
- * a client-type process is going up, `serverMods` where the server is, the union where both are —
- * never one list standing in for the other, because the two no longer share a command line.
+ * Every mod the requested processes load, so a plan can ask the disk whether it was built:
+ * `mods` for any process, plus `serverMods` when starting a server.
  */
 function loadedNamesOf(target: LaunchTarget, roles: readonly LaunchRole[]): string[] {
-  const client = roles.some((role) => role !== 'server');
   const server = roles.includes('server');
 
   return [
-    ...(client ? target.clientMods : []),
+    ...(roles.length > 0 ? target.mods : []),
     ...(server ? target.serverMods : []),
   ];
 }

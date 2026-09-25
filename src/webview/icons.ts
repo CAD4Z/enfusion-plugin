@@ -1,14 +1,20 @@
 /**
- * The six icons the panel's buttons are drawn with.
+ * The seven icons the panel's buttons are drawn with.
  *
  * Inline SVG rather than the codicon font: a webview cannot reach a font it has not been shipped
- * and pointed at through its content security policy, and six glyphs are not worth a font file in
+ * and pointed at through its content security policy, and seven glyphs are not worth a font file in
  * the `.vsix` for. The path data is copied out of the very icons VS Code draws these actions with
- * — `@vscode/codicons`, CC-BY-4.0, see `THIRD-PARTY.md` — so a button here reads as the same
- * button it is everywhere else in the editor.
+ * — `@vscode/codicons`, CC-BY-4.0, see `THIRD-PARTY.md` — apart from the small Workbench desktop.
  */
 
-export type IconName = 'start' | 'secondClient' | 'build' | 'mount' | 'unmount' | 'link';
+export type IconName =
+  | 'start'
+  | 'secondClient'
+  | 'build'
+  | 'mount'
+  | 'unmount'
+  | 'link'
+  | 'workbench';
 
 /** One path of an icon; `evenOdd` is the fill rule the shape with a hole in it needs. */
 export interface IconPath {
@@ -17,6 +23,13 @@ export interface IconPath {
 }
 
 export const ICON: Readonly<Record<IconName, readonly IconPath[]>> = {
+  // A desktop application: the external Workbench window.
+  workbench: [
+    {
+      d: 'M2 2H14V11H9V13H12V14H4V13H7V11H2V2ZM3 3V10H13V3H3Z',
+      evenOdd: true,
+    },
+  ],
   // A person with a plus: add another client/player to the running game. Codicon person-add.
   secondClient: [
     {

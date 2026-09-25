@@ -15,13 +15,15 @@ import {
   configurationsOf,
   workspaceFor,
 } from '../mods/enf';
+import { sameName } from '../mods/config';
 import type { LaunchMod, TargetSource } from '../mods/launch';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan, pboNameOf } from '../mods/model';
 import { folderOf, nameOf, windowsFolder } from '../mods/paths';
+import { projectOf } from '../mods/workbench';
 import type { Prefix } from '../mods/workDrive';
 
 /** The three files a workspace of mods is made of, anywhere in the open folders. */
-const SCAN_GLOB = `**/{${MANIFEST_FILE},${WORKSPACE_FILE},${CONFIG_FILE}}`;
+const SCAN_GLOB = `**/{${MANIFEST_FILE},${WORKSPACE_FILE},${CONFIG_FILE},*.gproj}`;
 
 /** Folders that never hold a mod but do hold thousands of files. */
 const EXCLUDE_GLOB = '**/{node_modules,.git,dist,out,bin,obj}/**';
@@ -35,6 +37,8 @@ export interface Discovery {
   readonly configured: ReadonlyMap<string, Configured>;
   /** Every `workspace.enf` of the open folders, by path, with what is wrong with it. */
   readonly workspaces: ReadonlyMap<string, readonly ManifestProblem[]>;
+  /** Workbench projects, kept as URI paths until one is chosen for an external process. */
+  readonly projects: readonly string[];
 }
 
 /** Every mod of the open folders. Honours the user's `files.exclude` and `search.exclude`. */
@@ -58,7 +62,31 @@ export async function findMods(): Promise<Discovery> {
   const configurations = configurationsOf(locationsOf(manifests), enf);
   const mods = modsFromScan({ manifests, configs, declared: declaredOf(configurations.mods) });
 
-  return { mods, uris, configured: configurations.mods, workspaces: configurations.workspaces };
+  return {
+    mods,
+    uris,
+    configured: configurations.mods,
+    workspaces: configurations.workspaces,
+    projects: found.filter((uri) => nameOf(uri.path).toLowerCase().endsWith('.gproj')).map((uri) => uri.path),
+  };
+}
+
+/** The selected target mod's Workbench project and repository, as Windows programs take them. */
+export function workbenchProjectOf(
+  found: Discovery,
+  targetMod: string,
+): { readonly project: string; readonly repository: string } | undefined {
+  const mod = found.mods.find((candidate) => sameName(candidate.name, targetMod));
+  const project = mod === undefined ? undefined : projectOf(mod.root, found.projects);
+  const projectUri = project === undefined ? undefined : found.uris.get(project);
+  const anchor =
+    mod === undefined
+      ? undefined
+      : found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
+
+  return projectUri === undefined || anchor === undefined || mod === undefined
+    ? undefined
+    : { project: projectUri.fsPath, repository: anchor.with({ path: mod.root }).fsPath };
 }
 
 /** All the cascade asks about a mod: where it sits, and which file configures it. */

@@ -18,7 +18,7 @@ declare const LOADED_MOD_NAME: unique symbol;
 /** A checked name belonging to a mod of this workspace. */
 export type ModName = string & { readonly [MOD_NAME]: true };
 
-/** A checked folder name from `clientMods` or `serverMods`, without its optional leading `@`. */
+/** A checked folder name from `mods` or `serverMods`, without its optional leading `@`. */
 export type LoadedModName = string & { readonly [LOADED_MOD_NAME]: true };
 
 /** Kept as text because the JSON schema is a deliberate static copy of the same rule. */

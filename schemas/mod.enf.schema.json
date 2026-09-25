@@ -58,16 +58,16 @@
           "type": "string",
           "description": "Where the @<Mod> folders live: the builder writes them here, and the game is pointed at them here. A relative path is counted from the folder this file is in, which is what keeps it meaning the same thing on every machine that clones the repository."
         },
-        "clientMods": {
+        "mods": {
           "type": "array",
-          "description": "Every mod the client loads, in load order, by the name of its folder in modsDirectory, with or without the leading @. Handed to the client alone as -mod=; the server reads none of it. Mods of this workspace are not added on their own: one is loaded because it is named here, the same as any other, so a mod the workspace holds and no launch wants is left out.",
+          "description": "Mods loaded by both the client and server as -mod=, in load order, by folder name in modsDirectory, with or without the leading @. Workspace mods must also be named here to load.",
           "items": {
             "type": "string"
           }
         },
         "serverMods": {
           "type": "array",
-          "description": "Every mod the server loads, in load order, named the same way. Handed to the server alone as -serverMod=; the client reads none of it. The two lists are independent — a mod both sides need has to be named in both — and mods of this workspace are not added on their own here either.",
+          "description": "Additional mods loaded only by the server as -serverMod=, in load order, named the same way as mods. Shared mods belong in mods and do not need to be repeated here.",
           "items": {
             "type": "string"
           }
@@ -120,16 +120,16 @@
           "description": "Start this target from the separately installed DayZ Experimental client and server applications instead of the stable ones.",
           "default": false
         },
-        "clientMods": {
+        "mods": {
           "type": "array",
-          "description": "The client mods for this target alone. Left out, the launch block's clientMods are inherited; when present, this list replaces them whole, including when it is empty.",
+          "description": "Shared mods loaded by both the client and server for this target. Left out, the launch block's mods are inherited; when present, this list replaces them whole, including when it is empty.",
           "items": {
             "type": "string"
           }
         },
         "serverMods": {
           "type": "array",
-          "description": "The server mods for this target alone. Left out, the launch block's serverMods are inherited; when present, this list replaces them whole, including when it is empty.",
+          "description": "Additional mods loaded only by the server for this target. Left out, the launch block's serverMods are inherited; when present, this list replaces them whole, including when it is empty.",
           "items": {
             "type": "string"
           }

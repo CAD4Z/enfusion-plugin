@@ -5,6 +5,7 @@ import {
   type LinkFact,
   type Prefix,
   driveLetterOf,
+  currentWorkDriveAction,
   isUnlinked,
   linkPathOf,
   linksOf,
@@ -53,6 +54,13 @@ test('the drive is mounted, not mounted, set nowhere, or mounted somewhere else'
   assert.equal(UNMOUNTED.state, 'unmounted');
   assert.equal(UNSET.state, 'unset');
   assert.equal(MISMOUNTED.state, 'elsewhere');
+});
+
+test('one drive button mounts a free letter and unmounts any occupied one', () => {
+  assert.equal(currentWorkDriveAction(UNMOUNTED), 'mount');
+  assert.equal(currentWorkDriveAction(UNSET), 'mount');
+  assert.equal(currentWorkDriveAction(MOUNTED), 'unmount');
+  assert.equal(currentWorkDriveAction(MISMOUNTED), 'unmount');
 });
 
 test('a folder is the same folder however it was typed, which on Windows is any way at all', () => {

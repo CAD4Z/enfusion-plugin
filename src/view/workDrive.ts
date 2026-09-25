@@ -8,7 +8,7 @@
  */
 
 import * as vscode from 'vscode';
-import { SETTING } from '../mods/machine';
+import { SETTING, workDriveToolOf } from '../mods/machine';
 import {
   type Link,
   type WorkDrive,
@@ -55,29 +55,34 @@ class WorkDriveCommands {
   ) {}
 
   async mount(): Promise<void> {
-    const drive = await this.current('mount');
-    if (drive === undefined) {
+    const current = await this.current('mount');
+    if (current === undefined) {
       return;
     }
 
-    await this.run(`mount ${drive.letter} from ${drive.source}`, () => mount(drive));
+    const { drive, workDriveTool } = current;
+    await this.run(`mount ${drive.letter} from ${drive.source}`, () =>
+      mount(drive, workDriveTool),
+    );
   }
 
   async unmount(): Promise<void> {
-    const drive = await this.current('unmount');
-    if (drive === undefined) {
+    const current = await this.current('unmount');
+    if (current === undefined) {
       return;
     }
 
-    await this.run(`unmount ${drive.letter}`, () => unmount(drive));
+    const { drive, workDriveTool } = current;
+    await this.run(`unmount ${drive.letter}`, () => unmount(drive, workDriveTool));
   }
 
   async link(): Promise<void> {
-    const drive = await this.current('link');
-    if (drive === undefined) {
+    const current = await this.current('link');
+    if (current === undefined) {
       return;
     }
 
+    const { drive } = current;
     const links = await readLinks(drive, prefixesOf(await findMods()));
     const making = linksToMake(links);
 
@@ -91,8 +96,9 @@ class WorkDriveCommands {
   }
 
   /** The drive as it is right now, or nothing at all when the action would only fail. */
-  private async current(action: WorkDriveAction): Promise<WorkDrive | undefined> {
-    const drive = await readWorkDrive(await readMachineSettings());
+  private async current(action: WorkDriveAction): Promise<CurrentDrive | undefined> {
+    const settings = await readMachineSettings();
+    const drive = await readWorkDrive(settings);
     const refusal = platformRefusal() ?? refusalOf(drive, action);
 
     if (refusal !== undefined) {
@@ -101,12 +107,12 @@ class WorkDriveCommands {
       return undefined;
     }
 
-    return drive;
+    return { drive, workDriveTool: workDriveToolOf(settings) };
   }
 
   /**
    * Everything here is somebody's disk answering, so the failure worth showing is the one the
-   * developer asked for: `subst` refusing a letter, a junction that could not be made.
+   * developer asked for: the drive helper refusing a letter, a junction that could not be made.
    */
   private async run(what: string, work: () => Promise<void>): Promise<boolean> {
     try {
@@ -122,6 +128,12 @@ class WorkDriveCommands {
       this.changed();
     }
   }
+}
+
+/** The current drive together with the machine tool that changes both of its Windows mappings. */
+interface CurrentDrive {
+  readonly drive: WorkDrive;
+  readonly workDriveTool: string;
 }
 
 /**

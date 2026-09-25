@@ -11,6 +11,7 @@ import {
   connectionLogPathOf,
   gamePrefixOf,
   imagePidsOf,
+  inBoxOf,
   loginUsersPathOf,
   previousConnectionLogPathOf,
   SIGN_IN_PATIENCE,
@@ -147,6 +148,21 @@ test('the box holds Steam’s record of the sign-in under a folder per drive let
     steamConfigPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
     'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\config.vdf',
   );
+});
+
+/**
+ * A second client's display settings, the way the box keeps them once the game has written them:
+ * under the drive the work drive is mounted from, since the path handed in is already the real one.
+ */
+test('the box keeps its copy of any file on a drive under that drive letter', () => {
+  assert.equal(
+    inBoxOf(
+      'C:\\Sandbox\\Ilya\\steam2',
+      'F:\\Code\\DayZ\\PDrive\\Profiles\\CADCore\\client2\\Users\\Ilya\\DayZ.cfg',
+    ),
+    'C:\\Sandbox\\Ilya\\steam2\\drive\\F\\Code\\DayZ\\PDrive\\Profiles\\CADCore\\client2\\Users\\Ilya\\DayZ.cfg',
+  );
+  assert.equal(inBoxOf('C:\\Sandbox\\Ilya\\steam2', '\\\\server\\share\\DayZ.cfg'), undefined);
 });
 
 test('the box holds Steam’s connection log beside the rest of its installation', () => {

@@ -240,16 +240,21 @@ the list is written stay as they were. A mod whose `config.cpp` sits in the pref
 not take an addon, and says why: it is one addon whole already, and splitting it means moving files
 rather than adding a folder.
 
-The work drive is mounted and unmounted by the three buttons on the right of the row: they call
-`subst` with the folder and the letter out of the machine settings. A drive mounted somewhere other
-than what is configured is a refusal with both folders in the tooltip, rather than a quiet build of
-the wrong sources. The third, **link**, lays junctions across the root of the drive onto the prefix
-roots of every mod of the workspace — what `SetupWorkdrive.bat` used to do: a junction already
-pointing where it should is not an error and is not repointed, one pointing elsewhere is repointed,
-and a real folder in its place is left untouched and shown as it is. A mod that is not linked is
-marked in the list, so the reason a build would fail is visible beforehand; a linked one is marked
-with nothing, which is how it should be. Unpacking the vanilla data and setting the drive up in the
-first place with DayZ Tools is not part of this.
+The lower **Workspace tools** group keeps one contextual drive button: it says **Mount** while the
+letter is free and **Unmount** while anything is mounted there. For the usual
+`P:`, they call the helper shipped with DayZ Tools, which asks for elevation and makes the drive
+visible to both ordinary and elevated tools; without that helper, and for a nonstandard letter,
+they fall back to `subst`. The folder and letter come from the machine settings. A drive mounted
+somewhere other than what is configured is a refusal with both folders in the tooltip, rather than
+a quiet build of the wrong sources. **Link mods** lays junctions across the root of the drive
+onto the prefix roots of every mod of the workspace — what `SetupWorkdrive.bat` used to do: a
+junction already pointing where it should is not an error and is not repointed, one pointing
+elsewhere is repointed, and a real folder in its place is left untouched and shown as it is. A mod
+that is not linked is marked in the list, so the reason a build would fail is visible beforehand;
+a linked one is marked with nothing, which is how it should be. Unpacking the vanilla data and
+setting the drive up in the first place with DayZ Tools is not part of this. **Workbench** opens
+the `.gproj` inside the selected launch target's mod (preferring `dayz.gproj`) with the Workbench
+installed by DayZ Tools; it stays disabled when the work drive or project is unavailable.
 
 What is built is an **addon** rather than a mod: every addon in the list has a **Build** button of
 its own, and the square **Build** at the top builds everything the workspace turned out to hold — in
@@ -418,12 +423,14 @@ before it will let one play: if a Release client is thrown off a moment after jo
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
 connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
-directory, `-mod=` out of `clientMods` and `-name=SurvivorA`; a client with nothing to connect to
-loads `-mission=dayzOffline.<map>` instead. The server gets `-serverMod=` out of `serverMods`,
-`-config=`, `-profiles=`, `-mission=` and `-world=none` — and nothing out of `clientMods`: the
-server's list is read apart from the client's rather than on top of it, so a mod both sides need has
-to be named in both. An empty list does not become an empty argument but is not passed at all: the
-game takes an empty `-mod=` badly.
+directory, `-mod=` out of `mods` and `-name=SurvivorA`; a client with nothing to connect to
+loads `-mission=dayzOffline.<map>` instead. The server gets the same `-mod=` out of `mods`,
+plus `-serverMod=` out of `serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`.
+Name shared mods once in `mods`; put additional mods that only the server needs in `serverMods`.
+An empty list is not passed at all: the game takes an empty `-mod=` badly.
+
+For manifests written before 0.0.28, rename `clientMods` to `mods` and remove shared entries
+from `serverMods`, leaving only the additional server mods there.
 
 The lists are the whole answer to what gets loaded: nothing is appended to them along the way. Mods
 of the workspace are named there alongside third-party ones, so the order is the one that is
@@ -434,13 +441,36 @@ a mod the workspace happens to hold. A mod of the workspace is checked more stri
 third-party one: what one of ours packs into is known, so "not built" names the missing pbo, while
 of a third-party one only the folder can be asked about.
 
-`clientMods` and `serverMods` may also be written on an individual target. An absent target list
+A client comes up borderless over the whole primary monitor, and it does so because the game is
+asked to rather than because its window is moved about afterwards. DayZ has a borderless mode that
+its options menu never names: windowed at exactly the desktop's resolution, it makes a popup and
+maximises it (the engine logs it as `bordeless`). `-window`, which clients used to be given, forces
+the other windowed mode — a title bar, placed wherever the last run left it, and the bottom of a
+monitor-sized picture off the screen — so it is no longer passed. Before each client starts, its
+`Users\<Windows account>\DayZ.cfg` in the profile (`DayZ Exp.cfg` for Experimental) is made to say
+`Windowed=1`, `WinX=0` and `WinY=0`, and loses `WindowWidth` and `WindowHeight`: without them the
+game takes the primary display's own resolution, which is what selects the borderless mode, and no
+monitor or scale has to be known here. Nothing else in the file changes. A file that is not there
+yet is written too, because without one the game starts in exclusive fullscreen. The second client
+reads its settings through its box, so the box's own copy is put right as well once the game has
+made one. None of this is documented; it was read out of the game.
+
+For the first seconds of each client's window a small guard runs beside it, because the game shows
+its new window on top of everything and asks for the foreground, and Windows sometimes grants it —
+which is a loading screen holding the mouse, or at least a game over the editor. The guard holds
+the foreground from before the game starts until its window is up, hands the foreground back to
+the window the developer was in if the game took it anyway, and puts that window back above the
+game's. After that it is gone: the game comes up behind whatever the developer was doing, with its
+taskbar button flashing, and is switched to like any other window. It is PowerShell with a little
+C# compiled on the spot, killed with the game, and what it did is logged as `client window: ...`.
+
+`mods` and `serverMods` may also be written on an individual target. An absent target list
 inherits the list on `launch`; a present target list replaces it whole. That distinction includes
-an explicit empty list, which means that side of this target loads no mods even when the shared
-launch list names some. The form therefore shows empty target rows until a target actually
+an explicit empty list: `mods: []` clears shared mods for both processes, and `serverMods: []`
+clears only the additional server mods. The form shows empty target rows until a target actually
 overrides them, while the shared lists remain the default for every other target.
 
-Each `clientMods` or `serverMods` entry names exactly one folder directly under `modsDirectory`.
+Each `mods` or `serverMods` entry names exactly one folder directly under `modsDirectory`.
 Spaces and hyphens are allowed there because these are folder references rather than class names;
 path separators, Windows path punctuation and semicolons are refused before a path is constructed.
 

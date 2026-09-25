@@ -12,13 +12,18 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { type LaunchTarget, targetsOf } from '../mods/launch';
-import { type GameBuild, GAME_BUILDS, isWanting } from '../mods/machine';
+import {
+  type GameBuild,
+  GAME_BUILDS,
+  isWanting,
+  workbenchExecutableOf,
+} from '../mods/machine';
 import { MANIFEST_FILE, type Mod } from '../mods/model';
 import {
   type Link,
   type WorkDrive,
   type WorkDriveAction,
-  WORK_DRIVE_ACTIONS,
+  currentWorkDriveAction,
   isUnlinked,
   refusalOf,
 } from '../mods/workDrive';
@@ -29,6 +34,7 @@ import {
   findMods,
   prefixesOf,
   targetSourcesOf,
+  workbenchProjectOf,
 } from '../platform/workspace';
 import type {
   ChoiceView,
@@ -48,6 +54,7 @@ import {
   describeRun,
 } from './launch';
 import { WORK_DRIVE_COMMAND } from './workDrive';
+import { WORKBENCH_COMMAND } from './workbench';
 
 /** A burst of file events — a checkout, a build — should still cost one scan. */
 const SETTLE_MS = 200;
@@ -155,6 +162,9 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'workDrive':
         this.report(runCommand(WORK_DRIVE_COMMAND[request.action]));
         return;
+      case 'workbench':
+        this.report(runCommand(WORKBENCH_COMMAND));
+        return;
       case 'build':
         this.report(runCommand(BUILD_COMMAND.addon, { mod: request.mod, addon: request.addon }));
         return;
@@ -209,7 +219,7 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
 
     const message: ModsMessage = {
       type: 'mods',
-      tools: toolsOf(drive, found, this.launching),
+      tools: toolsOf(drive, found, settings, this.launching),
       workspaces: [...found.workspaces].map(([path, problems]) => ({
         path,
         location: locationOfFile(path, found),
@@ -293,11 +303,17 @@ function workDriveTitle(action: WorkDriveAction, drive: WorkDrive): string {
  * The row of buttons, with the reason each one would refuse already on it: the disabled button
  * says why without being pressed, and it says it in the same words the command would.
  */
-function toolsOf(drive: WorkDrive, found: Discovery, launching: Launching): ToolsView {
+function toolsOf(
+  drive: WorkDrive,
+  found: Discovery,
+  settings: Awaited<ReturnType<typeof readMachineSettings>>,
+  launching: Launching,
+): ToolsView {
   const platform = platformRefusal();
   const targets = targetsOf(targetSourcesOf(found));
   const addons = found.mods.reduce((count, mod) => count + mod.addons.length, 0);
   const chosen = launching.chosen(targets);
+  const driveActions: readonly WorkDriveAction[] = [currentWorkDriveAction(drive), 'link'];
   const nothing =
     targets.length === 0
       ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
@@ -320,11 +336,49 @@ function toolsOf(drive: WorkDrive, found: Discovery, launching: Launching): Tool
       title: 'Pack every addon of this workspace into its pbo, in dependency order',
       refusal: addons === 0 ? 'No addon of this workspace can be built.' : undefined,
     },
-    workDrive: WORK_DRIVE_ACTIONS.map((action) => ({
+    workDrive: driveActions.map((action) => ({
       action,
       title: workDriveTitle(action, drive),
       refusal: platform ?? refusalOf(drive, action),
     })),
+    workbench: workbenchActionOf(drive, found, settings, chosen, platform),
+  };
+}
+
+function workbenchActionOf(
+  drive: WorkDrive,
+  found: Discovery,
+  settings: Awaited<ReturnType<typeof readMachineSettings>>,
+  chosen: Chosen,
+  platform: string | undefined,
+): ToolsView['workbench'] {
+  const target = chosen.target;
+  const project = target === undefined ? undefined : workbenchProjectOf(found, target.mod);
+  let refusal: string | undefined;
+
+  if (platform !== undefined) {
+    refusal = platform;
+  } else if (!vscode.workspace.isTrusted) {
+    refusal = 'Opening an external program with a workspace project requires a trusted workspace.';
+  } else if (target === undefined) {
+    refusal = 'Select a launch target before opening Workbench.';
+  } else if (project === undefined) {
+    refusal = `${target.mod} has no .gproj to open in Workbench.`;
+  } else if (workbenchExecutableOf(settings) === '') {
+    refusal = 'DayZ Tools was not found, so Workbench cannot be opened.';
+  } else if (drive.state !== 'mounted') {
+    refusal =
+      drive.at === ''
+        ? `${drive.letter} is not mounted, so Workbench cannot read the project resources.`
+        : `${drive.letter} is mounted from ${drive.at}, not from ${drive.source}.`;
+  }
+
+  return {
+    title:
+      project === undefined
+        ? 'Open the selected target mod in DayZ Workbench'
+        : `Open ${project.project} in DayZ Workbench`,
+    refusal,
   };
 }
 

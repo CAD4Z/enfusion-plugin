@@ -226,7 +226,7 @@ const PARSING = { allowTrailingComma: true, allowEmptyContent: true };
 /** The lists the form shows a row per item of, which is what makes their length matter. */
 const MOD_LISTS: readonly FormPath[] = [
   ['exclude'],
-  [LAUNCH, 'clientMods'],
+  [LAUNCH, 'mods'],
   [LAUNCH, 'serverMods'],
   [LAUNCH, TARGETS],
 ];
@@ -298,7 +298,7 @@ function clearedPathOf(source: string, path: FormPath): FormPath {
     path[0] !== LAUNCH ||
     path[1] !== TARGETS ||
     typeof path[2] !== 'number' ||
-    (path[3] !== 'clientMods' && path[3] !== 'serverMods') ||
+    (path[3] !== 'mods' && path[3] !== 'serverMods') ||
     typeof path[4] !== 'number'
   ) {
     return path;
@@ -521,8 +521,8 @@ function droppedFrom(
     })),
     ...read.launch.targets.flatMap((target, at) => [
       {
-        path: [LAUNCH, TARGETS, at, 'clientMods'] as FormPath,
-        length: target.clientMods?.length ?? 0,
+        path: [LAUNCH, TARGETS, at, 'mods'] as FormPath,
+        length: target.mods?.length ?? 0,
       },
       {
         path: [LAUNCH, TARGETS, at, 'serverMods'] as FormPath,
@@ -550,8 +550,8 @@ function shownListLengthOf(read: Read, path: FormPath): number {
   if (field === TARGETS) {
     return read.launch.targets.length;
   }
-  if (field === 'clientMods') {
-    return read.launch.clientMods.length;
+  if (field === 'mods') {
+    return read.launch.mods.length;
   }
   if (field === 'serverMods') {
     return read.launch.serverMods.length;

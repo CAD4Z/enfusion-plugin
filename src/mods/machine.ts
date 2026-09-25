@@ -207,6 +207,23 @@ export function signToolOf(settings: MachineSettings): string {
 }
 
 /**
+ * DayZ's work-drive helper. Unlike one `subst` call, it creates the P: mapping in both the normal
+ * and elevated Windows token contexts, so Workbench sees the same drive however it was started.
+ */
+export function workDriveToolOf(settings: MachineSettings): string {
+  return settings.dayzTools === ''
+    ? ''
+    : windowsPath(settings.dayzTools, 'Bin', 'WorkDrive', 'WorkDrive.exe');
+}
+
+/** DayZ Workbench, installed as part of DayZ Tools. */
+export function workbenchExecutableOf(settings: MachineSettings): string {
+  return settings.dayzTools === ''
+    ? ''
+    : windowsPath(settings.dayzTools, 'Bin', 'Workbench', 'workbenchApp.exe');
+}
+
+/**
  * The key this machine signs with, and empty where nothing is going to be signed at all — signing
  * turned off, or left on with no key named.
  *

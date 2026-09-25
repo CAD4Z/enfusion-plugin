@@ -124,7 +124,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
   const read = readMod(`{
   "launch": {
     "modsDirectory": "F:/DayZ/Mods",
-    "clientMods": ["@CF"],
+    "mods": ["@CF"],
     "serverMods": ["@ServerTools"],
     "targets": [
       {
@@ -133,7 +133,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         "map": "sakhal",
         "run": "both",
         "experimental": true,
-        "clientMods": ["@TargetCF"],
+        "mods": ["@TargetCF"],
         "serverMods": [],
         "serverConfig": "Profiles/Dev/server.cfg"
       },
@@ -146,7 +146,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
   assert.deepEqual(read.problems, []);
   assert.deepEqual(read.value.launch, {
     modsDirectory: 'F:/DayZ/Mods',
-    clientMods: ['@CF'],
+    mods: ['@CF'],
     serverMods: ['@ServerTools'],
     targets: [
       {
@@ -155,7 +155,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         map: 'sakhal',
         run: 'both',
         experimental: true,
-        clientMods: ['@TargetCF'],
+        mods: ['@TargetCF'],
         serverMods: [],
         serverConfig: 'Profiles/Dev/server.cfg',
       },
@@ -165,7 +165,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         map: undefined,
         run: 'server',
         experimental: false,
-        clientMods: undefined,
+        mods: undefined,
         serverMods: undefined,
         serverConfig: undefined,
       },
@@ -175,7 +175,7 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
         map: undefined,
         run: 'both',
         experimental: false,
-        clientMods: undefined,
+        mods: undefined,
         serverMods: undefined,
         serverConfig: undefined,
       },
@@ -185,10 +185,10 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
 
 test('an unsafe loaded-mod folder stays readable and is reported where it was written', () => {
   const read = readMod(
-    '{\n  "launch": {\n    "clientMods": ["../Victim", "Community-Online-Tools"]\n  }\n}',
+    '{\n  "launch": {\n    "mods": ["../Victim", "Community-Online-Tools"]\n  }\n}',
   );
 
-  assert.deepEqual(read.value.launch?.clientMods, ['../Victim', 'Community-Online-Tools']);
+  assert.deepEqual(read.value.launch?.mods, ['../Victim', 'Community-Online-Tools']);
   assert.equal(read.problems.length, 1);
   assert.equal(read.problems[0]?.line, 3);
   assert.match(read.problems[0]?.message ?? '', /one Windows folder name/);
@@ -255,7 +255,7 @@ test('a mod on its own owns its launch block', () => {
     manifest: mod,
     launch: {
       modsDirectory: 'F:/Mods',
-      clientMods: [],
+      mods: [],
       serverMods: [],
       targets: [
         {
@@ -264,7 +264,7 @@ test('a mod on its own owns its launch block', () => {
           map: undefined,
           run: 'both',
           experimental: false,
-          clientMods: undefined,
+          mods: undefined,
           serverMods: undefined,
           serverConfig: undefined,
         },
@@ -277,7 +277,7 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
   const mod = readMod(`{
   "launch": {
     "modsDirectory": "F:/Mods",
-    "clientMods": ["@CF"],
+    "mods": ["@CF"],
     "targets": [{ "name": "Sakhal" }]
   }
 }`).value;
@@ -287,7 +287,7 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
 
   assert.deepEqual(configuration.launch, {
     modsDirectory: undefined,
-    clientMods: [],
+    mods: [],
     serverMods: [],
     targets: [
       {
@@ -296,7 +296,7 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
         map: undefined,
         run: 'both',
         experimental: false,
-        clientMods: undefined,
+        mods: undefined,
         serverMods: undefined,
         serverConfig: undefined,
       },
@@ -312,7 +312,7 @@ test('the workspace file owns launch by being there, so one without the block le
 
   assert.deepEqual(configuration.launch, {
     modsDirectory: undefined,
-    clientMods: [],
+    mods: [],
     serverMods: [],
     targets: [],
   });

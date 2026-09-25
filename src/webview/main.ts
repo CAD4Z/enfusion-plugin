@@ -1,7 +1,7 @@
 /**
  * The Mods panel, on the browser side of the webview.
  *
- * Two things, one above the other. A row of buttons: the game, the build, and the work drive —
+ * Two things, one above the other. Grouped controls for launch/build and workspace tools —
  * everything that acts on the whole workspace rather than on one thing in it. Below it the
  * workspace and its mods, each mod a bar that opens its `mod.enf` and, under it, the addons it
  * packs into pbo.
@@ -132,12 +132,9 @@ function stale(): HTMLElement {
 
 /**
  * The buttons everything else is done with, in the order they are reached for: say what the next
- * launch is, put the game up, build what it would load, and — off to the side, because they are
- * done once and then forgotten — the three that the work drive is made of.
+ * launch is, put the game up, build what it would load, and manage the work drive or Workbench.
  *
- * The two lists sit where the heading was rather than beside the buttons. They are the heading:
- * what this row is about is which target and which build, and a Start with those written over it
- * needs no word saying that it runs and builds. They stand in the buttons' own columns — the
+ * The two lists and their buttons share one named group. They stand in the buttons' own columns — the
  * target over Start and Add client, the build over Build — so that the two rows read as one block
  * at every width the panel is dragged to.
  */
@@ -149,7 +146,7 @@ function toolsOf(tools: ToolsView): HTMLElement {
     picker('target', tools.target, (id) => ({ type: 'selectTarget', id })),
     picker('game-build', tools.gameBuild, (build) => ({ type: 'selectGameBuild', build })),
   );
-  primary.append(choices, primaryActions);
+  primary.append(span('tool-heading', 'Launch & build'), choices, primaryActions);
   primaryActions.append(
     tool('start', tools.start, 'Start', { type: 'launch' }, true),
     tool('secondClient', tools.secondClient, 'Add client', { type: 'launchSecondClient' }),
@@ -158,7 +155,7 @@ function toolsOf(tools: ToolsView): HTMLElement {
 
   const workDrive = div('tool-group');
   const driveActions = div('tool-row drive-actions');
-  workDrive.append(span('tool-heading', 'Work drive'), driveActions);
+  workDrive.append(span('tool-heading', 'Workspace tools'), driveActions);
   driveActions.append(
     ...tools.workDrive.map((action) =>
       tool(
@@ -168,6 +165,7 @@ function toolsOf(tools: ToolsView): HTMLElement {
         { type: 'workDrive', action: action.action },
       ),
     ),
+    tool('workbench', tools.workbench, 'Workbench', { type: 'workbench' }),
   );
 
   const toolsRoot = div('tools');
