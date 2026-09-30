@@ -1,3 +1,4 @@
+#include "memory.h"
 /*
  * TGA: colour-map type 0, uncompressed true-colour image type 2, 24 or 32 bits. The descriptor
  * byte is read for origin and alpha depth rather than assumed, and anything else is refused.
@@ -22,12 +23,12 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
         return EDDS_INVALID_INPUT;
     }
     if (size < 18u) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "truncated-tga-header", "The TGA header is truncated.");
         return EDDS_INVALID_INPUT;
     }
     if (file[1] != 0 || file[2] != 2) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "unsupported-tga-subtype",
             "Only TGA color-map type 0 and uncompressed true-color image type 2 are supported.");
         return EDDS_UNSUPPORTED_FORMAT;
@@ -35,19 +36,19 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
     width = edds_u16le(file + 12);
     height = edds_u16le(file + 14);
     if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "tga-dimension-limit", "TGA dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
         return EDDS_INVALID_INPUT;
     }
     if (file[16] != 24 && file[16] != 32) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "unsupported-tga-bit-depth", "Only 24-bit and 32-bit true-color TGA inputs are supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
     attributes = file[17] & 0x0fu;
     if ((file[17] & 0xc0u) != 0 || (file[16] == 24 && attributes != 0) ||
         (file[16] == 32 && attributes != 0 && attributes != 8)) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "unsupported-tga-descriptor",
             "The TGA descriptor must be non-interleaved with zero or eight alpha bits.");
         return EDDS_UNSUPPORTED_FORMAT;
@@ -57,13 +58,13 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
     data_bytes = (size_t)width * height * channels;
     if (data_at > size || data_bytes > size - data_at ||
         (uint64_t)width * height * 4u > EDDS_MAX_PREVIEW_BYTES) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "truncated-tga-pixels", "The TGA pixel array is truncated or exceeds the decoded-image limit.");
         return EDDS_INVALID_INPUT;
     }
-    rgba = malloc((size_t)width * height * 4u);
+    rgba = edds_alloc((size_t)width * height * 4u);
     if (rgba == NULL) {
-        free(file);
+        edds_free(file);
         edds_fail(error, "allocation-failed", "Memory for the decoded TGA could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
@@ -79,7 +80,7 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
             rgba[output_at + 3u] = attributes == 8 ? file[source_at + 3u] : 255u;
         }
     }
-    free(file);
+    edds_free(file);
     image->width = width;
     image->height = height;
     image->has_alpha = attributes == 8;

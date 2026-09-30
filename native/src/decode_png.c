@@ -1,3 +1,4 @@
+#include "memory.h"
 /*
  * PNG, the narrow way. Non-interlaced 8-bit RGB and RGBA only: every other IHDR combination is a
  * subtype whose Workbench treatment has not been established, so it is refused rather than guessed.
@@ -36,7 +37,7 @@ static int append_idat(uint8_t **idat, size_t *size, const uint8_t *part, size_t
     if (part_size > EDDS_MAX_FILE_BYTES - *size) {
         return 0;
     }
-    grown = realloc(*idat, *size + part_size);
+    grown = edds_realloc(*idat, *size + part_size);
     if (grown == NULL) {
         return 0;
     }
@@ -151,9 +152,9 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         edds_fail(error, "png-decoded-size-limit", "The PNG exceeds the decoded-image limit.");
         goto done;
     }
-    filtered = malloc(filtered_size);
-    raw = malloc(row_bytes * height);
-    rgba = malloc((size_t)width * height * 4u);
+    filtered = edds_alloc(filtered_size);
+    raw = edds_alloc(row_bytes * height);
+    rgba = edds_alloc((size_t)width * height * 4u);
     if (filtered == NULL || raw == NULL || rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded PNG could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -202,10 +203,10 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
     status = EDDS_OK;
 
 done:
-    free(file);
-    free(idat);
-    free(filtered);
-    free(raw);
-    free(rgba);
+    edds_free(file);
+    edds_free(idat);
+    edds_free(filtered);
+    edds_free(raw);
+    edds_free(rgba);
     return status;
 }

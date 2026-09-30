@@ -124,7 +124,7 @@ uint32_t edds_pool_worker_count(uint32_t count) {
 }
 
 uint64_t edds_pool_charge_of(uint64_t source_bytes) {
-    /* Four bytes a pixel, a mip chain a third as large again, and the staging the encoder wants. */
+    /* A cheap initial hint. Only the enforced allocation quota can bound compressed sources. */
     const uint64_t base = (uint64_t)4 * 1024 * 1024;
     const uint64_t expansion = 8u;
     if (source_bytes > (UINT64_MAX - base) / expansion) return UINT64_MAX;
@@ -175,6 +175,39 @@ void edds_pool_release(edds_pool *pool, uint64_t bytes) {
     pool->held = charged > pool->held ? 0u : pool->held - charged;
     signal_wake_all(&pool->budget_freed);
     mutex_unlock(&pool->lock);
+}
+
+edds_status edds_pool_execute(
+    edds_pool *pool, uint64_t initial_charge, edds_memory_operation_fn operation, void *context,
+    edds_cancelled_fn cancelled, void *cancel_context, edds_error *error
+) {
+    uint64_t charge = initial_charge == 0u ? 1u : initial_charge;
+    if (pool == NULL || operation == NULL || error == NULL) return EDDS_INTERNAL_FAILURE;
+    for (;;) {
+        edds_memory_result result;
+        uint64_t next;
+        edds_pool_reserve(pool, charge);
+        if (cancelled != NULL && cancelled(cancel_context)) {
+            edds_pool_release(pool, charge);
+            memset(error, 0, sizeof *error);
+            (void)snprintf(error->code, sizeof error->code, "cancelled");
+            (void)snprintf(error->message, sizeof error->message,
+                "The batch was cancelled before this conversion attempt started.");
+            return EDDS_CANCELLED;
+        }
+        result = edds_memory_run(charge > pool->budget ? UINT64_MAX : charge,
+            operation, context, error);
+        edds_pool_release(pool, charge);
+        if (result.status == EDDS_OK || result.required == 0u) return result.status;
+
+        /* Never wait for more memory while holding decoded buffers: that could deadlock workers.
+         * The operation has rolled back, and memory_run has verified that its buffers are gone. */
+        next = charge > UINT64_MAX / 2u ? UINT64_MAX : charge * 2u;
+        if (next > pool->budget && charge < pool->budget && result.required <= pool->budget) {
+            next = pool->budget;
+        }
+        charge = next < result.required ? result.required : next;
+    }
 }
 
 void edds_pool_lock_output(edds_pool *pool) {

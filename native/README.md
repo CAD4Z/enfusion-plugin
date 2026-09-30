@@ -40,11 +40,16 @@ pipe split the bytes carries no protocol meaning, a line over 256 KiB is refused
 half-framed, and progress steps below a twentieth are dropped so one shared stdout cannot flood.
 
 One batch is one process over one worker pool: at most eight threads, never more than there are
-jobs or cores, and one shared 512 MiB budget that every image must fit inside before it starts
-decoding. An image charged more than the whole budget runs alone rather than being refused. So a
-hundred-item batch keeps the cores busy without independent codec thread pools, independent memory
-peaks, or a queue of decoded images nobody bounded. `EDDS_CONVERT_WORKERS` pins the worker count
-for a test or a diagnostic run; it is not a protocol field and never a texture-profile one.
+jobs or cores, and one shared 512 MiB budget for live codec heap allocations, including allocation
+bookkeeping. File size supplies only the initial quota. Source buffers, decoded pixels, mip and
+GPU buffers, container compression and metadata parsing all reserve their actual bytes before
+allocation; growing a buffer charges both copies while they coexist. If an attempt needs more
+room, it releases its memory and sibling temps before retrying with a larger quota. Waiting workers
+never retain decoded images, and cancellation is checked again after admission and before retry.
+An image that needs more than the whole budget runs alone rather than being refused. The budget
+is not a process RSS limit: bounded job records, thread stacks and the C runtime are separate.
+`EDDS_CONVERT_WORKERS` pins the worker count for a test or a diagnostic run; it is not a protocol
+field and never a texture-profile one.
 
 The extension passes a private cancellation-file control to the process; the codec polls it at its
 existing cancellation points, then the extension force-kills only after a grace period and removes

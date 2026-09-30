@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum { EDDS_FIXTURES = 5, SOURCE_FIXTURES = 7 };
 
@@ -11,6 +12,12 @@ int main(int argc, char **argv) {
     const int argc_with_sources = argc_without_sources + SOURCE_FIXTURES;
     int produced;
     int ok;
+    if (argc == 3 && strcmp(argv[1], "--memory") == 0) {
+        test_bytes source = fixture_png_flat(1024u);
+        ok = source.data != NULL && fixture_write(argv[2], source);
+        fixture_free(source);
+        return ok ? 0 : 1;
+    }
     if (argc != argc_without_sources && argc != argc_with_sources) {
         fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF GPU_TGA GPU_FLAT_TGA DDS]\n",
             stderr);

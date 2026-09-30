@@ -40,6 +40,7 @@ test_bytes fixture_dds_dx10_top(
 );
 test_bytes fixture_integer_overflow(void);
 test_bytes fixture_png_rgba(void);
+test_bytes fixture_png_flat(uint32_t side);
 test_bytes fixture_png_rgba_gamma(void);
 test_bytes fixture_tga_bgrx(void);
 test_bytes fixture_jpeg_ycbcr(void);

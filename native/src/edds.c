@@ -1,3 +1,4 @@
+#include "memory.h"
 #include <edds/edds.h>
 
 #include "gpu.h"
@@ -511,7 +512,7 @@ static edds_status decode_lz4(
             fail(error, "changed-input", "An LZ4 block no longer matches its inspection.");
             return EDDS_INVALID_INPUT;
         }
-        compressed = malloc(compressed_size);
+        compressed = edds_alloc(compressed_size);
         if (compressed == NULL) {
             fail(error, "allocation-failed", "Memory for an LZ4 block could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
@@ -519,11 +520,11 @@ static edds_status decode_lz4(
         block_output_at = output_at;
         if (!read_exact(input, compressed, compressed_size) ||
             !decode_lz4_block(compressed, compressed_size, output, mip->decoded_bytes, &output_at)) {
-            free(compressed);
+            edds_free(compressed);
             fail(error, "invalid-lz4-data", "An LZ4 block cannot be decoded within the declared boundary.");
             return EDDS_INVALID_INPUT;
         }
-        free(compressed);
+        edds_free(compressed);
         consumed += compressed_size;
         if ((framed & 0x80000000u) == 0 &&
             output_at - block_output_at != LZ4_DECODED_BLOCK_BYTES) {
@@ -583,11 +584,11 @@ edds_status edds_preview(
         fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.", level);
         return EDDS_INVALID_INPUT;
     }
-    raw = malloc(mip->decoded_bytes);
-    pixels = malloc(decoded_bytes);
+    raw = edds_alloc(mip->decoded_bytes);
+    pixels = edds_alloc(decoded_bytes);
     if (raw == NULL || pixels == NULL) {
-        free(raw);
-        free(pixels);
+        edds_free(raw);
+        edds_free(pixels);
         fail(error, "allocation-failed", "Memory for the selected mip could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
@@ -612,14 +613,11 @@ edds_status edds_preview(
             pixels = NULL;
         }
     }
-    free(raw);
-    free(pixels);
+    edds_free(raw);
+    edds_free(pixels);
     return status;
 }
 
-void edds_free(void *allocation) {
-    free(allocation);
-}
 
 const char *edds_container_name(edds_container container) {
     return container == EDDS_CONTAINER_COPY ? "COPY" : "LZ4";

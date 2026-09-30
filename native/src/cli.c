@@ -1605,7 +1605,7 @@ typedef struct batch_run {
 } batch_run;
 
 typedef struct batch_reporter {
-    const char *id;
+    const native_batch_job *job;
     edds_pool *pool;
     double reported;
 } batch_reporter;
@@ -1619,9 +1619,15 @@ static void batch_progress(void *context, double progress) {
     if (progress < reporter->reported + 0.05 || progress >= 1.0) return;
     reporter->reported = progress;
     edds_pool_lock_output(reporter->pool);
-    write_batch_progress(reporter->id, progress);
+    write_batch_progress(reporter->job->id, progress);
     (void)fflush(stdout);
     edds_pool_unlock_output(reporter->pool);
+}
+
+static edds_status convert_batch_attempt(void *context, edds_error *error) {
+    batch_reporter *reporter = context;
+    return convert_atomically(&reporter->job->options, &reporter->job->profile,
+        batch_progress, reporter, error);
 }
 
 /** One image, on whichever worker claimed it. Everything shared is touched under a pool lock. */
@@ -1634,7 +1640,7 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
     edds_info info;
     edds_status status;
     uint64_t charge;
-    reporter.id = job->id;
+    reporter.job = job;
     reporter.pool = pool;
 
     if (was_cancelled(NULL)) {
@@ -1668,16 +1674,15 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
     (void)fflush(stdout);
     edds_pool_unlock_output(pool);
 
-    /* The image only starts decoding once its share of the one memory budget is free. */
+    /* File size is only the initial quota; allocations enforce it even for compressed sources. */
     charge = edds_pool_charge_of(
         revision_of(job->options.input, &source_revision) && source_revision.exists
             ? source_revision.size
             : 0u);
-    edds_pool_reserve(pool, charge);
-    status = convert_atomically(&job->options, &job->profile, batch_progress, &reporter, &error);
+    status = edds_pool_execute(pool, charge, convert_batch_attempt, &reporter,
+        was_cancelled, NULL, &error);
     inject_batch_cancel_after_first_commit(at, status);
     if (status == EDDS_OK) status = inspect_converted(job, &info, &error);
-    edds_pool_release(pool, charge);
 
     edds_pool_lock_output(pool);
     if (status == EDDS_OK) {

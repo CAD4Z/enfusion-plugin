@@ -1,3 +1,4 @@
+#include "memory.h"
 #include <edds/edds.h>
 
 #include <ctype.h>
@@ -64,13 +65,13 @@ static int read_text(FILE *input, char **source, size_t *size, edds_error *error
         fail(error, "metadata-size-limit", "The metadata could not be measured within the input limit.");
         return 0;
     }
-    allocation = malloc((size_t)length + 1u);
+    allocation = edds_alloc((size_t)length + 1u);
     if (allocation == NULL) {
         fail(error, "allocation-failed", "Memory for the metadata could not be allocated.");
         return 0;
     }
     if (fread(allocation, 1, (size_t)length, input) != (size_t)length) {
-        free(allocation);
+        edds_free(allocation);
         fail(error, "metadata-read-failed", "The metadata could not be read completely.");
         return 0;
     }
@@ -588,7 +589,7 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
     if (pending != EDDS_OK) *error = pending_error;
 
 done:
-    free(source);
+    edds_free(source);
     return status;
 }
 

@@ -388,6 +388,55 @@ test_bytes fixture_integer_overflow(void) {
     return fixture;
 }
 
+/* Owned fixed-Huffman Deflate: one zero, then distance-one runs, without a codec dependency. */
+static void fixture_bits(uint8_t *bytes, size_t *bit, unsigned value, unsigned count) {
+    for (unsigned at = 0; at < count; ++at, ++*bit) {
+        bytes[*bit / 8u] |= (uint8_t)(((value >> at) & 1u) << (*bit % 8u));
+    }
+}
+
+test_bytes fixture_png_flat(uint32_t side) {
+    const uint32_t filtered = (side * 4u + 1u) * side;
+    const size_t capacity = (size_t)filtered / 258u * 2u + 2048u;
+    test_bytes fixture;
+    uint8_t *idat;
+    uint8_t ihdr[13] = { 0 };
+    size_t bit = 16u;
+    size_t at = 8u;
+    uint32_t remaining = filtered - 1u;
+    if (side == 0u || side > 4096u) return (test_bytes){ NULL, 0 };
+    fixture = allocated(capacity + 64u);
+    idat = calloc(1u, capacity);
+    if (fixture.data == NULL || idat == NULL) {
+        fixture_free(fixture);
+        free(idat);
+        return (test_bytes){ NULL, 0 };
+    }
+    idat[0] = 0x78;
+    idat[1] = 0x01;
+    fixture_bits(idat, &bit, 3u, 3u); /* Final block, fixed Huffman. */
+    fixture_bits(idat, &bit, 12u, 8u); /* Literal zero. */
+    while (remaining >= 258u) {
+        fixture_bits(idat, &bit, 163u, 8u); /* Length 258. */
+        fixture_bits(idat, &bit, 0u, 5u); /* Distance one. */
+        remaining -= 258u;
+    }
+    while (remaining-- > 0u) fixture_bits(idat, &bit, 12u, 8u);
+    fixture_bits(idat, &bit, 0u, 7u); /* End of block. */
+    put_u32be(idat + (bit + 7u) / 8u, ((filtered % 65521u) << 16) | 1u);
+    memcpy(fixture.data, "\x89PNG\r\n\x1a\n", 8u);
+    put_u32be(ihdr, side);
+    put_u32be(ihdr + 4u, side);
+    ihdr[8] = 8u;
+    ihdr[9] = 6u;
+    at += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
+    at += png_chunk(fixture.data + at, "IDAT", idat, (uint32_t)((bit + 7u) / 8u + 4u));
+    at += png_chunk(fixture.data + at, "IEND", NULL, 0u);
+    fixture.size = at;
+    free(idat);
+    return fixture;
+}
+
 test_bytes fixture_png_rgba(void) {
     static const uint8_t filtered[] = {
         0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120,

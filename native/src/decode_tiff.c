@@ -1,3 +1,4 @@
+#include "memory.h"
 /*
  * Baseline TIFF, in the one shape a texture source arrives in.
  *
@@ -185,7 +186,7 @@ static int lzw_string(lzw_dictionary *dictionary, uint32_t code, uint32_t next, 
 
 /** TIFF LZW: MSB-first codes, the early code-width change, and no reliance on a trailing EOI. */
 static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
-    lzw_dictionary *dictionary = calloc(1, sizeof *dictionary);
+    lzw_dictionary *dictionary = edds_calloc(1, sizeof *dictionary);
     uint64_t bit_at = 0;
     const uint64_t bits = (uint64_t)input_size * 8u;
     uint32_t next = LZW_FIRST;
@@ -264,7 +265,7 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
             break;
         }
     }
-    free(dictionary);
+    edds_free(dictionary);
     return ok;
 }
 
@@ -530,8 +531,8 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
         goto done;
     }
     status = EDDS_INVALID_INPUT;
-    samples = malloc((size_t)layout.width * layout.height * layout.samples);
-    rgba = malloc((size_t)layout.width * layout.height * 4u);
+    samples = edds_alloc((size_t)layout.width * layout.height * layout.samples);
+    rgba = edds_alloc((size_t)layout.width * layout.height * 4u);
     if (samples == NULL || rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded TIFF could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -557,8 +558,8 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     status = EDDS_OK;
 
 done:
-    free(file);
-    free(samples);
-    free(rgba);
+    edds_free(file);
+    edds_free(samples);
+    edds_free(rgba);
     return status;
 }

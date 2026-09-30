@@ -30,6 +30,7 @@ find_package(Threads REQUIRED)
 add_library(edds_core STATIC
   src/edds.c
   src/image.c
+  src/memory.c
   src/sources.c
   src/conversions.c
   src/gpu.c
@@ -73,6 +74,15 @@ if(BUILD_TESTING AND EDDS_BUILD_TESTS)
   edds_configure_target(edds-reference-reader)
 
   add_test(NAME edds_core COMMAND edds-core-test)
+  add_executable(edds-memory-test tests/memory_test.c)
+  target_link_libraries(edds-memory-test PRIVATE edds_core edds_test_fixture)
+  edds_configure_target(edds-memory-test)
+  add_test(NAME edds_memory COMMAND edds-memory-test)
+  add_test(NAME edds_memory_cli
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCLI=$<TARGET_FILE:edds-convert>"
+      "-DFIXTURE=$<TARGET_FILE:edds-fixture>"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/memory_protocol_test.cmake")
   add_test(
     NAME edds_cli_black_box
     COMMAND "${CMAKE_COMMAND}"

@@ -1,3 +1,4 @@
+#include "memory.h"
 /*
  * The readers and refusals shared by every source-image codec. Nothing here knows which format it
  * is serving: PNG and TIFF meet in the inflate, JPEG and TIFF in the byte order, all four in the
@@ -75,13 +76,13 @@ int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error)
         edds_fail(error, "source-size-limit", "The source image could not be measured within the supported limit.");
         return 0;
     }
-    allocation = malloc(length == 0 ? 1u : (size_t)length);
+    allocation = edds_alloc(length == 0 ? 1u : (size_t)length);
     if (allocation == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the source image could not be allocated.");
         return 0;
     }
     if (fread(allocation, 1, (size_t)length, input) != (size_t)length) {
-        free(allocation);
+        edds_free(allocation);
         edds_fail(error, "source-read-failed", "The source image could not be read completely.");
         return 0;
     }

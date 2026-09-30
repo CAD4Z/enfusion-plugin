@@ -1,3 +1,4 @@
+#include "memory.h"
 #include "image.h"
 #include "gpu.h"
 
@@ -231,7 +232,7 @@ static float kaiser_sample_bytes(
 
 static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
     const size_t intermediate_count = (size_t)next->width * previous->height;
-    float *intermediate = malloc(intermediate_count * sizeof *intermediate);
+    float *intermediate = edds_alloc(intermediate_count * sizeof *intermediate);
     if (intermediate == NULL) return 0;
 
     for (uint32_t channel = 0; channel < 4u; ++channel) {
@@ -261,7 +262,7 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
             }
         }
     }
-    free(intermediate);
+    edds_free(intermediate);
     return 1;
 }
 
@@ -309,8 +310,8 @@ static int lz4_block(
     size_t capacity,
     size_t *written
 ) {
-    int32_t *head = malloc(65536u * sizeof *head);
-    int32_t *previous = malloc((size == 0 ? 1u : size) * sizeof *previous);
+    int32_t *head = edds_alloc(65536u * sizeof *head);
+    int32_t *previous = edds_alloc((size == 0 ? 1u : size) * sizeof *previous);
     size_t input_at = 0;
     size_t anchor = 0;
     size_t output_at = 0;
@@ -387,8 +388,8 @@ static int lz4_block(
     ok = 1;
 
 done:
-    free(head);
-    free(previous);
+    edds_free(head);
+    edds_free(previous);
     return ok;
 }
 
@@ -402,7 +403,7 @@ static uint8_t *lz4_frame(
     const size_t capacity = 4u + (size_t)block_count * (4u + 16u) + size + size / 255u;
     const unsigned depth = mode == EDDS_COMPRESS_FASTEST ? 1u :
         (mode == EDDS_COMPRESS_MEDIUM ? 16u : 64u);
-    uint8_t *frame = malloc(capacity);
+    uint8_t *frame = edds_alloc(capacity);
     size_t output_at = 4;
     uint32_t input_at = 0;
     if (frame == NULL) {
@@ -416,7 +417,7 @@ static uint8_t *lz4_frame(
         output_at += 4;
         if (!lz4_block(input + input_at, block_bytes, depth, frame + output_at,
                 capacity - output_at, &compressed_size) || compressed_size > UINT32_MAX) {
-            free(frame);
+            edds_free(frame);
             return NULL;
         }
         edds_put_u32le(frame + descriptor_at, (block + 1u == block_count ? 0x80000000u : 0u) |
@@ -425,7 +426,7 @@ static uint8_t *lz4_frame(
         input_at += block_bytes;
     }
     if (output_at > UINT32_MAX) {
-        free(frame);
+        edds_free(frame);
         return NULL;
     }
     *stored_bytes = (uint32_t)output_at;
@@ -465,7 +466,7 @@ static edds_status prepare_storage(
                 mip->stored_bytes = compressed_bytes;
                 mip->stored = compressed;
             } else {
-                free(compressed);
+                edds_free(compressed);
             }
         }
     }
@@ -475,10 +476,10 @@ static edds_status prepare_storage(
 static void free_mips(generated_mip *mips, uint32_t count) {
     for (uint32_t at = 0; at < count; ++at) {
         if (mips[at].stored != mips[at].payload) {
-            free(mips[at].stored);
+            edds_free(mips[at].stored);
         }
-        free(mips[at].payload);
-        free(mips[at].bgra);
+        edds_free(mips[at].payload);
+        edds_free(mips[at].bgra);
         mips[at].bgra = NULL;
         mips[at].payload = NULL;
         mips[at].stored = NULL;
@@ -505,7 +506,7 @@ static edds_status encode_mips(
             edds_fail(error, "mip-size-limit", "A generated mip exceeds the runtime-format limit.");
             return EDDS_INVALID_INPUT;
         }
-        mip->payload = malloc(mip->payload_bytes);
+        mip->payload = edds_alloc(mip->payload_bytes);
         if (mip->payload == NULL) {
             edds_fail(error, "allocation-failed", "Memory for the runtime-format mip could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
@@ -565,7 +566,7 @@ static edds_status generate_mips(
             edds_fail(error, "mip-size-limit", "A generated mip exceeds the decoded-image limit.");
             return EDDS_INVALID_INPUT;
         }
-        mips[at].bgra = malloc(mips[at].bytes);
+        mips[at].bgra = edds_alloc(mips[at].bytes);
         if (mips[at].bgra == NULL) {
             free_mips(mips, complete_count);
             edds_fail(error, "allocation-failed", "Memory for the mip chain could not be allocated.");
@@ -597,7 +598,7 @@ static edds_status generate_mips(
     if (profile->remove_mips != 0) {
         const uint32_t removed = profile->remove_mips;
         for (uint32_t at = 0; at < removed; ++at) {
-            free(mips[at].bgra);
+            edds_free(mips[at].bgra);
             mips[at].bgra = NULL;
         }
         memmove(mips, mips + removed, sizeof(*mips) * (complete_count - removed));
@@ -610,10 +611,10 @@ static edds_status generate_mips(
 static void free_source(edds_decoded_source *source) {
     if (source->supplied_mip_count != 0) {
         for (uint32_t level = 0; level < source->supplied_mip_count; ++level) {
-            free(source->supplied_mips[level].rgba);
+            edds_free(source->supplied_mips[level].rgba);
         }
     } else {
-        free(source->rgba);
+        edds_free(source->rgba);
     }
     memset(source, 0, sizeof *source);
 }

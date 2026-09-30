@@ -1,3 +1,4 @@
+#include "memory.h"
 #include "image.h"
 #include "gpu.h"
 
@@ -103,7 +104,7 @@ static edds_pixel_format dx10_format(uint32_t dxgi, int *declares_alpha) {
 
 static void release_mips(edds_decoded_source *image) {
     for (uint32_t level = 0; level < image->supplied_mip_count; ++level) {
-        free(image->supplied_mips[level].rgba);
+        edds_free(image->supplied_mips[level].rgba);
         image->supplied_mips[level].rgba = NULL;
     }
     image->rgba = NULL;
@@ -241,7 +242,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
                 "DDS mip %u is truncated or exceeds the decoded-image limit.", level);
             goto decoded_invalid;
         }
-        mip->rgba = malloc((size_t)rgba_bytes);
+        mip->rgba = edds_alloc((size_t)rgba_bytes);
         if (mip->rgba == NULL) {
             edds_fail(error, "allocation-failed", "Memory for DDS mip %u could not be allocated.", level);
             goto decoded_internal;
@@ -270,19 +271,19 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
             }
         }
     }
-    free(bytes);
+    edds_free(bytes);
     return EDDS_OK;
 
 decoded_internal:
     release_mips(image);
-    free(bytes);
+    edds_free(bytes);
     return EDDS_INTERNAL_FAILURE;
 decoded_invalid:
     release_mips(image);
 invalid:
-    free(bytes);
+    edds_free(bytes);
     return EDDS_INVALID_INPUT;
 unsupported:
-    free(bytes);
+    edds_free(bytes);
     return EDDS_UNSUPPORTED_FORMAT;
 }

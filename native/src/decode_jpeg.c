@@ -1,3 +1,4 @@
+#include "memory.h"
 /*
  * Baseline sequential JPEG, and only baseline sequential JPEG.
  *
@@ -460,7 +461,7 @@ static edds_status jpeg_allocate_planes(jpeg_frame *frame, edds_error *error) {
         }
         component->stride = (uint32_t)stride;
         component->rows = (uint32_t)rows;
-        component->plane = calloc((size_t)(stride * rows), 1u);
+        component->plane = edds_calloc((size_t)(stride * rows), 1u);
         if (component->plane == NULL) {
             edds_fail(error, "allocation-failed",
                 "Memory for the decoded JPEG could not be allocated.");
@@ -714,7 +715,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
     if (!edds_read_all(input, &file, &file_size, error)) {
         return EDDS_INVALID_INPUT;
     }
-    state = calloc(1, sizeof *state);
+    state = edds_calloc(1, sizeof *state);
     if (state == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the JPEG decoder could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -858,7 +859,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         goto done;
     }
     status = EDDS_INVALID_INPUT;
-    rgba = malloc((size_t)state->frame.width * state->frame.height * 4u);
+    rgba = edds_alloc((size_t)state->frame.width * state->frame.height * 4u);
     if (rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded JPEG could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -873,13 +874,13 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
     status = EDDS_OK;
 
 done:
-    free(file);
-    free(rgba);
+    edds_free(file);
+    edds_free(rgba);
     if (state != NULL) {
         for (uint32_t component = 0; component < JPEG_MAX_COMPONENTS; ++component) {
-            free(state->frame.components[component].plane);
+            edds_free(state->frame.components[component].plane);
         }
-        free(state);
+        edds_free(state);
     }
     return status;
 }

@@ -2,6 +2,7 @@
 #define EDDS_POOL_H
 
 #include <edds/edds.h>
+#include <edds/memory.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,9 +23,8 @@ extern "C" {
 #define EDDS_POOL_MEMORY_BUDGET ((uint64_t)512 * 1024 * 1024)
 
 /**
- * What one source of `source_bytes` is charged against the budget. A compressed image decodes to
- * far more than it weighs on disk, and the mip chain and its staging buffers live beside it, so
- * the charge is deliberately generous rather than a measurement of the decode that has not run.
+ * Initial quota for a source of `source_bytes`. This is only an admission hint, not a bound on
+ * decoded memory: pool_execute enforces the quota on actual allocations and grows it on retry.
  */
 uint64_t edds_pool_charge_of(uint64_t source_bytes);
 
@@ -51,6 +51,16 @@ edds_status edds_pool_run(
  */
 void edds_pool_reserve(edds_pool *pool, uint64_t bytes);
 void edds_pool_release(edds_pool *pool, uint64_t bytes);
+
+/**
+ * Executes an atomic operation under an enforced allocation quota. If the initial charge is too
+ * small, the failed attempt releases its allocations and temps before retrying with more room.
+ * An operation exceeding the entire budget runs alone. Cancellation is checked after waiting for
+ * admission and before every attempt; ordinary input/IO/allocator failures are never retried.
+ */
+edds_status edds_pool_execute(
+    edds_pool *pool, uint64_t initial_charge, edds_memory_operation_fn operation, void *context,
+    edds_cancelled_fn cancelled, void *cancel_context, edds_error *error);
 
 /**
  * Serializes whatever a task writes to a shared stream. Events are several writes each, so the
