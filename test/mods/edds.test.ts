@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import { TEXTURE_SWIZZLES } from '../../src/mods/textureSwizzles';
 import {
   EDDS_PROTOCOL_VERSION,
   conversionOf,
@@ -25,6 +27,16 @@ test('the protocol handshake accepts the converter contract this extension speak
       commands: ['inspect', 'preview', 'convert', 'batch'],
     },
   );
+});
+
+test('all canonical swizzle names survive metadata parsing and unknown values refuse', () => {
+  const read = (Swizzling: string) => inspectionOf(JSON.stringify({ ...inspectMessage({}), metadata: {
+    schemaVersion: 1,
+    identity: { guid: '0123456789ABCDEF', name: 'Mod/x.edds', sourceFile: 'x.png', sourceFormat: 'png' },
+    recipe: { ...DEFAULT_TEXTURE_PROFILE, Swizzling },
+  } }));
+  for (const { name } of TEXTURE_SWIZZLES) assert.equal(read(name).metadata?.profile.Swizzling, name);
+  assert.throws(() => read('NormalMapTypo'), /Swizzling|recipe/);
 });
 
 test('inspect accepts only the structured supported metadata recipe', () => {

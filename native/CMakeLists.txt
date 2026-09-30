@@ -33,6 +33,7 @@ add_library(edds_core STATIC
   src/memory.c
   src/sources.c
   src/conversions.c
+  src/swizzling.c
   src/gpu.c
   src/bc7.c
   src/decode_png.c
@@ -83,6 +84,11 @@ if(BUILD_TESTING AND EDDS_BUILD_TESTS)
     "-DFIXTURE=$<TARGET_FILE:edds-fixture>"
     "-DREFERENCE_READER=$<TARGET_FILE:edds-reference-reader>"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/mip_modes_test.cmake")
+  add_test(NAME edds_swizzling COMMAND "${CMAKE_COMMAND}"
+    "-DCLI=$<TARGET_FILE:edds-convert>"
+    "-DFIXTURE=$<TARGET_FILE:edds-fixture>"
+    "-DREFERENCE_READER=$<TARGET_FILE:edds-reference-reader>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/swizzling_test.cmake")
   add_executable(edds-memory-test tests/memory_test.c)
   target_link_libraries(edds-memory-test PRIVATE edds_core edds_test_fixture)
   edds_configure_target(edds-memory-test)

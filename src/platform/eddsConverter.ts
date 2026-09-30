@@ -1,3 +1,4 @@
+import { textureSwizzleWireOf } from '../mods/textureSwizzles';
 /**
  * The one process boundary around the bundled EDDS converter.
  *
@@ -145,7 +146,7 @@ export class EddsConverter {
             '--remove-mips', String(profile.RemoveMips),
             '--conversion', conversionWireOf(profile.Conversion),
             '--conversion-quality', textureQualityText(profile.ConversionQuality),
-            '--swizzling', 'none',
+            '--swizzling', textureSwizzleWireOf(profile.Swizzling),
             '--contains-mips', String(profile.ContainsMips),
             '--generate-mips', String(profile.GenerateMips),
             '--normalize', String(profile.Normalize),

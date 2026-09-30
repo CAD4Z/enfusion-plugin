@@ -4,6 +4,7 @@ import {
   type TextureSourceFormat,
   textureSourceFormatOf,
 } from './textureSources';
+import type { TextureSwizzling } from './textureSwizzles';
 import type { TextureConversion } from './textureConversions';
 
 export type { TextureSourceFormat };
@@ -21,7 +22,7 @@ export interface TextureProfile {
   readonly Conversion: TextureConversion;
   /** A fraction of one, to three decimals; only a compressed conversion reads it. */
   readonly ConversionQuality: number;
-  readonly Swizzling: 'None';
+  readonly Swizzling: TextureSwizzling;
   /** True only when the DDS source proves a complete supplied mip chain. */
   readonly ContainsMips: boolean;
   readonly GenerateMips: boolean;

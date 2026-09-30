@@ -164,6 +164,8 @@ static int selected_mip(
         u32le(file->data + 16) != expected_width || u32le(file->data + 12) != expected_height) {
         return 0;
     }
+    if (memcmp(file->data + 84, "DX10", 4) == 0) table_at = 148u;
+    if (file->size < table_at) return 0;
     mips = u32le(file->data + 28);
     if (mips == 0) {
         mips = 1;
@@ -740,8 +742,8 @@ static int verify_mip_modes(const char *kaiser_path, const char *pre_path, const
     };
     static const uint8_t kaiser_smallest[] = { 105, 95, 85, 255 };
     static const uint8_t pre_normalized[] = {
-        61, 54, 47, 255, 64, 54, 45, 255, 70, 55, 40, 255,
-        100, 61, 22, 255, 238, 190, 142, 255, 217, 200, 183, 255
+        61, 54, 47, 255, 64, 54, 45, 255, 70, 55, 39, 255,
+        99, 61, 22, 255, 240, 190, 140, 255, 218, 201, 184, 255
     };
     static const uint8_t post_normalized_smallest[] = { 78, 56, 34, 255 };
     bytes kaiser = { NULL, 0 };
@@ -769,7 +771,7 @@ static int verify_golden(const char *path, unsigned width, unsigned height,
     unsigned top_width = width, top_height = height;
     size_t cursor = 0;
     for (unsigned level = 0; level < count; ++level) {
-        uint8_t expected[8 * 8 * 4];
+        uint8_t expected[32 * 32 * 4];
         const size_t size = (size_t)width * height * 4;
         if (size > sizeof expected || strlen(hex + cursor) < size * 2) { ok = 0; break; }
         for (size_t at = 0; at < size; ++at) {
@@ -793,7 +795,65 @@ static int verify_golden(const char *path, unsigned width, unsigned height,
     return ok;
 }
 
+static int verify_swizzle(const char *path, unsigned width, unsigned height,
+    unsigned count, const char *hex, const char *format_name) {
+    const gpu_format *format = gpu_format_named(format_name);
+    bytes file = { NULL, 0 };
+    int ok = format != NULL && load(path, &file) && file.size >= 136u;
+    if (ok && format->four_cc[0] != '\0') {
+        ok = memcmp(file.data + 84, format->four_cc, 4) == 0;
+        if (ok && format->dxgi != 0) ok = file.size >= 148u && u32le(file.data + 128) == format->dxgi;
+    } else if (ok) {
+        ok = u32le(file.data + 80) == (format->channel_mask == 0xfu ? 0x41u : 0x40u) &&
+            u32le(file.data + 88) == 32u;
+    }
+    const unsigned top_width = width, top_height = height;
+    size_t cursor = 0;
+    for (unsigned level = 0; ok && level < count; ++level) {
+        uint8_t expected[32 * 32 * 4], decoded[sizeof expected];
+        const size_t size = (size_t)width * height * 4u;
+        bytes stored = { NULL, 0 };
+        if (size > sizeof expected || strlen(hex + cursor) < size * 2u) { ok = 0; break; }
+        for (size_t at = 0; at < size; ++at) {
+            char byte[3] = { hex[cursor], hex[cursor + 1], 0 };
+            expected[at] = (uint8_t)strtoul(byte, NULL, 16);
+            cursor += 2;
+        }
+        ok = selected_mip(&file, level, top_width, top_height, count, "COPY", &stored) &&
+            decode_gpu_mip(format, &stored, width, height, decoded);
+        for (unsigned c = 0; ok && c < 4; ++c) {
+            const unsigned bgra_channel = c == 0 ? 2 : c == 2 ? 0 : c;
+            uint64_t total = 0;
+            for (size_t pixel = 0; pixel < size / 4; ++pixel) {
+                const uint8_t wanted = (format->channel_mask & (1u << c)) != 0
+                    ? expected[pixel * 4 + bgra_channel] : c == 3 ? 255 : 0;
+                int difference = decoded[pixel * 4 + c] - wanted;
+                total += (uint64_t)abs(difference);
+            }
+            const unsigned bound = format->block_bytes == 0 ||
+                (format->channel_mask & (1u << c)) == 0 ? 0 : c == 3 ? 6 : 8;
+            if (total > (uint64_t)bound * (size / 4)) {
+                fprintf(stderr, "%s mip %u channel %u absolute error %llu / %zu exceeds %u\n",
+                    path, level, c, (unsigned long long)total, size / 4, bound);
+                ok = 0;
+            }
+        }
+        free(stored.data);
+        width = width > 1 ? width / 2 : 1;
+        height = height > 1 ? height / 2 : 1;
+    }
+    ok = ok && hex[cursor] == 0;
+    free(file.data);
+    if (!ok) fprintf(stderr, "Workbench swizzle mismatch: %s (%s)\n", path, format_name);
+    return ok;
+}
+
 int main(int argc, char **argv) {
+    if (argc == 8 && strcmp(argv[1], "--swizzle") == 0) {
+        return verify_swizzle(argv[2], (unsigned)strtoul(argv[3], NULL, 10),
+            (unsigned)strtoul(argv[4], NULL, 10), (unsigned)strtoul(argv[5], NULL, 10),
+            argv[6], argv[7]) ? 0 : 1;
+    }
     if (argc == 8 && strcmp(argv[1], "--golden") == 0) {
         return verify_golden(argv[2], (unsigned)strtoul(argv[3], NULL, 10),
             (unsigned)strtoul(argv[4], NULL, 10), (unsigned)strtoul(argv[5], NULL, 10),

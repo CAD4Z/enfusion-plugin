@@ -372,10 +372,11 @@ static void write_inspection(
             json_string(conversion == NULL ? "None" : conversion->workbench_name);
         }
         (void)printf(
-            ",\"ConversionQuality\":%s,\"Swizzling\":\"None\","
+            ",\"ConversionQuality\":%s,\"Swizzling\":\"%s\","
             "\"ContainsMips\":%s,\"GenerateMips\":%s,\"Normalize\":%s,"
             "\"MipMapFunction\":",
             quality_json(metadata->profile.conversion_quality, quality_buffer),
+            edds_swizzle_capability_of(metadata->profile.swizzling)->workbench_name,
             metadata->profile.contains_mips ? "true" : "false",
             metadata->profile.generate_mips ? "true" : "false",
             metadata->profile.normalize ? "true" : "false");
@@ -584,7 +585,16 @@ static edds_status profile_of(
     if (options->quality_seen) {
         profile->conversion_quality = options->conversion_quality;
     }
-    if (options->swizzling != NULL && !equals(options->swizzling, "none")) goto unsupported;
+    if (options->swizzling != NULL) {
+        size_t count = 0;
+        const edds_swizzle_capability *capabilities = edds_swizzles(&count);
+        const edds_swizzle_capability *chosen = NULL;
+        for (size_t at = 0; at < count; ++at) {
+            if (equals(options->swizzling, capabilities[at].wire_name)) chosen = &capabilities[at];
+        }
+        if (chosen == NULL) goto unsupported;
+        profile->swizzling = chosen->swizzling;
+    }
     if (options->contains_mips != NULL) {
         if (equals(options->contains_mips, "true")) profile->contains_mips = 1;
         else if (equals(options->contains_mips, "false")) profile->contains_mips = 0;

@@ -1,6 +1,28 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'node:test';
+import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import { TEXTURE_SWIZZLES } from '../../src/mods/textureSwizzles';
+
+test('every swizzle crosses the process boundary with its stable CLI flag', async () => {
+  const calls: ExecutableRequest[] = [];
+  const converter = new EddsConverter('C:\\extension', (request) => {
+    calls.push(request);
+    return Promise.resolve({ stdout: request.args[0] === 'protocol' ? PROTOCOL : JSON.stringify({
+      protocolVersion: 1, kind: 'convert', width: 8, height: 8, mipCount: 4,
+      pixelFormat: 'BGRA8', registered: false,
+    }), stderr: '' });
+  });
+  for (const { name, wire } of TEXTURE_SWIZZLES) {
+    await converter.convert({ kind: 'ready', scope: 'detached', action: 'convert', label: 'Convert',
+      source: 'C:\\mod\\x_nohq.png', sourceFormat: 'PNG', output: 'C:\\mod\\x_nohq.edds',
+      identityAction: 'none', profile: { ...DEFAULT_TEXTURE_PROFILE, Swizzling: name },
+      revisions: { source: { size: 1, modified: 2 } },
+    });
+    const args = calls.at(-1)?.args ?? [];
+    assert.equal(args[args.indexOf('--swizzling') + 1], wire);
+  }
+});
 import {
   type ExecutableRequest,
   EddsConverter,

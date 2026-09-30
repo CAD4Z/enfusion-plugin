@@ -68,6 +68,19 @@ try {
   if ($packagedHash -ne $stagedHash) {
     throw 'the VSIX converter is not the staged and tested converter'
   }
+
+  $swizzles = @('TerrainLayerTexture', 'TerrainSuperTexture', 'TerrainNormalSpecular_SYxX',
+    'AlphaToRGB', 'SMDIToGS', 'NormalMap_NOHQ', 'NormalMapGA', 'NormalSpecularMapXYZS',
+    'AmbientSpecularMapGA')
+  foreach ($bundle in @('extension.js', 'texture-conversion.js', 'texture-batch.js')) {
+    $entry = $archive.GetEntry("extension/dist/$bundle")
+    if ($null -eq $entry) { throw "the packaged VSIX has no $bundle" }
+    $reader = New-Object System.IO.StreamReader($entry.Open())
+    try { $script = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    foreach ($swizzle in $swizzles) {
+      if (-not $script.Contains($swizzle)) { throw "$bundle is missing Swizzling=$swizzle" }
+    }
+  }
 } finally {
   $archive.Dispose()
 }

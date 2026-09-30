@@ -13,8 +13,8 @@ static int mip_source(int argc, char **argv) {
     const unsigned h = (unsigned)strtoul(argv[4], NULL, 10);
     const int alpha = strcmp(argv[5], "1") == 0;
     const size_t size = (size_t)w * h * 4;
-    uint8_t pixels[8 * 8 * 4], tga[18 + sizeof pixels];
-    if (w == 0 || h == 0 || w > 8 || h > 8 || strlen(argv[6]) != size * 2) return 2;
+    uint8_t pixels[32 * 32 * 4], tga[18 + sizeof pixels];
+    if (w == 0 || h == 0 || w > 32 || h > 32 || strlen(argv[6]) != size * 2) return 2;
     for (size_t at = 0; at < size; ++at) {
         char hex[3] = { argv[6][at * 2], argv[6][at * 2 + 1], 0 };
         pixels[at] = (uint8_t)strtoul(hex, NULL, 16);

@@ -1,3 +1,4 @@
+import { textureSwizzleRefusalOf, type TextureSwizzleSource } from './textureSwizzles';
 import type { EddsConversion, EddsInspection, EddsPreview } from './edds';
 import {
   withActiveMipSettings,
@@ -13,6 +14,7 @@ import {
 type ReadyPlan = Extract<TextureConversionPlan, { kind: 'ready' }>;
 
 export interface TextureRendering {
+  readonly sourceFacts?: TextureSwizzleSource;
   readonly inspection: EddsInspection;
   /** Original source samples decoded by the native source pipeline. */
   readonly source: EddsPreview;
@@ -36,8 +38,12 @@ export interface TextureProfileField {
 export function textureProfileFieldsOf(
   profile: TextureProfile,
   sourceFormat: TextureSourceFormat = 'PNG',
+  source?: TextureSwizzleSource,
 ): readonly TextureProfileField[] {
   const conversion = textureConversionCapabilityOf(profile.Conversion);
+  const suppliedRefusal = textureSwizzleRefusalOf({ ...profile, ContainsMips: true, GenerateMips: false });
+  const generatedRefusal = textureSwizzleRefusalOf({ ...profile, GenerateMips: false });
+  const removalRefusal = textureSwizzleRefusalOf({ ...profile, RemoveMips: 1 }, source);
   return [
     {
       key: 'TargetFormat',
@@ -46,7 +52,9 @@ export function textureProfileFieldsOf(
     },
     { key: 'FormatCompress', editable: true },
     { key: 'CompressTreshold', editable: true },
-    { key: 'RemoveMips', editable: true },
+    removalRefusal !== undefined && profile.RemoveMips === 0
+      ? { key: 'RemoveMips', editable: false, reason: removalRefusal }
+      : { key: 'RemoveMips', editable: true },
     { key: 'Conversion', editable: true },
     conversion?.usesQuality === true
       ? { key: 'ConversionQuality', editable: true }
@@ -55,19 +63,19 @@ export function textureProfileFieldsOf(
           editable: false,
           reason: `Conversion=${profile.Conversion} stores its channels as they are, so quality has nothing to trade.`,
         },
-    {
-      key: 'Swizzling',
-      editable: false,
-      reason: 'This conversion slice supports None only.',
-    },
-    sourceFormat === 'DDS'
+    { key: 'Swizzling', editable: true },
+    suppliedRefusal !== undefined
+      ? { key: 'ContainsMips', editable: false, reason: suppliedRefusal }
+      : sourceFormat === 'DDS'
       ? { key: 'ContainsMips', editable: true }
       : {
           key: 'ContainsMips',
           editable: false,
           reason: 'ContainsMips is available only for a DDS source.',
         },
-    profile.ContainsMips
+    generatedRefusal !== undefined
+      ? { key: 'GenerateMips', editable: false, reason: generatedRefusal }
+      : profile.ContainsMips
       ? {
           key: 'GenerateMips',
           editable: false,
@@ -107,6 +115,7 @@ export type TextureAuthoringState =
       readonly draft: TextureProfile;
       readonly revision: number;
       readonly selectedMip: number;
+      readonly sourceFacts?: TextureSwizzleSource;
       readonly preview:
         | { readonly kind: 'loading' }
         | { readonly kind: 'ready'; readonly rendered: TextureRendering }
@@ -139,7 +148,8 @@ type EditableProfileKey =
   | 'MipMapFunction'
   | 'MipMapFilter'
   | 'Conversion'
-  | 'ConversionQuality';
+  | 'ConversionQuality'
+  | 'Swizzling';
 
 type TextureProfileChange = {
   readonly [Key in EditableProfileKey]: {
@@ -295,6 +305,7 @@ function changedProfile(
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
   });
+  if (textureSwizzleRefusalOf(draft, state.sourceFacts) !== undefined) return unchanged(state);
   const revision = state.revision + 1;
   const plan: ReadyPlan = { ...state.plan, profile: draft };
   return {
@@ -327,7 +338,7 @@ function drafted(
   rendered: TextureRendering,
 ): TextureAuthoringUpdate {
   return state.kind === 'authoring' && state.revision === revision
-    ? { state: { ...state, preview: { kind: 'ready', rendered } }, effects: [] }
+    ? { state: { ...state, sourceFacts: rendered.sourceFacts, preview: { kind: 'ready', rendered } }, effects: [] }
     : unchanged(state);
 }
 

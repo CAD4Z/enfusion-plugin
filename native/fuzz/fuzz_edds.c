@@ -57,6 +57,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                 : EDDS_QUALITY_SCALE;
         }
         profile.remove_mips = size > 2u ? data[2] % 15u : 0u;
+        /* Payload selection reaches all channel mappings without fixing a format's magic bytes. */
+        profile.swizzling = size > 0u ? (edds_swizzling)(data[size - 1u] % 11u) : EDDS_SWIZZLE_NONE;
         profile.generate_mips = size > 3u ? (data[3] & 1u) != 0u : 1;
         profile.normalize = size > 4u ? (data[4] & 1u) != 0u : 0;
         profile.mipmap_function = size > 5u && (data[5] & 1u) != 0u

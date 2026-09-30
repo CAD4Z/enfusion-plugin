@@ -166,9 +166,9 @@ class Oracle:
     def property_index(self):
         return self.arg(1) if self.arg(0) == self.meta and self.arg(1) in self.present else -1
 
-    def convert(self, width,height,pixels,mip_function=0,tiled=True,mip_filter=0,normalize=False,remove=0,generate=True,fmt=87):
+    def convert(self, width,height,pixels,mip_function=0,tiled=True,mip_filter=0,normalize=False,remove=0,generate=True,fmt=87,swizzling=0,conversion=0):
         # Verified property-name registration IDs are replaced with stable local IDs.
-        values = {0x2321af0:remove,0x2321af4:0,0x2321afc:0,0x2321b00:0,0x2321b04:int(generate),
+        values = {0x2321af0:remove,0x2321af4:conversion,0x2321afc:swizzling,0x2321b00:0,0x2321b04:int(generate),
                   0x2321b08:int(normalize),0x2321b0c:mip_function,0x2321b10:int(tiled),0x2321b14:mip_filter,0x2321b1c:0}
         self.meta = self.alloc(0x80)
         entries = self.alloc(len(values)*16)
@@ -192,6 +192,7 @@ class Oracle:
             raise
         if self.uc.reg_read(UC_X86_REG_RIP) != self.sentinel: raise RuntimeError('instruction limit')
         if not self.uc.reg_read(UC_X86_REG_RAX)&255: raise RuntimeError('importer refused fixture')
+        self.output_format = self.images[output]['format']
         return [{'width':w,'height':h,'bgra':bytes(self.uc.mem_read(p,n)).hex()} for w,h,p,n in self.images[output]['levels']]
 
 def pixels_of(width, height, alpha):
@@ -201,28 +202,29 @@ def pixels_of(width, height, alpha):
          (x*47+y*59)%256 if alpha else 255])
 
 
-rows = []
-for alpha, dimensions, functions in [
-    (True, [(8,8),(7,5),(1,7),(7,1),(2,2),(1,1)], [0,2]),
-    (False, [(8,8),(7,5)], [2]),
-]:
-    for width, height in dimensions:
-        pixels = pixels_of(width, height, alpha)
-        for function in functions:
-            for tiled in [False, True]:
-                for filt in [0,2]:
-                    args = (width, height, pixels, function, tiled, filt)
-                    levels = Oracle().convert(*args, fmt=87 if alpha else 88)
-                    reused = Oracle()
-                    for repeat in range(2):
-                        assert reused.convert(*args, fmt=87 if alpha else 88) == levels
-                    row = dict(width=width, height=height, source_bgra=pixels.hex(),
-                               mip_function=function, tiled=tiled, mip_filter=filt, levels=levels)
-                    if not alpha:
-                        row['alpha'] = False
-                    rows.append(row)
-                    print(width, height, function, tiled, filt, 'repeatable', flush=True)
-pathlib.Path(sys.argv[2]).write_text(json.dumps(dict(
-    workbench_sha256=fingerprint, rows=rows,
-    repeatability='Each case captured in a fresh emulator and twice in a reused emulator; all three outputs identical.'
-), indent=2) + '\n')
+if __name__ == '__main__':
+    rows = []
+    for alpha, dimensions, functions in [
+        (True, [(8,8),(7,5),(1,7),(7,1),(2,2),(1,1)], [0,2]),
+        (False, [(8,8),(7,5)], [2]),
+    ]:
+        for width, height in dimensions:
+            pixels = pixels_of(width, height, alpha)
+            for function in functions:
+                for tiled in [False, True]:
+                    for filt in [0,2]:
+                        args = (width, height, pixels, function, tiled, filt)
+                        levels = Oracle().convert(*args, fmt=87 if alpha else 88)
+                        reused = Oracle()
+                        for repeat in range(2):
+                            assert reused.convert(*args, fmt=87 if alpha else 88) == levels
+                        row = dict(width=width, height=height, source_bgra=pixels.hex(),
+                                   mip_function=function, tiled=tiled, mip_filter=filt, levels=levels)
+                        if not alpha:
+                            row['alpha'] = False
+                        rows.append(row)
+                        print(width, height, function, tiled, filt, 'repeatable', flush=True)
+    pathlib.Path(sys.argv[2]).write_text(json.dumps(dict(
+        workbench_sha256=fingerprint, rows=rows,
+        repeatability='Each case captured in a fresh emulator and twice in a reused emulator; all three outputs identical.'
+    ), indent=2) + '\n')

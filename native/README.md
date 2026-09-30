@@ -102,7 +102,7 @@ format: `none` writes 32-bit BGRX/BGRA, `dxt-compression` BC1 or BC3, `red` `R8_
 `color-hq-compression` BC7. `hdr-compression` is recognized and refused rather than replaced with
 the nearest LDR format. A block format declares its top mip as a linear size and an uncompressed
 one as a pitch, and every block format stores whole `ceil(w/4)*ceil(h/4)` blocks, padding the edge
-by repeating the last real column and row. The branch `none` and `dxt-compression` take is read off
+by repeating the last real column and row. With `Swizzling=None`, the `none` / `dxt-compression` branch is read off
 each source image's own samples: `none` follows whether the source declares an alpha channel, and
 `dxt-compression` writes BC3 only when some sample is actually below fully opaque.
 
@@ -115,6 +115,16 @@ other than `1` is refused before anything is written.
 independent-block `LZ4` per mip using the declared `CompressTreshold` percentage (equality selects
 LZ4). The container is applied over the runtime format and never changes a decoded pixel of it.
 Unsupported known profile values are refused rather than substituted.
+
+`--swizzling` accepts `none` (default), `terrain-layer-texture`, `terrain-super-texture`,
+`terrain-normal-specular-syxx`, `alpha-to-rgb`, `smdi-to-gs`, `normal-map-nohq`, `normal-map-ga`,
+`normal-specular-map-xyzs`, and `ambient-specular-map-ga`. Canonical metadata preserves the exact
+Workbench spelling. No mode is inferred from a filename. The [capture notes](tests/workbench/README.md#swizzling-captures)
+define the verified mappings, format-dependent dispatch, alpha format selection and special
+terrain/ambient RemoveMips behavior. Those special paths resize before chain generation; they
+require an unsupplied source of at least 8x8, and ambient also requires declared alpha. Unsupported
+settings or combinations refuse before publication. The editor disables incompatible profile
+choices with an explanation; a mixed batch reports source-specific failures independently.
 
 Registration is explicit: supplying `--metadata`, `--resource-name`, `--source-file` and `--guid`
 together publishes a canonical EDDS/metadata pair; omitting all four publishes only EDDS and

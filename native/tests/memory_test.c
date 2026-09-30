@@ -162,9 +162,41 @@ static int cancellation_is_checked_before_an_attempt_starts(void) {
     return 1;
 }
 
+static int swizzling_unwinds_partial_buffers_and_rejects_short_channels(void) {
+    test_bytes fixture = fixture_png_flat(32u);
+    size_t count = 0;
+    const edds_swizzle_capability *mappings = edds_swizzles(&count);
+    CHECK(fixture.data != NULL && count == 10u);
+    for (size_t at = 0; at < count; ++at) {
+        conversion_input input;
+        edds_error error;
+        edds_default_profile(&input.profile);
+        input.source = fixture;
+        input.format = EDDS_SOURCE_PNG;
+        input.profile.swizzling = mappings[at].swizzling;
+        input.profile.remove_mips = 1u;
+        input.profile.normalize = 1;
+        const edds_memory_result full = edds_memory_run(UINT64_MAX, convert_source, &input, &error);
+        CHECK(full.status == EDDS_OK && full.required == 0);
+        for (uint64_t quota = 1; quota < full.peak; quota *= 2) {
+            const edds_memory_result limited = edds_memory_run(quota, convert_source, &input, &error);
+            CHECK(limited.status != EDDS_OK && limited.peak <= quota && limited.required > quota);
+            CHECK(strcmp(error.code, "operation-memory-leak") != 0);
+        }
+        for (size_t length = 0; length < fixture.size; length += 13) {
+            input.source.size = length;
+            CHECK(edds_memory_run(UINT64_MAX, convert_source, &input, &error).status != EDDS_OK);
+            CHECK(strcmp(error.code, "operation-memory-leak") != 0);
+        }
+    }
+    fixture_free(fixture);
+    return 1;
+}
+
 int main(void) {
     return a_conversion_cannot_allocate_past_its_quota() &&
         compressed_images_finish_even_when_the_initial_charge_is_too_small() &&
         every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota() &&
+        swizzling_unwinds_partial_buffers_and_rejects_short_channels() &&
         cancellation_is_checked_before_an_attempt_starts() ? 0 : 1;
 }

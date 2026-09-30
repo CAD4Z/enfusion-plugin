@@ -1,3 +1,4 @@
+import { isTextureSwizzling } from '../mods/textureSwizzles';
 /** Explicit Explorer multi-selection authoring: one captured batch and one native process. */
 
 import { randomBytes } from 'node:crypto';
@@ -176,6 +177,11 @@ export class TextureBatchEditor {
             apply({ kind: 'change-profile', field: 'MipMapFilter', value: request.value });
           }
           return;
+        case 'change-swizzling':
+          if (isTextureSwizzling(request.value)) {
+            apply({ kind: 'change-profile', field: 'Swizzling', value: request.value });
+          }
+          break;
         case 'change-conversion':
           if (isSupportedTextureConversion(request.value)) {
             apply({ kind: 'change-profile', field: 'Conversion', value: request.value });

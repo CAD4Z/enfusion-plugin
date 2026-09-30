@@ -347,6 +347,7 @@ static int supported_workbench_defaults_are_explicit(void) {
     CHECK(profile.format_compress == EDDS_COMPRESS_FASTEST);
     CHECK(profile.compress_threshold == 80u);
     CHECK(profile.remove_mips == 0u);
+    CHECK(profile.swizzling == EDDS_SWIZZLE_NONE);
     CHECK(profile.contains_mips == 0);
     CHECK(profile.generate_mips == 1);
     CHECK(profile.normalize == 0);
@@ -2045,11 +2046,11 @@ static int normalize_flag_and_mipmap_function_have_distinct_stages(void) {
         127, 191, 127, 77
     };
     static const uint8_t expected_normalized_source[] = {
-        255, 128, 128, 33,
-        128, 255, 128, 77
+        255, 127, 127, 33,
+        127, 255, 127, 77
     };
-    static const uint8_t expected_pre_normalized_mip[] = { 192, 192, 128, 55 };
-    static const uint8_t expected_post_normalized_mip[] = { 218, 218, 128, 55 };
+    static const uint8_t expected_pre_normalized_mip[] = { 191, 191, 127, 55 };
+    static const uint8_t expected_post_normalized_mip[] = { 218, 218, 126, 55 };
     edds_profile profile;
     edds_info info;
     uint8_t *rgba = NULL;

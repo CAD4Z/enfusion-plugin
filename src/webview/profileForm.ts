@@ -4,6 +4,7 @@
  * it is not, rather than left live and quietly ignored.
  */
 
+import { TEXTURE_SWIZZLES, isTextureSwizzling, textureSwizzleRefusalOf, type TextureSwizzleSource } from '../mods/textureSwizzles';
 import { textureProfileFieldsOf } from '../mods/textureAuthoring';
 import type {
   TextureCompression,
@@ -28,6 +29,7 @@ export interface ProfileFormRequests {
   readonly normalize: (value: boolean) => void;
   readonly mipFunction: (value: TextureMipFunction) => void;
   readonly mipFilter: (value: TextureMipFilter) => void;
+  readonly swizzling: (value: string) => void;
   readonly conversion: (value: string) => void;
   readonly quality: (value: number) => void;
 }
@@ -41,9 +43,10 @@ export function profileFormControls(
   sourceFormat: TextureSourceFormat,
   locked: boolean,
   requests: ProfileFormRequests,
+  source?: TextureSwizzleSource,
 ): readonly HTMLLabelElement[] {
-  return textureProfileFieldsOf(profile, sourceFormat).map((field) => {
-    const control = controlOf(profile, field.key, requests);
+  return textureProfileFieldsOf(profile, sourceFormat, source).map((field) => {
+    const control = controlOf(profile, field.key, requests, source);
     control.disabled = locked || !field.editable;
     control.title = locked
       ? `${field.key}: properties are locked while or after this immutable run.`
@@ -61,6 +64,7 @@ function controlOf(
   profile: TextureProfile,
   key: keyof TextureProfile,
   requests: ProfileFormRequests,
+  source?: TextureSwizzleSource,
 ): HTMLInputElement | HTMLSelectElement {
   if (key === 'FormatCompress') {
     return selectOf(COMPRESSIONS, profile.FormatCompress, (value) => {
@@ -68,6 +72,11 @@ function controlOf(
         requests.compression(value as TextureCompression);
       }
     });
+  }
+  if (key === 'Swizzling') {
+    return selectOf(TEXTURE_SWIZZLES.map(({ name }) => name), profile.Swizzling, (value) => {
+      if (isTextureSwizzling(value)) requests.swizzling(value);
+    }, undefined, TEXTURE_SWIZZLES.map(({ name }) => textureSwizzleRefusalOf({ ...profile, Swizzling: name }, source)));
   }
   if (key === 'Conversion') {
     return selectOf(
@@ -79,6 +88,7 @@ function controlOf(
         }
       },
       SUPPORTED_TEXTURE_CONVERSIONS.map((conversion) => conversion.label),
+      SUPPORTED_TEXTURE_CONVERSIONS.map(({ name }) => textureSwizzleRefusalOf({ ...profile, Conversion: name }, source)),
     );
   }
   if (key === 'MipMapFunction') {
@@ -153,6 +163,7 @@ function selectOf(
   selected: string,
   onChange: (value: string) => void,
   labels: readonly string[] = values,
+  refusals: readonly (string | undefined)[] = [],
 ): HTMLSelectElement {
   const select = document.createElement('select');
   values.forEach((value, at) => {
@@ -160,6 +171,9 @@ function selectOf(
     option.value = value;
     option.textContent = labels[at] ?? value;
     option.selected = value === selected;
+    option.disabled = refusals[at] !== undefined;
+    option.title = refusals[at] ?? '';
+    if (option.disabled) option.textContent += ` - ${refusals[at]}`;
     select.append(option);
   });
   select.addEventListener('change', () => onChange(select.value));

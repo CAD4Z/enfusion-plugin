@@ -122,6 +122,32 @@ const edds_conversion_capability *edds_conversion_capability_of(edds_conversion 
 const edds_conversion_capability *edds_conversion_of_workbench_name(const char *name);
 const edds_conversion_capability *edds_conversion_of_wire_name(const char *name);
 
+typedef enum edds_swizzling {
+    EDDS_SWIZZLE_NONE,
+    EDDS_SWIZZLE_TERRAIN_LAYER,
+    EDDS_SWIZZLE_TERRAIN_SUPER,
+    EDDS_SWIZZLE_ALPHA_TO_RGB,
+    EDDS_SWIZZLE_SMDI_TO_GS,
+    EDDS_SWIZZLE_NORMAL_NOHQ,
+    EDDS_SWIZZLE_NORMAL_GA,
+    EDDS_SWIZZLE_TERRAIN_NORMAL,
+    EDDS_SWIZZLE_NORMAL_SPECULAR,
+    EDDS_SWIZZLE_AMBIENT_SPECULAR,
+    EDDS_SWIZZLE_UNKNOWN
+} edds_swizzling;
+
+/** Exact Workbench names and stable CLI spellings; no filename inference. */
+typedef struct edds_swizzle_capability {
+    edds_swizzling swizzling;
+    const char *workbench_name;
+    const char *wire_name;
+    int writes_alpha;
+} edds_swizzle_capability;
+
+const edds_swizzle_capability *edds_swizzles(size_t *count);
+const edds_swizzle_capability *edds_swizzle_capability_of(edds_swizzling swizzling);
+const edds_swizzle_capability *edds_swizzle_of_workbench_name(const char *name);
+
 typedef enum edds_mipmap_function {
     EDDS_MIPMAP_FILTER,
     EDDS_MIPMAP_NORMALIZE,
@@ -139,6 +165,7 @@ typedef struct edds_profile {
     edds_format_compress format_compress;
     uint32_t compress_threshold;
     edds_conversion conversion;
+    edds_swizzling swizzling;
     /** Thousandths of one, so 1000 is Workbench's default `ConversionQuality 1`. */
     uint32_t conversion_quality;
     /** Number of the largest completed levels removed after generation or supplied-mip decode. */

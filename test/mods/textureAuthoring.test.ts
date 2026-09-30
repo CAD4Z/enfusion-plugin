@@ -2,11 +2,27 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { EddsConversion, EddsInspection, EddsPreview } from '../../src/mods/edds';
 import { DEFAULT_TEXTURE_PROFILE, type TextureProfile } from '../../src/mods/textureConversion';
+import { TEXTURE_SWIZZLES } from '../../src/mods/textureSwizzles';
 import {
   textureProfileFieldsOf,
   openedTextureAuthoring,
   updateTextureAuthoring,
 } from '../../src/mods/textureAuthoring';
+
+test('an explicit swizzle invalidates the result and reaches the conversion profile unchanged', () => {
+  const initial = readyAuthoring();
+  const changed = updateTextureAuthoring(initial, {
+    kind: 'change-profile', field: 'Swizzling', value: 'NormalMap_NOHQ',
+  });
+  const profile = { ...DEFAULT_TEXTURE_PROFILE, Swizzling: 'NormalMap_NOHQ' };
+  assert.deepEqual(changed.effects, [{
+    kind: 'render-draft', revision: 2, mip: 0,
+    plan: { ...plan(), profile }, profile,
+  }]);
+  assert.deepEqual(textureProfileFieldsOf(DEFAULT_TEXTURE_PROFILE).find(({ key }) => key === 'Swizzling'), {
+    key: 'Swizzling', editable: true,
+  });
+});
 
 test('load settles into authoring and asks the native pipeline for a temporary preview', () => {
   const opened = openedTextureAuthoring();
@@ -20,6 +36,35 @@ test('load settles into authoring and asks the native pipeline for a temporary p
   assert.deepEqual(loaded.effects, [
     { kind: 'render-draft', revision: 1, mip: 0, plan: plan(), profile: DEFAULT_TEXTURE_PROFILE },
   ]);
+});
+
+test('every explicit swizzle reaches the preview and terrain settings cannot disable required mips', () => {
+  for (const { name } of TEXTURE_SWIZZLES.slice(1)) {
+    const changed = updateTextureAuthoring(readyAuthoring(), { kind: 'change-profile', field: 'Swizzling', value: name });
+    assert.equal(changed.effects[0]?.kind === 'render-draft' && changed.effects[0].profile.Swizzling, name);
+    if (name !== 'TerrainLayerTexture' && name !== 'TerrainSuperTexture') continue;
+    const disabled = updateTextureAuthoring(changed.state, { kind: 'change-profile', field: 'GenerateMips', value: false });
+    assert.strictEqual(disabled.state, changed.state);
+    for (const field of textureProfileFieldsOf({ ...DEFAULT_TEXTURE_PROFILE, Swizzling: name }, 'DDS')) {
+      if (field.key !== 'GenerateMips' && field.key !== 'ContainsMips') continue;
+      assert.equal(field.editable, false);
+      assert.match(field.reason ?? '', /Terrain/);
+    }
+  }
+});
+
+test('known RGB source facts disable ambient mip removal with an explanation', () => {
+  const facts = { width: 16, height: 16, hasAlpha: false };
+  const profile = { ...DEFAULT_TEXTURE_PROFILE, Swizzling: 'AmbientSpecularMapGA' } as const;
+  const field = textureProfileFieldsOf(profile, 'TGA', facts).find(({ key }) => key === 'RemoveMips');
+  assert.equal(field?.editable, false);
+  assert.match(field?.reason ?? '', /alpha channel/);
+  const loaded = updateTextureAuthoring(readyAuthoring(), {
+    kind: 'draft-rendered', revision: 1, rendered: { ...rendering(), sourceFacts: facts },
+  });
+  const changed = updateTextureAuthoring(loaded.state, { kind: 'change-profile', field: 'Swizzling', value: 'AmbientSpecularMapGA' });
+  const refused = updateTextureAuthoring(changed.state, { kind: 'change-profile', field: 'RemoveMips', value: 1 });
+  assert.strictEqual(refused.state, changed.state);
 });
 
 test('mip selection re-renders that level without changing the draft profile', () => {
@@ -134,7 +179,7 @@ test('every Workbench key is visible while unsupported dependent values explain 
         false,
         'Conversion=None stores its channels as they are, so quality has nothing to trade.',
       ],
-      ['Swizzling', false, 'This conversion slice supports None only.'],
+      ['Swizzling', true, undefined],
       ['ContainsMips', false, 'ContainsMips is available only for a DDS source.'],
       ['GenerateMips', true, undefined],
       ['Normalize', true, undefined],

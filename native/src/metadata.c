@@ -323,13 +323,10 @@ static edds_status recipe_setting(
         return EDDS_OK;
     }
     if (bit == SETTING_SWIZZLING) {
-        static const char *const known[] = {
-            "None", "NormalMap", "NormalMapY", "NormalMapAlpha", "NormalMapAlphaY",
-            "NormalMapXZY", "NormalMapXZYAlpha", "NormalSpecularMap", "NormalSpecularMapXYZS",
-            "AmbientSpecularMapGA"
-        };
-        if (!is_one_of(value->text, known, sizeof known / sizeof known[0])) goto malformed;
-        return strcmp(value->text, "None") == 0 ? EDDS_OK : unsupported(error, key->text, value->text);
+        const edds_swizzle_capability *capability = edds_swizzle_of_workbench_name(value->text);
+        if (capability == NULL) return unsupported(error, key->text, value->text);
+        metadata->profile.swizzling = capability->swizzling;
+        return EDDS_OK;
     }
     if (bit == SETTING_MIP_FUNCTION) {
         static const char *const known[] = { "Filter", "ColorNoise", "Normalize" };
@@ -688,7 +685,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "   RemoveMips %u\n"
         "   Conversion %s\n"
         "   ConversionQuality %s\n"
-        "   Swizzling None\n"
+        "   Swizzling %s\n"
         "   ContainsMips %d\n"
         "   GenerateMips %d\n"
         "   Normalize %d\n"
@@ -706,7 +703,9 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "}\n",
         metadata->guid, metadata->name, resource, metadata->source_file, compress,
         metadata->profile.compress_threshold, metadata->profile.remove_mips,
-        conversion->workbench_name, quality, metadata->profile.contains_mips,
+        conversion->workbench_name, quality,
+        edds_swizzle_capability_of(metadata->profile.swizzling)->workbench_name,
+        metadata->profile.contains_mips,
         metadata->profile.generate_mips, metadata->profile.normalize,
         mipmap_function, mipmap_filter, metadata->profile.tiled_texture, resource, resource, resource);
     if (written < 0 || fflush(output) != 0) {

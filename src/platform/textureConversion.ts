@@ -12,6 +12,7 @@ import {
 } from '../mods/textureBatch';
 import {
   type ArtifactRevision,
+  DEFAULT_TEXTURE_PROFILE,
   type EnfusionRoot,
   type ExistingTextureMetadata,
   type TextureConversionPlan,
@@ -203,7 +204,7 @@ export async function renderTextureDraft(
   const sourceOutput = vscode.Uri.joinPath(folder, 'source.edds').fsPath;
   const resultOutput = vscode.Uri.joinPath(folder, 'result.edds').fsPath;
   const sourcePlan = detachedPlan(plan, sourceOutput, {
-    ...plan.profile,
+    ...DEFAULT_TEXTURE_PROFILE,
     FormatCompress: 'Copy',
     /*
      * The left pane is the source as it is, so it goes through no conversion at all: putting the
@@ -217,7 +218,7 @@ export async function renderTextureDraft(
   const resultPlan = detachedPlan(plan, resultOutput, plan.profile);
 
   try {
-    await Promise.all([
+    const [sourceConversion] = await Promise.all([
       converter.convert(sourcePlan, signal, 'preview'),
       converter.convert(resultPlan, signal, 'preview'),
     ]);
@@ -226,7 +227,10 @@ export async function renderTextureDraft(
       converter.preview(sourceOutput, 0, signal),
       converter.preview(resultOutput, mip, signal),
     ]);
-    return { inspection, source, result };
+    return { inspection, source, result, sourceFacts: {
+      width: sourceConversion.width, height: sourceConversion.height,
+      hasAlpha: sourceConversion.pixelFormat === 'BGRA8',
+    } };
   } finally {
     await vscode.workspace.fs.delete(folder, { recursive: true, useTrash: false }).then(
       () => undefined,

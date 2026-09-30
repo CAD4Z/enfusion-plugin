@@ -61,6 +61,15 @@ the common batch profile and are preserved in metadata. Controls explain depende
 are disabled. The left pane always shows the source as it is, so a GPU conversion has something
 to be compared against.
 
+`Swizzling` offers all nine Workbench modes in single and batch editors: TerrainLayerTexture,
+TerrainSuperTexture, TerrainNormalSpecular_SYxX, AlphaToRGB, SMDIToGS, NormalMap_NOHQ, NormalMapGA,
+NormalSpecularMapXYZS and AmbientSpecularMapGA. `None` remains the default; filenames never select
+a mapping. The recipe preserves the exact choice, and Result shows pixels decoded from the
+converted EDDS. Unsupported profile combinations are disabled with a reason. Terrain/ambient
+removal has additional source-size and alpha requirements; a mixed batch reports refusals per item.
+The [verified mapping table](native/tests/workbench/README.md#swizzling-captures) describes the
+format-dependent behavior and the special resampling paths.
+
 `Conversion` turns the decoded RGBA into a runtime format. Which format each value produces is read
 off DayZ's own textures, where a `.edds.meta` recipe sits beside the `.edds` Workbench wrote from
 it:
@@ -76,7 +85,7 @@ it:
 | `ColorHQCompression` | BC7 (`BC7_UNORM`) | RGBA | active |
 | `HDRCompression` | — | — | refused as unsupported |
 
-`None` and `DXTCompression` each have two branches, and the branch is read off one source image's
+With `Swizzling=None`, `None` and `DXTCompression` each have two branches, read off one source image's
 own samples rather than off the batch it was selected with. `None` keeps whichever channel layout
 the source declared. `DXTCompression` writes BC3 only when a sample is actually below fully opaque:
 a source with no alpha channel and a source whose alpha is opaque throughout both become BC1,

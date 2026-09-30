@@ -284,7 +284,10 @@ static int profile_value(
         } else if (strcmp(key, "ConversionQuality") == 0) {
             bit = 1u << 5; if (!quality_value(scan, &profile->conversion_quality)) return 0;
         } else if (strcmp(key, "Swizzling") == 0) {
-            bit = 1u << 6; if (!string_value(scan, value, sizeof value) || strcmp(value, "None") != 0) return 0;
+            const edds_swizzle_capability *capability;
+            bit = 1u << 6; if (!string_value(scan, value, sizeof value)) return 0;
+            capability = edds_swizzle_of_workbench_name(value);
+            profile->swizzling = capability == NULL ? EDDS_SWIZZLE_UNKNOWN : capability->swizzling;
         } else if (strcmp(key, "ContainsMips") == 0) {
             bit = 1u << 7; if (!bool_value(scan, &boolean)) return 0; profile->contains_mips = boolean;
         } else if (strcmp(key, "GenerateMips") == 0) {

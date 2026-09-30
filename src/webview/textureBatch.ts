@@ -147,6 +147,7 @@ function profileForm(
     normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
     mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
     mipFilter: (value) => host.postMessage({ type: 'change-mipmap-filter', value }),
+    swizzling: (value) => host.postMessage({ type: 'change-swizzling', value }),
     conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
     quality: (value) => host.postMessage({ type: 'change-quality', value }),
   }));

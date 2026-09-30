@@ -76,56 +76,6 @@ static void rgba_mip(const uint8_t *rgba, int has_alpha, generated_mip *mip) {
     }
 }
 
-static void box_mip(const generated_mip *previous, generated_mip *next) {
-    const uint32_t width = next->width;
-    const uint32_t height = next->height;
-    for (uint32_t channel = 0; channel < 4u; ++channel) {
-        if (previous->width == 1u || previous->height == 1u) {
-            const uint32_t length = width * height;
-            for (uint32_t at = 0; at < length; ++at) {
-                const uint8_t *source = previous->bgra + (size_t)(at * 2u) * 4u + channel;
-                if ((previous->width * previous->height & 1u) != 0u) {
-                    const uint32_t first = length - at;
-                    const uint32_t middle = length;
-                    const uint32_t last = 1u + at;
-                    const uint32_t divisor = 2u * length + 1u;
-                    const uint32_t total = first * source[0] + middle * source[4] +
-                        last * source[8];
-                    next->bgra[(size_t)at * 4u + channel] =
-                        (uint8_t)((total + divisor / 2u) / divisor);
-                } else {
-                    next->bgra[(size_t)at * 4u + channel] =
-                        (uint8_t)(((uint32_t)source[0] + source[4] + 1u) / 2u);
-                }
-            }
-            continue;
-        }
-        for (uint32_t y = 0; y < height; ++y) {
-            const uint32_t y_weights[3] = { height - y, height, 1u + y };
-            const uint32_t y_samples = (previous->height & 1u) != 0u ? 3u : 2u;
-            for (uint32_t x = 0; x < width; ++x) {
-                const uint32_t x_weights[3] = { width - x, width, 1u + x };
-                const uint32_t x_samples = (previous->width & 1u) != 0u ? 3u : 2u;
-                const uint32_t divisor =
-                    ((previous->width & 1u) != 0u ? previous->width : 2u) *
-                    ((previous->height & 1u) != 0u ? previous->height : 2u);
-                uint32_t total = 0;
-                for (uint32_t dy = 0; dy < y_samples; ++dy) {
-                    for (uint32_t dx = 0; dx < x_samples; ++dx) {
-                        const uint32_t wx = x_samples == 3u ? x_weights[dx] : 1u;
-                        const uint32_t wy = y_samples == 3u ? y_weights[dy] : 1u;
-                        const size_t source_at =
-                            ((size_t)(y * 2u + dy) * previous->width + x * 2u + dx) * 4u;
-                        total += wx * wy * previous->bgra[source_at + channel];
-                    }
-                }
-                next->bgra[((size_t)y * width + x) * 4u + channel] =
-                    (uint8_t)((total + divisor / 2u) / divisor);
-            }
-        }
-    }
-}
-
 /* NVTT keeps the chain in normalized floats and packs through UNORM16 to BGRA8. */
 static void pack_filtered_mip(generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; ++at) {
@@ -307,18 +257,29 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next, int ti
 
 static void normalize_mip(generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; at += 4u) {
-        float red = (2.0f * mip->bgra[at + 2u] - 254.0f) / 255.0f;
-        float green = (2.0f * mip->bgra[at + 1u] - 254.0f) / 255.0f;
-        float blue = (2.0f * mip->bgra[at] - 254.0f) / 255.0f;
+        float red = mip->bgra[at + 2u] * (2.0f / 255.0f) - 1.0f;
+        float green = mip->bgra[at + 1u] * (2.0f / 255.0f) - 1.0f;
+        float blue = mip->bgra[at] * (2.0f / 255.0f) - 1.0f;
         const float length = sqrtf(red * red + green * green + blue * blue);
         if (length > 1e-8f) {
             red /= length;
             green /= length;
             blue /= length;
         }
-        mip->bgra[at + 2u] = (uint8_t)floorf((red * 0.5f + 0.5f) * 255.0f + 0.5f);
-        mip->bgra[at + 1u] = (uint8_t)floorf((green * 0.5f + 0.5f) * 255.0f + 0.5f);
-        mip->bgra[at] = (uint8_t)floorf((blue * 0.5f + 0.5f) * 255.0f + 0.5f);
+        /* DayZ's source normalizer truncates (unit + 1) * 128.5, saturated to a byte. */
+        mip->bgra[at + 2u] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (red + 1.0f) * 128.5f));
+        mip->bgra[at + 1u] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (green + 1.0f) * 128.5f));
+        mip->bgra[at] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (blue + 1.0f) * 128.5f));
+    }
+}
+
+static void normalize_filtered_mip(generated_mip *mip) {
+    for (size_t at = 0; at < mip->bytes; at += 4u) {
+        float *p = mip->filter_pixels + at;
+        float r = p[2] * 2.0f - 1.0f, g = p[1] * 2.0f - 1.0f, b = p[0] * 2.0f - 1.0f;
+        const float length = sqrtf(r * r + g * g + b * b);
+        if (length > 0.0f) { r /= length; g /= length; b /= length; }
+        p[2] = r * 0.5f + 0.5f; p[1] = g * 0.5f + 0.5f; p[0] = b * 0.5f + 0.5f;
     }
 }
 
@@ -561,7 +522,7 @@ static edds_status encode_mips(
     return EDDS_OK;
 }
 
-static edds_status generate_mips(
+static edds_status generate_chain(
     const edds_decoded_source *source,
     const edds_profile *profile,
     generated_mip *mips,
@@ -585,8 +546,7 @@ static edds_status generate_mips(
             profile->remove_mips);
         return EDDS_INVALID_INPUT;
     }
-    const int float_filter = profile->generate_mips &&
-        profile->mipmap_function != EDDS_MIPMAP_NORMALIZE;
+    const int float_filter = profile->generate_mips;
     *count = complete_count;
     memset(mips, 0, sizeof(*mips) * complete_count);
     mips[0].width = source->width;
@@ -636,16 +596,13 @@ static edds_status generate_mips(
                         "Memory for Kaiser mip filtering could not be allocated.");
                     return EDDS_INTERNAL_FAILURE;
                 }
-            } else if (float_filter) {
-                box_float_mip(&mips[at - 1u], &mips[at]);
             } else {
-                box_mip(&mips[at - 1u], &mips[at]);
+                box_float_mip(&mips[at - 1u], &mips[at]);
             }
+            if (profile->mipmap_function == EDDS_MIPMAP_NORMALIZE) normalize_filtered_mip(&mips[at]);
             if (float_filter) pack_filtered_mip(&mips[at]);
         }
-        if ((profile->normalize && (profile->contains_mips || at == 0)) ||
-            (at > 0 && !profile->contains_mips &&
-             profile->mipmap_function == EDDS_MIPMAP_NORMALIZE)) {
+        if (profile->normalize && (profile->contains_mips || at == 0)) {
             normalize_mip(&mips[at]);
         }
         if (float_filter) {
@@ -672,6 +629,121 @@ static edds_status generate_mips(
         *count = complete_count - removed;
     }
     return EDDS_OK;
+}
+
+/** Resampling is in normalized float bytes, with truncation back to a byte. */
+static uint8_t terrain_sample(const generated_mip *source, float x, float y, uint32_t channel) {
+    const uint32_t left = (uint32_t)x, top = (uint32_t)y;
+    const uint32_t right = left + 1u < source->width ? left + 1u : left;
+    const uint32_t bottom = top + 1u < source->height ? top + 1u : top;
+    const float fx = x - (float)left, fy = y - (float)top;
+    const float a = source->bgra[((size_t)top * source->width + left) * 4u + channel] * (1.0f / 255.0f);
+    const float b = source->bgra[((size_t)top * source->width + right) * 4u + channel] * (1.0f / 255.0f);
+    const float c = source->bgra[((size_t)bottom * source->width + left) * 4u + channel] * (1.0f / 255.0f);
+    const float d = source->bgra[((size_t)bottom * source->width + right) * 4u + channel] * (1.0f / 255.0f);
+    const float value = ((a * (1.0f - fx) + b * fx) * (1.0f - fy) +
+        (c * (1.0f - fx) + d * fx) * fy) * 255.0f;
+    return (uint8_t)fminf(255.0f, fmaxf(0.0f, value));
+}
+
+static int uses_terrain_resampling(const edds_profile *profile) {
+    return (profile->conversion == EDDS_CONVERSION_NONE || profile->conversion == EDDS_CONVERSION_DXT) &&
+        (profile->swizzling == EDDS_SWIZZLE_TERRAIN_LAYER || profile->swizzling == EDDS_SWIZZLE_TERRAIN_SUPER);
+}
+
+static int uses_ambient_reduction(const edds_profile *profile) {
+    return profile->swizzling == EDDS_SWIZZLE_AMBIENT_SPECULAR && profile->conversion != EDDS_CONVERSION_RED;
+}
+
+/** Terrain/ambient removal creates a new top level, then runs the ordinary mip generator. */
+static edds_status generate_mips(
+    const edds_decoded_source *source, const edds_profile *profile,
+    generated_mip *mips, uint32_t *count,
+    edds_cancelled_fn cancelled, void *context, edds_error *error
+) {
+    const int terrain = uses_terrain_resampling(profile);
+    const int ambient = uses_ambient_reduction(profile);
+    if (profile->remove_mips == 0 || (!terrain && !ambient)) {
+        return generate_chain(source, profile, mips, count, cancelled, context, error);
+    }
+    if (profile->contains_mips || source->width < 8 || source->height < 8 ||
+        (ambient && !source->has_alpha)) {
+        edds_fail(error, "unsupported-combination",
+            "Terrain/ambient RemoveMips requires an unsupplied source of at least 8x8; ambient also requires alpha.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (profile->remove_mips >= mip_count(source->width, source->height, profile->generate_mips)) {
+        edds_fail(error, "remove-mips-out-of-range", "RemoveMips would remove the complete mip chain.");
+        return EDDS_INVALID_INPUT;
+    }
+    edds_decoded_source reduced = { 0 };
+    generated_mip original = { 0 };
+    edds_profile chain_profile = *profile;
+    reduced.width = source->width >> profile->remove_mips;
+    reduced.height = source->height >> profile->remove_mips;
+    if (reduced.width < 8) reduced.width = 8;
+    if (reduced.height < 8) reduced.height = 8;
+    reduced.has_alpha = source->has_alpha;
+    original.width = source->width;
+    original.height = source->height;
+    if (!mip_bytes(original.width, original.height, &original.bytes)) return EDDS_INVALID_INPUT;
+    original.bgra = edds_alloc(original.bytes);
+    reduced.rgba = edds_alloc((size_t)reduced.width * reduced.height * 4u);
+    if (original.bgra == NULL || reduced.rgba == NULL) {
+        edds_free(original.bgra); edds_free(reduced.rgba);
+        edds_fail(error, "allocation-failed", "Memory for swizzle resampling could not be allocated.");
+        return EDDS_INTERNAL_FAILURE;
+    }
+    rgba_mip(source->rgba, source->has_alpha, &original);
+    if (profile->normalize) normalize_mip(&original);
+    for (uint32_t y = 0; y < reduced.height; ++y) {
+        if (cancelled != NULL && cancelled(context)) {
+            edds_free(original.bgra); edds_free(reduced.rgba);
+            edds_fail(error, "cancelled", "The conversion was cancelled.");
+            return EDDS_CANCELLED;
+        }
+        for (uint32_t x = 0; x < reduced.width; ++x) {
+            uint8_t bgra[4];
+            if (ambient) {
+                const uint32_t sx = source->width / reduced.width, sy = source->height / reduced.height;
+                bgra[0] = bgra[1] = bgra[2] = 255; bgra[3] = 0;
+                for (uint32_t dy = 0; dy < sy; ++dy) {
+                    for (uint32_t dx = 0; dx < sx; ++dx) {
+                        const uint8_t *p = original.bgra +
+                            ((size_t)(y * sy + dy) * original.width + x * sx + dx) * 4u;
+                        for (uint32_t c = 0; c < 3; ++c) if (p[c] < bgra[c]) bgra[c] = p[c];
+                        if (p[3] > bgra[3]) bgra[3] = p[3];
+                    }
+                }
+            } else {
+                /* Workbench duplicates three border texels after resampling the interior. */
+                const uint32_t ix = x < 3 ? 3 : x >= reduced.width - 3 ? reduced.width - 4 : x;
+                const uint32_t iy = y < 3 ? 3 : y >= reduced.height - 3 ? reduced.height - 4 : y;
+                float px, py;
+                if (profile->swizzling == EDDS_SWIZZLE_TERRAIN_LAYER) {
+                    px = (float)ix * ((float)(source->width - 1) / (float)(reduced.width - 1));
+                    py = (float)iy * ((float)(source->height - 1) / (float)(reduced.height - 1));
+                } else {
+                    px = (float)(ix - 3) * (1.0f / (float)(reduced.width - 6)) * (float)(source->width - 6) + 3.0f;
+                    py = (float)(iy - 3) * (1.0f / (float)(reduced.height - 6)) * (float)(source->height - 6) + 3.0f;
+                    if (ix == reduced.width - 4) px = (float)(source->width - 4);
+                    if (iy == reduced.height - 4) py = (float)(source->height - 4);
+                    if (ix == 3 || ix == reduced.width - 4 || iy == 3 || iy == reduced.height - 4) {
+                        px = nearbyintf(px); py = nearbyintf(py);
+                    }
+                }
+                for (uint32_t c = 0; c < 4; ++c) bgra[c] = terrain_sample(&original, px, py, c);
+            }
+            uint8_t *p = reduced.rgba + ((size_t)y * reduced.width + x) * 4u;
+            p[0] = bgra[2]; p[1] = bgra[1]; p[2] = bgra[0]; p[3] = bgra[3];
+        }
+    }
+    edds_free(original.bgra);
+    chain_profile.remove_mips = 0;
+    chain_profile.normalize = 0;
+    const edds_status status = generate_chain(&reduced, &chain_profile, mips, count, cancelled, context, error);
+    edds_free(reduced.rgba);
+    return status;
 }
 
 static void free_source(edds_decoded_source *source) {
@@ -794,6 +866,7 @@ void edds_default_profile(edds_profile *profile) {
         profile->format_compress = EDDS_COMPRESS_FASTEST;
         profile->compress_threshold = 80;
         profile->conversion = EDDS_CONVERSION_NONE;
+        profile->swizzling = EDDS_SWIZZLE_NONE;
         profile->conversion_quality = EDDS_QUALITY_SCALE;
         profile->remove_mips = 0;
         profile->contains_mips = 0;
@@ -810,6 +883,20 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
     if (profile == NULL) {
         edds_fail(error, "invalid-api-argument", "A conversion profile is required.");
         return EDDS_INTERNAL_FAILURE;
+    }
+    if (edds_swizzle_capability_of(profile->swizzling) == NULL) {
+        edds_fail(error, "unsupported-setting", "Workbench setting Swizzling is unknown or unsupported.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (uses_terrain_resampling(profile) && (!profile->generate_mips || profile->contains_mips)) {
+        edds_fail(error, "unsupported-combination",
+            "Terrain layer/super swizzling requires generated mips; supplied or disabled mips are incompatible.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (uses_ambient_reduction(profile) && profile->remove_mips > 0 && profile->contains_mips) {
+        edds_fail(error, "unsupported-combination",
+            "AmbientSpecularMapGA with RemoveMips requires an unsupplied source.");
+        return EDDS_UNSUPPORTED_FORMAT;
     }
     if (profile->format_compress < EDDS_COMPRESS_COPY ||
         profile->format_compress > EDDS_COMPRESS_BEST || profile->compress_threshold > 100u ||
@@ -887,6 +974,16 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
  * so a fully opaque channel buys nothing. Only a sample below 255 is alpha the result has to carry.
  */
 edds_pixel_format edds_profile_pixel_format(const edds_profile *profile, edds_source_alpha alpha) {
+    const edds_swizzle_capability *swizzle = profile == NULL ? NULL :
+        edds_swizzle_capability_of(profile->swizzling);
+    if (swizzle != NULL && swizzle->writes_alpha) {
+        /* These mappings produce BGRA even when the original source was opaque RGB. */
+        if (profile->conversion == EDDS_CONVERSION_NONE) return EDDS_PIXEL_BGRA8;
+        if (profile->conversion == EDDS_CONVERSION_DXT) return EDDS_PIXEL_DXT5;
+    }
+    /* Non-default identity mappings retain declared alpha in the captured DXT branch too. */
+    if (swizzle != NULL && swizzle->swizzling != EDDS_SWIZZLE_NONE &&
+        profile->conversion == EDDS_CONVERSION_DXT && alpha != EDDS_ALPHA_ABSENT) return EDDS_PIXEL_DXT5;
     switch (profile == NULL ? EDDS_CONVERSION_NONE : profile->conversion) {
         case EDDS_CONVERSION_NONE:
             return alpha == EDDS_ALPHA_ABSENT ? EDDS_PIXEL_BGRX8 : EDDS_PIXEL_BGRA8;
@@ -975,6 +1072,29 @@ edds_status edds_convert(
     report(progress, progress_context, 0.15);
     status = generate_mips(&image, profile, mips, &count, cancelled, cancel_context, error);
     if (status == EDDS_OK) {
+        /* Byte-domain swizzling follows filtering/normalization, before pixel encoding. */
+        for (uint32_t level = 0; level < count; ++level) {
+            for (size_t at = 0; at < mips[level].bytes; at += 4u) {
+                uint8_t *p = mips[level].bgra + at;
+                const uint8_t red = p[2], alpha = p[3];
+                switch (profile->swizzling) {
+                    case EDDS_SWIZZLE_ALPHA_TO_RGB:
+                        p[0] = p[1] = p[2] = alpha; p[3] = 255; break;
+                    case EDDS_SWIZZLE_SMDI_TO_GS:
+                        p[2] = p[0]; p[0] = 0; p[3] = 255; break;
+                    case EDDS_SWIZZLE_NORMAL_NOHQ:
+                        if (profile->conversion != EDDS_CONVERSION_NONE && profile->conversion != EDDS_CONVERSION_DXT) break;
+                        p[0] = p[2] = 0; p[3] = (uint8_t)(255u - red); break;
+                    case EDDS_SWIZZLE_NORMAL_GA:
+                        if (profile->conversion != EDDS_CONVERSION_NONE && profile->conversion != EDDS_CONVERSION_DXT) break;
+                        p[0] = p[2] = 0; p[3] = red; break;
+                    case EDDS_SWIZZLE_TERRAIN_NORMAL:
+                        if (profile->conversion != EDDS_CONVERSION_NONE && profile->conversion != EDDS_CONVERSION_DXT) break;
+                        p[0] = 0; p[2] = alpha; p[3] = red; break;
+                    default: break;
+                }
+            }
+        }
         report(progress, progress_context, 0.30);
         status = encode_mips(mips, count, format, profile->conversion_quality,
             cancelled, cancel_context, error);

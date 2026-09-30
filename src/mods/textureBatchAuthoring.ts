@@ -1,3 +1,4 @@
+import { textureSwizzleRefusalOf } from './textureSwizzles';
 import type { EddsConversion } from './edds';
 import type { TextureRendering } from './textureAuthoring';
 import {
@@ -78,7 +79,8 @@ type EditableBatchProfileKey =
   | 'MipMapFunction'
   | 'MipMapFilter'
   | 'Conversion'
-  | 'ConversionQuality';
+  | 'ConversionQuality'
+  | 'Swizzling';
 
 type TextureBatchProfileChange = {
   readonly [Key in EditableBatchProfileKey]: {
@@ -234,6 +236,7 @@ function changed(
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
   });
+  if (textureSwizzleRefusalOf(draft) !== undefined) return unchanged(state);
   const plan = withTextureBatchProfile(state.plan, draft);
   const revision = state.revision + 1;
   const active = readyItem(plan, state.activeSource);

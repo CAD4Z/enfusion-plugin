@@ -1,3 +1,4 @@
+import { isTextureSwizzling, textureSwizzleRefusalOf } from './textureSwizzles';
 /**
  * The versioned values that cross the EDDS converter's process boundary.
  *
@@ -381,7 +382,8 @@ function profileOf(
   if (!isTextureQuality(quality)) {
     throw new Error('metadata.recipe.ConversionQuality must be 0 through 1, to three decimals.');
   }
-  literalOf(value, 'Swizzling', 'None');
+  const swizzling = stringOf(value, 'Swizzling');
+  if (!isTextureSwizzling(swizzling)) throw new Error(`metadata.recipe.Swizzling is unsupported: ${swizzling}.`);
   const containsMips = booleanOf(value, 'ContainsMips');
   const generateMips = booleanOf(value, 'GenerateMips');
   const normalize = booleanOf(value, 'Normalize');
@@ -409,14 +411,14 @@ function profileOf(
     throw new Error('metadata.recipe.ContainsMips is supported only for a DDS source.');
   }
 
-  return {
+  const profile: TextureProfile = {
     TargetFormat: 'EnfusionDDS',
     FormatCompress: compression,
     CompressTreshold: threshold,
     RemoveMips: removeMips,
     Conversion: conversion,
     ConversionQuality: quality,
-    Swizzling: 'None',
+    Swizzling: swizzling,
     ContainsMips: containsMips,
     GenerateMips: generateMips,
     Normalize: normalize,
@@ -424,6 +426,9 @@ function profileOf(
     MipMapFilter: mipMapFilter,
     TiledTexture: tiledTexture,
   };
+  const refusal = textureSwizzleRefusalOf(profile);
+  if (refusal !== undefined) throw new Error(refusal);
+  return profile;
 }
 
 function literalOf(value: Record<string, unknown>, name: string, expected: string): void {

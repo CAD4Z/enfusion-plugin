@@ -5,6 +5,7 @@ import type { TextureAuthoringState } from '../mods/textureAuthoring';
 import { profileFormControls } from './profileForm';
 import { textureChannelViewsOf } from '../mods/textureConversions';
 import type { TextureProfile } from '../mods/textureConversion';
+import type { TextureSwizzleSource } from '../mods/textureSwizzles';
 import type {
   TextureAuthoringRequest,
   TextureAuthoringStateMessage,
@@ -68,7 +69,8 @@ function render(next: TextureAuthoringState): void {
   }
 
   const properties = element('aside', 'properties');
-  properties.append(heading('Texture profile'), profileForm(profile, plan.sourceFormat, locked));
+  properties.append(heading('Texture profile'), profileForm(profile, plan.sourceFormat, locked,
+    next.kind === 'authoring' ? next.sourceFacts : rendered?.sourceFacts));
   const action = document.createElement('button');
   action.type = 'button';
   action.className = 'primary-action';
@@ -146,6 +148,7 @@ function profileForm(
   profile: TextureProfile,
   sourceFormat: 'PNG' | 'TGA' | 'JPG' | 'TIFF' | 'DDS',
   locked: boolean,
+  source?: TextureSwizzleSource,
 ): HTMLElement {
   const form = element('div', 'profile-form');
   form.append(...profileFormControls(profile, sourceFormat, locked, {
@@ -158,9 +161,10 @@ function profileForm(
     normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
     mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
     mipFilter: (value) => host.postMessage({ type: 'change-mipmap-filter', value }),
+    swizzling: (value) => host.postMessage({ type: 'change-swizzling', value }),
     conversion: (value) => host.postMessage({ type: 'change-conversion', value }),
     quality: (value) => host.postMessage({ type: 'change-quality', value }),
-  }));
+  }, source));
   return form;
 }
 

@@ -7,6 +7,24 @@ import {
 } from '../../src/mods/textureBatchAuthoring';
 import { textureBatchPlanOf } from '../../src/mods/textureBatch';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
+import { TEXTURE_SWIZZLES } from '../../src/mods/textureSwizzles';
+
+test('all swizzles remain one common recipe without changing per-source facts', () => {
+  const plan = readyPlan();
+  for (const { name } of TEXTURE_SWIZZLES.slice(1)) {
+    const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan });
+    const changed = updateTextureBatch(loaded.state, { kind: 'change-profile', field: 'Swizzling', value: name });
+    assert.equal(changed.state.kind, 'authoring');
+    if (changed.state.kind !== 'authoring') continue;
+    const updated = changed.state.plan;
+    assert.equal(updated.profile.Swizzling, name);
+    updated.jobs.forEach((job, index) => {
+      assert.strictEqual(job.profile, updated.profile);
+      assert.deepEqual({ ...job, profile: plan.jobs[index]?.profile }, plan.jobs[index]);
+    });
+    assert.equal(changed.effects[0]?.kind === 'render-item' && changed.effects[0].profile.Swizzling, name);
+  }
+});
 
 test('loading chooses one active viewport and changing rows never changes the common profile', () => {
   const plan = readyPlan();
