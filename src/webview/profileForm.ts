@@ -24,6 +24,7 @@ export interface ProfileFormRequests {
   readonly removeMips: (value: number) => void;
   readonly containsMips: (value: boolean) => void;
   readonly mips: (value: boolean) => void;
+  readonly tiled: (value: boolean) => void;
   readonly normalize: (value: boolean) => void;
   readonly mipFunction: (value: TextureMipFunction) => void;
   readonly mipFilter: (value: TextureMipFilter) => void;
@@ -32,7 +33,7 @@ export interface ProfileFormRequests {
 }
 
 const COMPRESSIONS: readonly TextureCompression[] = ['Copy', 'Fastest', 'Medium', 'Best'];
-const MIP_FUNCTIONS: readonly TextureMipFunction[] = ['Filter', 'Normalize'];
+const MIP_FUNCTIONS: readonly TextureMipFunction[] = ['Filter', 'Normalize', 'ColorNoise'];
 const MIP_FILTERS: readonly TextureMipFilter[] = ['Box', 'Kaiser'];
 
 export function profileFormControls(
@@ -103,6 +104,7 @@ function controlOf(
     input.checked = Boolean(profile[key]);
     if (key === 'ContainsMips') input.addEventListener('change', () => requests.containsMips(input.checked));
     if (key === 'GenerateMips') input.addEventListener('change', () => requests.mips(input.checked));
+    if (key === 'TiledTexture') input.addEventListener('change', () => requests.tiled(input.checked));
     if (key === 'Normalize') input.addEventListener('change', () => requests.normalize(input.checked));
     return input;
   }

@@ -762,7 +762,43 @@ static int verify_mip_modes(const char *kaiser_path, const char *pre_path, const
     return ok;
 }
 
+static int verify_golden(const char *path, unsigned width, unsigned height,
+    unsigned count, const char *hex, unsigned removed) {
+    bytes file = { NULL, 0 };
+    int ok = load(path, &file);
+    unsigned top_width = width, top_height = height;
+    size_t cursor = 0;
+    for (unsigned level = 0; level < count; ++level) {
+        uint8_t expected[8 * 8 * 4];
+        const size_t size = (size_t)width * height * 4;
+        if (size > sizeof expected || strlen(hex + cursor) < size * 2) { ok = 0; break; }
+        for (size_t at = 0; at < size; ++at) {
+            char byte[3] = { hex[cursor], hex[cursor + 1], 0 };
+            expected[at] = (uint8_t)strtoul(byte, NULL, 16);
+            cursor += 2;
+        }
+        if (level < removed) {
+            top_width = width > 1 ? width / 2 : 1;
+            top_height = height > 1 ? height / 2 : 1;
+        } else {
+            ok = ok && mip_equals(&file, level - removed, top_width, top_height,
+                count - removed, expected, size);
+        }
+        width = width > 1 ? width / 2 : 1;
+        height = height > 1 ? height / 2 : 1;
+    }
+    ok = ok && hex[cursor] == 0;
+    free(file.data);
+    if (!ok) fprintf(stderr, "Workbench golden mismatch: %s\n", path);
+    return ok;
+}
+
 int main(int argc, char **argv) {
+    if (argc == 8 && strcmp(argv[1], "--golden") == 0) {
+        return verify_golden(argv[2], (unsigned)strtoul(argv[3], NULL, 10),
+            (unsigned)strtoul(argv[4], NULL, 10), (unsigned)strtoul(argv[5], NULL, 10),
+            argv[6], (unsigned)strtoul(argv[7], NULL, 10)) ? 0 : 1;
+    }
     if (argc == 6 && strcmp(argv[1], "--gpu") == 0) {
         return verify_gpu(argv[2], argv[3], argv[4], (unsigned)strtoul(argv[5], NULL, 10)) ? 0 : 1;
     }

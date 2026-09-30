@@ -53,10 +53,13 @@ held to the channel mapping, mip behaviour and a bounded difference rather than 
 The editor opens before anything in the project is written. It shows the decoded source beside a
 result decoded back from a temporary native EDDS, with shared channel, alpha checkerboard, mip,
 zoom and pan controls.
-Changing `Conversion`, `ConversionQuality`, `FormatCompress`, `CompressTreshold` or `GenerateMips`
-rebuilds only that temporary preview; the other visible Workbench fields show the exact fixed
-values of this slice and explain why they are locked. The left pane always shows the source as it
-is, so a GPU conversion has something to be compared against.
+Changing the conversion profile rebuilds only that temporary preview. Mip controls include
+generation, removal of the largest levels, Box/Kaiser, normalization and tiled borders.
+`MipMapFunction=ColorNoise` follows the same deterministic filtering as `Filter` in DayZ;
+`TiledTexture=false` clamps edge samples instead of repeating them. These choices also apply to
+the common batch profile and are preserved in metadata. Controls explain dependencies when they
+are disabled. The left pane always shows the source as it is, so a GPU conversion has something
+to be compared against.
 
 `Conversion` turns the decoded RGBA into a runtime format. Which format each value produces is read
 off DayZ's own textures, where a `.edds.meta` recipe sits beside the `.edds` Workbench wrote from

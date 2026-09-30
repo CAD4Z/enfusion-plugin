@@ -143,6 +143,7 @@ function profileForm(
     removeMips: (value) => host.postMessage({ type: 'change-remove-mips', value }),
     containsMips: (value) => host.postMessage({ type: 'change-contains-mips', value }),
     mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    tiled: (value) => host.postMessage({ type: 'change-tiled-texture', value }),
     normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
     mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
     mipFilter: (value) => host.postMessage({ type: 'change-mipmap-filter', value }),

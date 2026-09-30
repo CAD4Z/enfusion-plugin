@@ -61,6 +61,27 @@ test('batch profile edits reset mip settings when their controlling stage is dis
   assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFilter, 'Box');
 });
 
+test('ColorNoise with untiled Kaiser is the common profile of every batch item', () => {
+  const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
+  const filtered = updateTextureBatch(loaded.state, {
+    kind: 'change-profile', field: 'MipMapFilter', value: 'Kaiser',
+  });
+  const colored = updateTextureBatch(filtered.state, {
+    kind: 'change-profile', field: 'MipMapFunction', value: 'ColorNoise',
+  });
+  const changed = updateTextureBatch(colored.state, {
+    kind: 'change-profile', field: 'TiledTexture', value: false,
+  });
+  assert.equal(changed.state.kind, 'authoring');
+  if (changed.state.kind !== 'authoring') return;
+  const expected = { ...DEFAULT_TEXTURE_PROFILE,
+    MipMapFunction: 'ColorNoise', MipMapFilter: 'Kaiser', TiledTexture: false };
+  assert.deepEqual(changed.state.draft, expected);
+  for (const job of changed.state.plan.jobs) assert.deepEqual(job.profile, expected);
+  assert.equal(changed.effects.length, 1);
+  assert.equal(changed.effects[0]?.kind, 'render-item');
+});
+
 test('per-item failures do not stop successes and cancellation preserves completed outputs', () => {
   const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan: readyPlan() });
   const running = updateTextureBatch(loaded.state, { kind: 'run' });

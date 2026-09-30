@@ -156,13 +156,18 @@ export class TextureBatchEditor {
             apply({ kind: 'change-profile', field: 'GenerateMips', value: request.value });
           }
           return;
+        case 'change-tiled-texture':
+          if (typeof request.value === 'boolean') {
+            apply({ kind: 'change-profile', field: 'TiledTexture', value: request.value });
+          }
+          return;
         case 'change-normalize':
           if (typeof request.value === 'boolean') {
             apply({ kind: 'change-profile', field: 'Normalize', value: request.value });
           }
           return;
         case 'change-mipmap-function':
-          if (request.value === 'Filter' || request.value === 'Normalize') {
+          if (request.value === 'Filter' || request.value === 'Normalize' || request.value === 'ColorNoise') {
             apply({ kind: 'change-profile', field: 'MipMapFunction', value: request.value });
           }
           return;

@@ -127,6 +127,13 @@ test('metadata refuses mip settings that their controlling stage cannot use', ()
     },
   }));
 
+  const newModes = { MipMapFunction: 'ColorNoise', MipMapFilter: 'Kaiser', TiledTexture: false };
+  assert.deepEqual(inspect(newModes).metadata?.profile, { ...recipe, ...newModes });
+  assert.throws(
+    () => inspect({ GenerateMips: false, MipMapFunction: 'ColorNoise' }),
+    /MipMapFunction.*GenerateMips/i,
+  );
+
   assert.throws(
     () => inspect({ GenerateMips: false, MipMapFunction: 'Normalize' }),
     /MipMapFunction.*GenerateMips/i,

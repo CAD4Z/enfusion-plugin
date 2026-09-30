@@ -8,7 +8,7 @@ import type { TextureConversion } from './textureConversions';
 
 export type { TextureSourceFormat };
 export type TextureCompression = 'Copy' | 'Fastest' | 'Medium' | 'Best';
-export type TextureMipFunction = 'Filter' | 'Normalize';
+export type TextureMipFunction = 'Filter' | 'Normalize' | 'ColorNoise';
 export type TextureMipFilter = 'Box' | 'Kaiser';
 
 /** The entire supported Workbench recipe. There are no implicit preset fields. */
@@ -29,7 +29,7 @@ export interface TextureProfile {
   readonly Normalize: boolean;
   readonly MipMapFunction: TextureMipFunction;
   readonly MipMapFilter: TextureMipFilter;
-  readonly TiledTexture: true;
+  readonly TiledTexture: boolean;
 }
 
 export const DEFAULT_TEXTURE_PROFILE: TextureProfile = {
@@ -53,7 +53,7 @@ export function withActiveMipSettings(profile: TextureProfile): TextureProfile {
   if (!profile.GenerateMips) {
     return { ...profile, MipMapFunction: 'Filter', MipMapFilter: 'Box' };
   }
-  return profile.MipMapFunction === 'Filter'
+  return profile.MipMapFunction !== 'Normalize'
     ? profile
     : { ...profile, MipMapFilter: 'Box' };
 }

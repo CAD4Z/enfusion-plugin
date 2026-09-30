@@ -74,6 +74,15 @@ if(BUILD_TESTING AND EDDS_BUILD_TESTS)
   edds_configure_target(edds-reference-reader)
 
   add_test(NAME edds_core COMMAND edds-core-test)
+  add_executable(edds-mip-modes-test tests/mip_modes_test.c)
+  target_link_libraries(edds-mip-modes-test PRIVATE edds_core edds_test_fixture)
+  edds_configure_target(edds-mip-modes-test)
+  add_test(NAME edds_mip_modes COMMAND edds-mip-modes-test)
+  add_test(NAME edds_mip_goldens COMMAND "${CMAKE_COMMAND}"
+    "-DCLI=$<TARGET_FILE:edds-convert>"
+    "-DFIXTURE=$<TARGET_FILE:edds-fixture>"
+    "-DREFERENCE_READER=$<TARGET_FILE:edds-reference-reader>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/mip_modes_test.cmake")
   add_executable(edds-memory-test tests/memory_test.c)
   target_link_libraries(edds-memory-test PRIVATE edds_core edds_test_fixture)
   edds_configure_target(edds-memory-test)

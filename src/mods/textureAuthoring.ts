@@ -82,19 +82,18 @@ export function textureProfileFieldsOf(
           editable: false,
           reason: 'MipMapFunction applies only while GenerateMips is enabled.',
         },
-    profile.GenerateMips && profile.MipMapFunction === 'Filter'
+    profile.GenerateMips && profile.MipMapFunction !== 'Normalize'
       ? { key: 'MipMapFilter', editable: true }
       : {
           key: 'MipMapFilter',
           editable: false,
           reason: profile.GenerateMips
-            ? 'MipMapFilter applies only to MipMapFunction=Filter.'
+            ? 'MipMapFilter applies only to Filter or ColorNoise.'
             : 'MipMapFilter applies only while GenerateMips is enabled.',
         },
     {
       key: 'TiledTexture',
-      editable: false,
-      reason: 'TiledTexture=false is not supported in this conversion slice.',
+      editable: true,
     },
   ];
 }
@@ -136,6 +135,7 @@ type EditableProfileKey =
   | 'ContainsMips'
   | 'GenerateMips'
   | 'Normalize'
+  | 'TiledTexture'
   | 'MipMapFunction'
   | 'MipMapFilter'
   | 'Conversion'

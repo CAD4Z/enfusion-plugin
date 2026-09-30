@@ -35,6 +35,8 @@ typedef struct generated_mip {
     uint32_t height;
     uint32_t bytes;
     uint8_t *bgra;
+    /** Unquantized filtering state; released as soon as the next level is built. */
+    float *filter_pixels;
     /** The same mip in the runtime format, which is what the container then compresses. */
     uint32_t payload_bytes;
     uint8_t *payload;
@@ -124,6 +126,59 @@ static void box_mip(const generated_mip *previous, generated_mip *next) {
     }
 }
 
+/* NVTT keeps the chain in normalized floats and packs through UNORM16 to BGRA8. */
+static void pack_filtered_mip(generated_mip *mip) {
+    for (size_t at = 0; at < mip->bytes; ++at) {
+        float value = mip->filter_pixels[at] * 65535.0f;
+        if (value < 0.0f) value = 0.0f;
+        if (value > 65535.0f) value = 65535.0f;
+        mip->bgra[at] = (uint8_t)((uint32_t)floorf(value + 0.5f) >> 8);
+    }
+}
+
+static void box_float_mip(const generated_mip *previous, generated_mip *next) {
+    const uint32_t w = next->width, h = next->height;
+    const uint32_t sw = previous->width, sh = previous->height;
+    for (uint32_t c = 0; c < 4; ++c) {
+        for (uint32_t y = 0; y < h; ++y) {
+            for (uint32_t x = 0; x < w; ++x) {
+                const float *src = previous->filter_pixels + ((size_t)y * 2 * sw + x * 2) * 4 + c;
+                float value;
+                if (sw == 1 || sh == 1) {
+                    const uint32_t n = w * h, at = y * w + x;
+                    src = previous->filter_pixels + (size_t)at * 8 + c;
+                    value = ((sw * sh) & 1) != 0
+                        ? (1.0f / (float)(2 * n + 1)) * ((float)(n - at) * src[0] +
+                            (float)n * src[4] + (float)(1 + at) * src[8])
+                        : 0.5f * (src[0] + src[4]);
+                } else if ((sw & 1) == 0 && (sh & 1) == 0) {
+                    value = 0.25f * (src[0] + src[4] + src[sw * 4] + src[sw * 4 + 4]);
+                } else if ((sw & 1) != 0 && (sh & 1) != 0) {
+                    const float wx[3] = { (float)(w - x), (float)w, (float)(1 + x) };
+                    const float wy[3] = { (float)(h - y), (float)h, (float)(1 + y) };
+                    value = 0;
+                    for (uint32_t dy = 0; dy < 3; ++dy) {
+                        const float *row = src + dy * sw * 4;
+                        value += wy[dy] * (wx[0] * row[0] + wx[1] * row[4] + wx[2] * row[8]);
+                    }
+                    value *= 1.0f / (float)(sw * sh);
+                } else if ((sw & 1) != 0) {
+                    value = (float)(w - x) * (src[0] + src[sw * 4]);
+                    value += (float)w * (src[4] + src[sw * 4 + 4]);
+                    value += (float)(1 + x) * (src[8] + src[sw * 4 + 8]);
+                    value *= 1.0f / (float)(2 * sw);
+                } else {
+                    value = (float)(h - y) * (src[0] + src[4]);
+                    value += (float)h * (src[sw * 4] + src[sw * 4 + 4]);
+                    value += (float)(1 + y) * (src[sw * 8] + src[sw * 8 + 4]);
+                    value *= 1.0f / (float)(2 * sh);
+                }
+                next->filter_pixels[((size_t)y * w + x) * 4 + c] = value;
+            }
+        }
+    }
+}
+
 static float bessel_zero(float value) {
     const float half = 0.5f * value;
     float sum = 1.0f;
@@ -152,10 +207,15 @@ static float kaiser_value(float position) {
     const float inside = 1.0f - ratio * ratio;
     return inside < 0.0f
         ? 0.0f
-        : sinc_value(pi * position) * bessel_zero(4.0f * sqrtf(inside)) / bessel_zero(4.0f);
+        : sinc_value(pi * position * 4.0f) * bessel_zero(sqrtf(inside)) / bessel_zero(1.0f);
 }
 
-static uint32_t repeat_index(int index, uint32_t length) {
+static uint32_t sample_index(int index, uint32_t length, int tiled) {
+    if (!tiled) {
+        if (index < 0) return 0;
+        if ((uint32_t)index >= length) return length - 1u;
+        return (uint32_t)index;
+    }
     int result = index % (int)length;
     return (uint32_t)(result < 0 ? result + (int)length : result);
 }
@@ -197,7 +257,8 @@ static float kaiser_sample_float(
     uint32_t source_length,
     uint32_t destination_length,
     uint32_t destination,
-    size_t stride
+    size_t stride,
+    int tiled
 ) {
     float weights[20];
     int left;
@@ -206,31 +267,12 @@ static float kaiser_sample_float(
     float result = 0.0f;
     for (int sample = 0; sample < window; ++sample) {
         result += weights[sample] *
-            source[(size_t)repeat_index(left + sample, source_length) * stride];
+            source[(size_t)sample_index(left + sample, source_length, tiled) * stride];
     }
     return result;
 }
 
-static float kaiser_sample_bytes(
-    const uint8_t *source,
-    uint32_t source_length,
-    uint32_t destination_length,
-    uint32_t destination,
-    size_t stride
-) {
-    float weights[20];
-    int left;
-    const int window = kaiser_weights(
-        source_length, destination_length, destination, &left, weights);
-    float result = 0.0f;
-    for (int sample = 0; sample < window; ++sample) {
-        result += weights[sample] *
-            source[(size_t)repeat_index(left + sample, source_length) * stride];
-    }
-    return result;
-}
-
-static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
+static int kaiser_mip(const generated_mip *previous, generated_mip *next, int tiled) {
     const size_t intermediate_count = (size_t)next->width * previous->height;
     float *intermediate = edds_alloc(intermediate_count * sizeof *intermediate);
     if (intermediate == NULL) return 0;
@@ -240,11 +282,11 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
             for (uint32_t x = 0; x < next->width; ++x) {
                 float value;
                 if (previous->width == next->width) {
-                    value = (float)previous->bgra[((size_t)y * previous->width + x) * 4u + channel];
+                    value = previous->filter_pixels[((size_t)y * previous->width + x) * 4u + channel];
                 } else {
-                    value = kaiser_sample_bytes(
-                        previous->bgra + (size_t)y * previous->width * 4u + channel,
-                        previous->width, next->width, x, 4u);
+                    value = kaiser_sample_float(
+                        previous->filter_pixels + (size_t)y * previous->width * 4u + channel,
+                        previous->width, next->width, x, 4u, tiled);
                 }
                 intermediate[(size_t)y * next->width + x] = value;
             }
@@ -254,11 +296,8 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next) {
                 float value = previous->height == next->height
                     ? intermediate[(size_t)y * next->width + x]
                     : kaiser_sample_float(intermediate + x, previous->height, next->height, y,
-                        next->width);
-                if (value < 0.0f) value = 0.0f;
-                if (value > 255.0f) value = 255.0f;
-                next->bgra[((size_t)y * next->width + x) * 4u + channel] =
-                    (uint8_t)floorf(value + 0.5f);
+                        next->width, tiled);
+                next->filter_pixels[((size_t)y * next->width + x) * 4u + channel] = value;
             }
         }
     }
@@ -480,6 +519,8 @@ static void free_mips(generated_mip *mips, uint32_t count) {
         }
         edds_free(mips[at].payload);
         edds_free(mips[at].bgra);
+        edds_free(mips[at].filter_pixels);
+        mips[at].filter_pixels = NULL;
         mips[at].bgra = NULL;
         mips[at].payload = NULL;
         mips[at].stored = NULL;
@@ -544,6 +585,8 @@ static edds_status generate_mips(
             profile->remove_mips);
         return EDDS_INVALID_INPUT;
     }
+    const int float_filter = profile->generate_mips &&
+        profile->mipmap_function != EDDS_MIPMAP_NORMALIZE;
     *count = complete_count;
     memset(mips, 0, sizeof(*mips) * complete_count);
     mips[0].width = source->width;
@@ -572,29 +615,52 @@ static edds_status generate_mips(
             edds_fail(error, "allocation-failed", "Memory for the mip chain could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
+        if (float_filter) {
+            mips[at].filter_pixels = edds_alloc((size_t)mips[at].bytes * sizeof(float));
+            if (mips[at].filter_pixels == NULL) {
+                free_mips(mips, complete_count);
+                edds_fail(error, "allocation-failed", "Memory for mip filtering could not be allocated.");
+                return EDDS_INTERNAL_FAILURE;
+            }
+        }
         if (profile->contains_mips) {
             rgba_mip(source->supplied_mips[at].rgba, source->has_alpha, &mips[at]);
         } else if (at == 0) {
             rgba_mip(source->rgba, source->has_alpha, &mips[at]);
         } else {
-            if (profile->mipmap_function == EDDS_MIPMAP_FILTER &&
+            if (profile->mipmap_function != EDDS_MIPMAP_NORMALIZE &&
                 profile->mipmap_filter == EDDS_FILTER_KAISER) {
-                if (!kaiser_mip(&mips[at - 1u], &mips[at])) {
+                if (!kaiser_mip(&mips[at - 1u], &mips[at], profile->tiled_texture)) {
                     free_mips(mips, complete_count);
                     edds_fail(error, "allocation-failed",
                         "Memory for Kaiser mip filtering could not be allocated.");
                     return EDDS_INTERNAL_FAILURE;
                 }
+            } else if (float_filter) {
+                box_float_mip(&mips[at - 1u], &mips[at]);
             } else {
                 box_mip(&mips[at - 1u], &mips[at]);
             }
+            if (float_filter) pack_filtered_mip(&mips[at]);
         }
         if ((profile->normalize && (profile->contains_mips || at == 0)) ||
             (at > 0 && !profile->contains_mips &&
              profile->mipmap_function == EDDS_MIPMAP_NORMALIZE)) {
             normalize_mip(&mips[at]);
         }
+        if (float_filter) {
+            if (at == 0) {
+                for (size_t pixel = 0; pixel < mips[at].bytes; ++pixel) {
+                    mips[at].filter_pixels[pixel] = mips[at].bgra[pixel] * (1.0f / 255.0f);
+                }
+            } else {
+                edds_free(mips[at - 1].filter_pixels);
+                mips[at - 1].filter_pixels = NULL;
+            }
+        }
     }
+    edds_free(mips[complete_count - 1].filter_pixels);
+    mips[complete_count - 1].filter_pixels = NULL;
     if (profile->remove_mips != 0) {
         const uint32_t removed = profile->remove_mips;
         for (uint32_t at = 0; at < removed; ++at) {
@@ -750,7 +816,8 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
         profile->remove_mips > 14u ||
         (profile->contains_mips != 0 && profile->contains_mips != 1) ||
         (profile->generate_mips != 0 && profile->generate_mips != 1) ||
-        (profile->normalize != 0 && profile->normalize != 1)) {
+        (profile->normalize != 0 && profile->normalize != 1) ||
+        (profile->tiled_texture != 0 && profile->tiled_texture != 1)) {
         edds_fail(error, "unsupported-setting",
             "The conversion profile is outside the supported Workbench slice.");
         return EDDS_UNSUPPORTED_FORMAT;
@@ -760,11 +827,7 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
             "Workbench settings ContainsMips=true and GenerateMips=true are mutually exclusive.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
-    if (profile->mipmap_function == EDDS_MIPMAP_COLOR_NOISE) {
-        edds_fail(error, "unsupported-setting",
-            "Workbench setting MipMapFunction=ColorNoise is recognized but unsupported.");
-        return EDDS_UNSUPPORTED_FORMAT;
-    }
+    /* DayZ's ColorNoise mip function follows Filter. Its noise-producing swizzle is separate. */
     if (profile->mipmap_function < EDDS_MIPMAP_FILTER ||
         profile->mipmap_function > EDDS_MIPMAP_COLOR_NOISE) {
         edds_fail(error, "unsupported-setting", "Workbench setting MipMapFunction is unknown.");
@@ -784,15 +847,10 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
             "Workbench setting MipMapFunction is active only while GenerateMips=true.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
-    if ((!profile->generate_mips || profile->mipmap_function != EDDS_MIPMAP_FILTER) &&
+    if ((!profile->generate_mips || profile->mipmap_function == EDDS_MIPMAP_NORMALIZE) &&
         profile->mipmap_filter != EDDS_FILTER_BOX) {
         edds_fail(error, "unsupported-combination",
-            "Workbench setting MipMapFilter is active only for GenerateMips=true and MipMapFunction=Filter.");
-        return EDDS_UNSUPPORTED_FORMAT;
-    }
-    if (!profile->tiled_texture) {
-        edds_fail(error, "unsupported-setting",
-            "Workbench setting TiledTexture=false is recognized but unsupported.");
+            "Workbench setting MipMapFilter requires GenerateMips=true and MipMapFunction=Filter or ColorNoise.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
     conversion = edds_conversion_capability_of(profile->conversion);

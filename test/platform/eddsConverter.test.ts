@@ -138,6 +138,76 @@ test('conversion spells out the immutable plan through stable native flags', asy
   ]);
 });
 
+test('ColorNoise and clamp borders cross the process boundary with canonical flags', async () => {
+  const calls: ExecutableRequest[] = [];
+  const converter = new EddsConverter('C:\\extension', (request) => {
+    calls.push(request);
+    return Promise.resolve({
+      stdout:
+        request.args[0] === 'protocol'
+          ? PROTOCOL
+          : '{"protocolVersion":1,"kind":"convert","width":3,"height":2,"mipCount":2,"pixelFormat":"BGRA8","registered":true}',
+      stderr: '',
+    });
+  });
+
+  const result = await converter.convert({
+    kind: 'ready',
+    scope: 'registered',
+    action: 'replace',
+    label: 'Replace',
+    source: 'C:\\mod\\Mod\\icon.png',
+    sourceFormat: 'PNG',
+    output: 'C:\\mod\\Mod\\icon.edds',
+    metadata: 'C:\\mod\\Mod\\icon.edds.meta',
+    identity: { guid: '0123456789ABCDEF', name: 'Mod/icon.edds', sourceFile: 'icon.png' },
+    identityAction: 'preserve',
+    profile: {
+      TargetFormat: 'EnfusionDDS',
+      FormatCompress: 'Medium',
+      CompressTreshold: 80,
+      RemoveMips: 0,
+      Conversion: 'None',
+      ConversionQuality: 1,
+      Swizzling: 'None',
+      ContainsMips: false,
+      GenerateMips: true,
+      Normalize: false,
+      MipMapFunction: 'ColorNoise',
+      MipMapFilter: 'Kaiser',
+      TiledTexture: false,
+    },
+    revisions: { source: { size: 1, modified: 2 } },
+  });
+
+  assert.equal(result.registered, true);
+  assert.deepEqual(calls[1]?.args, [
+    'convert', '--machine', '--protocol', '1',
+    '--input', 'C:\\mod\\Mod\\icon.png',
+    '--output', 'C:\\mod\\Mod\\icon.edds',
+    '--target-format', 'enfusion-dds',
+    '--format-compress', 'medium',
+    '--compress-threshold', '80',
+    '--remove-mips', '0',
+    '--conversion', 'none',
+    '--conversion-quality', '1',
+    '--swizzling', 'none',
+    '--contains-mips', 'false',
+    '--generate-mips', 'true',
+    '--normalize', 'false',
+    '--mipmap-function', 'color-noise',
+    '--mipmap-filter', 'kaiser',
+    '--tiled-texture', 'false',
+    '--expect-source-revision', '1:2',
+    '--expect-output-revision', 'missing',
+    '--expect-metadata-revision', 'missing',
+    '--metadata', 'C:\\mod\\Mod\\icon.edds.meta',
+    '--resource-name', 'Mod/icon.edds',
+    '--source-file', 'icon.png',
+    '--guid', '0123456789ABCDEF',
+  ]);
+});
+
 test('a GPU conversion reaches the converter as its own wire name and exact quality', async () => {
   const calls: ExecutableRequest[] = [];
   const converter = new EddsConverter('C:\\extension', (request) => {

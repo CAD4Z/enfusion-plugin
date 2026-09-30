@@ -1,7 +1,7 @@
 # EDDS converter
 
-`edds-convert` is the extension's C17 codec process. It has no third-party code and is linked with
-the static MSVC runtime. The extension invokes only the installed Windows x64 executable at
+`edds-convert` is the extension's C17 codec process. It has no third-party runtime dependencies and
+is linked with the static MSVC runtime. The extension invokes only the installed Windows x64 executable at
 `dist/native/win32-x64/edds-convert.exe`, with `shell: false`.
 
 ## Build and test
@@ -90,6 +90,10 @@ anything is read. JPEG carries no alpha; TIFF alpha comes from the file, never f
 It writes EnfusionDDS with a floor-halved NPOT Box or Kaiser mip chain. Supplied DDS levels are used
 only with `--contains-mips true --generate-mips false`; otherwise only the decoded top level enters
 the generated path. `--remove-mips` removes levels from the large end after that path has completed.
+`--mipmap-function color-noise` follows the same deterministic filter path as `filter` in the
+observed DayZ build. `--tiled-texture false` clamps border samples; the default true repeats them.
+Both modes accept Box and Kaiser. The [importer captures](tests/workbench/README.md) document their
+exact pixels and repeatability, including unchanged mip 0.
 Boolean `--normalize` normalizes source vectors before filtering, while
 `--mipmap-function normalize` normalizes each reduced level after Box filtering. `--conversion`
 selects the runtime

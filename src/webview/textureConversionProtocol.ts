@@ -17,6 +17,7 @@ export type TextureAuthoringRequest =
   | { readonly type: 'change-remove-mips'; readonly value: number }
   | { readonly type: 'change-contains-mips'; readonly value: boolean }
   | { readonly type: 'change-mips'; readonly value: boolean }
+  | { readonly type: 'change-tiled-texture'; readonly value: boolean }
   | { readonly type: 'change-normalize'; readonly value: boolean }
   | { readonly type: 'change-mipmap-function'; readonly value: TextureMipFunction }
   | { readonly type: 'change-mipmap-filter'; readonly value: TextureMipFilter }

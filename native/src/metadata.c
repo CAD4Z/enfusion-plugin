@@ -694,7 +694,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "   Normalize %d\n"
         "   MipMapFunction %s\n"
         "   MipMapFilter %s\n"
-        "   TiledTexture 1\n"
+        "   TiledTexture %d\n"
         "  }\n"
         "  %s XBOX_ONE : PC {\n"
         "  }\n"
@@ -708,7 +708,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         metadata->profile.compress_threshold, metadata->profile.remove_mips,
         conversion->workbench_name, quality, metadata->profile.contains_mips,
         metadata->profile.generate_mips, metadata->profile.normalize,
-        mipmap_function, mipmap_filter, resource, resource, resource);
+        mipmap_function, mipmap_filter, metadata->profile.tiled_texture, resource, resource, resource);
     if (written < 0 || fflush(output) != 0) {
         fail(error, "metadata-write-failed", "Canonical metadata could not be written completely.");
         return EDDS_INTERNAL_FAILURE;

@@ -140,7 +140,7 @@ test('every Workbench key is visible while unsupported dependent values explain 
       ['Normalize', true, undefined],
       ['MipMapFunction', true, undefined],
       ['MipMapFilter', true, undefined],
-      ['TiledTexture', false, 'TiledTexture=false is not supported in this conversion slice.'],
+      ['TiledTexture', true, undefined],
     ],
   );
 });
@@ -193,6 +193,28 @@ test('turning off mip generation or its filter stage resets inactive settings', 
   });
   assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFunction, 'Filter');
   assert.equal(disabled.state.kind === 'authoring' && disabled.state.draft.MipMapFilter, 'Box');
+});
+
+test('ColorNoise keeps Kaiser active and untiled borders reach the draft preview', () => {
+  const filtered = updateTextureAuthoring(readyAuthoring(), {
+    kind: 'change-profile', field: 'MipMapFilter', value: 'Kaiser',
+  });
+  const colored = updateTextureAuthoring(filtered.state, {
+    kind: 'change-profile', field: 'MipMapFunction', value: 'ColorNoise',
+  });
+  const untiled = updateTextureAuthoring(colored.state, {
+    kind: 'change-profile', field: 'TiledTexture', value: false,
+  });
+  assert.equal(untiled.state.kind, 'authoring');
+  if (untiled.state.kind !== 'authoring') return;
+  assert.equal(untiled.state.draft.MipMapFunction, 'ColorNoise');
+  assert.equal(untiled.state.draft.MipMapFilter, 'Kaiser');
+  assert.equal(untiled.state.draft.TiledTexture, false);
+  assert.equal(textureProfileFieldsOf(untiled.state.draft)
+    .find(({ key }) => key === 'MipMapFilter')?.editable, true);
+  assert.equal(untiled.effects[0]?.kind, 'render-draft');
+  if (untiled.effects[0]?.kind !== 'render-draft') return;
+  assert.deepEqual(untiled.effects[0].profile, untiled.state.draft);
 });
 
 test('a compressed conversion is what makes ConversionQuality a control at all', () => {

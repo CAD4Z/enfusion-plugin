@@ -250,7 +250,7 @@ endif()
 set(unsupported_profile_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-unsupported-profile.edds")
 execute_process(
   COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
-    --output "${unsupported_profile_result}" --tiled-texture false
+    --output "${unsupported_profile_result}" --mipmap-filter triangle
   RESULT_VARIABLE unsupported_profile_exit OUTPUT_VARIABLE unsupported_profile_output ERROR_QUIET
 )
 if(NOT unsupported_profile_exit EQUAL 4 OR EXISTS "${unsupported_profile_result}")
@@ -262,7 +262,6 @@ if(NOT unsupported_profile_code STREQUAL "unsupported-setting")
 endif()
 
 foreach(refused_mip IN ITEMS
-    "--mipmap-function;color-noise"
     "--mipmap-filter;triangle")
   list(GET refused_mip 0 refused_mip_flag)
   list(GET refused_mip 1 refused_mip_value)

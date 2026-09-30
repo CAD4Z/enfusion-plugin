@@ -372,8 +372,8 @@ static int mip_profile_refuses_conflicts_and_unproven_values(void) {
 
     edds_default_profile(&profile);
     profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
-    CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
-    CHECK(strstr(error.message, "ColorNoise") != NULL);
+    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
 
     edds_default_profile(&profile);
     profile.mipmap_filter = EDDS_FILTER_TRIANGLE;
@@ -394,8 +394,9 @@ static int mip_profile_refuses_conflicts_and_unproven_values(void) {
 
     edds_default_profile(&profile);
     profile.tiled_texture = 0;
+    CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
+    profile.tiled_texture = 2;
     CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
-    CHECK(strstr(error.message, "TiledTexture=false") != NULL);
     return 1;
 }
 
@@ -792,9 +793,8 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
         const char *code;
     } cases[] = {
         { "Conversion HDRCompression", "unsupported-setting" },
-        { "MipMapFunction ColorNoise", "unsupported-setting" },
         { "MipMapFilter Triangle", "unsupported-setting" },
-        { "TiledTexture 0", "unsupported-setting" },
+        { "GenerateMips 0 MipMapFunction ColorNoise", "unsupported-combination" },
         { "GenerateMips 0 MipMapFunction Normalize", "unsupported-combination" },
         { "MipMapFunction Normalize MipMapFilter Kaiser", "unsupported-combination" },
         { "ContainsMips 1 GenerateMips 1", "unsupported-combination" }
@@ -1835,8 +1835,8 @@ static int converted_source(
 }
 
 static int box_and_kaiser_mips_cover_npot_edges_exactly(void) {
-    static const uint8_t expected_box[] = { 11, 0, 0, 255, 13, 0, 0, 255 };
-    static const uint8_t expected_kaiser[] = { 17, 0, 0, 255, 17, 0, 0, 255 };
+    static const uint8_t expected_box[] = { 10, 0, 0, 255, 13, 0, 0, 255 };
+    static const uint8_t expected_kaiser[] = { 0, 0, 0, 255, 0, 0, 0, 255 };
     uint8_t bgra[5u * 3u * 4u] = { 0 };
     edds_profile profile;
     edds_info info;

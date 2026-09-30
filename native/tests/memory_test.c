@@ -106,7 +106,11 @@ static int every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota(void) 
             edds_memory_result full;
             edds_default_profile(&input.profile);
             if (mode == 1u) input.profile.conversion = EDDS_CONVERSION_COLOR_HQ;
-            if (mode == 2u) input.profile.mipmap_filter = EDDS_FILTER_KAISER;
+            if (mode == 2u) {
+                input.profile.mipmap_filter = EDDS_FILTER_KAISER;
+                input.profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
+                input.profile.tiled_texture = 0;
+            }
             if (mode == 1u && input.format == EDDS_SOURCE_DDS) {
                 input.profile.contains_mips = 1;
                 input.profile.generate_mips = 0;

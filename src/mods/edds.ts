@@ -386,25 +386,23 @@ function profileOf(
   const generateMips = booleanOf(value, 'GenerateMips');
   const normalize = booleanOf(value, 'Normalize');
   const mipMapFunction = stringOf(value, 'MipMapFunction');
-  if (mipMapFunction !== 'Filter' && mipMapFunction !== 'Normalize') {
+  if (mipMapFunction !== 'Filter' && mipMapFunction !== 'Normalize' && mipMapFunction !== 'ColorNoise') {
     throw new Error(`metadata.recipe.MipMapFunction is not supported: ${mipMapFunction}.`);
   }
   const mipMapFilter = stringOf(value, 'MipMapFilter');
   if (mipMapFilter !== 'Box' && mipMapFilter !== 'Kaiser') {
     throw new Error(`metadata.recipe.MipMapFilter is not supported: ${mipMapFilter}.`);
   }
-  if (booleanOf(value, 'TiledTexture') !== true) {
-    throw new Error('metadata.recipe.TiledTexture must be true.');
-  }
+  const tiledTexture = booleanOf(value, 'TiledTexture');
   if (containsMips && generateMips) {
     throw new Error('metadata.recipe.ContainsMips and GenerateMips cannot both be true.');
   }
   if (!generateMips && mipMapFunction !== 'Filter') {
     throw new Error('metadata.recipe.MipMapFunction is active only while GenerateMips is true.');
   }
-  if ((!generateMips || mipMapFunction !== 'Filter') && mipMapFilter !== 'Box') {
+  if ((!generateMips || mipMapFunction === 'Normalize') && mipMapFilter !== 'Box') {
     throw new Error(
-      'metadata.recipe.MipMapFilter is active only while GenerateMips is true and MipMapFunction is Filter.',
+      'metadata.recipe.MipMapFilter requires GenerateMips and MipMapFunction Filter or ColorNoise.',
     );
   }
   if (sourceFormat !== 'DDS' && containsMips) {
@@ -424,7 +422,7 @@ function profileOf(
     Normalize: normalize,
     MipMapFunction: mipMapFunction,
     MipMapFilter: mipMapFilter,
-    TiledTexture: true,
+    TiledTexture: tiledTexture,
   };
 }
 

@@ -149,9 +149,10 @@ export class EddsConverter {
             '--contains-mips', String(profile.ContainsMips),
             '--generate-mips', String(profile.GenerateMips),
             '--normalize', String(profile.Normalize),
-            '--mipmap-function', profile.MipMapFunction.toLowerCase(),
+            '--mipmap-function', profile.MipMapFunction === 'ColorNoise'
+              ? 'color-noise' : profile.MipMapFunction.toLowerCase(),
             '--mipmap-filter', profile.MipMapFilter.toLowerCase(),
-            '--tiled-texture', 'true',
+            '--tiled-texture', String(profile.TiledTexture),
             '--expect-source-revision', revision(plan.revisions.source),
             '--expect-output-revision', revision(plan.revisions.output),
             '--expect-metadata-revision', revision(plan.revisions.metadata),

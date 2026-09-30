@@ -74,6 +74,7 @@ type EditableBatchProfileKey =
   | 'ContainsMips'
   | 'GenerateMips'
   | 'Normalize'
+  | 'TiledTexture'
   | 'MipMapFunction'
   | 'MipMapFilter'
   | 'Conversion'
