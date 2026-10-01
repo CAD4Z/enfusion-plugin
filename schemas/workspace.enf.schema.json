@@ -9,6 +9,14 @@
       "type": "string",
       "description": "The schema this file is written against, for an editor that finds it that way rather than by the file name."
     },
+    "ignore": {
+      "type": "array",
+      "description": "Folders this workspace does not see, each written relative to this file and inside its folder: no mod, addon, Workbench project or workspace.enf under one is listed, built, linked or launched from here. Folders rather than masks, compared the way Windows compares paths. What a workspace kept in such a folder builds is still loaded by its folder name in mods.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "launch": {
       "$ref": "#/definitions/launch",
       "description": "How the mods of this workspace are launched. This block wins whole: the one in a mod.enf under it is ignored rather than merged."

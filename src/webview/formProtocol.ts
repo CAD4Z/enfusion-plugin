@@ -7,7 +7,7 @@
  * has misunderstood the file cannot write anything but a field it was shown.
  */
 
-import type { Launch, ManifestProblem, ModManifest } from '../mods/enf';
+import type { Launch, ManifestProblem, ModManifest, WorkspaceManifest } from '../mods/enf';
 import type { FormEdit, ManifestKind } from '../mods/form';
 
 /** Sent to the form whenever the file it is over can have changed, the form's own edits included. */
@@ -18,6 +18,8 @@ export interface ManifestMessage {
   readonly file: string;
   /** What the mod says about itself; a `workspace.enf` says nothing about any one mod. */
   readonly mod: ModManifest | undefined;
+  /** What the workspace says about itself — the folders it ignores; a `mod.enf` has not got it. */
+  readonly workspace: WorkspaceManifest | undefined;
   readonly launch: Launch;
   readonly problems: readonly ManifestProblem[];
   /** Why the form is showing the file without writing into it; undefined when it writes. */

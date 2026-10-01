@@ -41,6 +41,7 @@ import {
   NO_LAUNCH,
   TARGET_FIELDS,
   WORKSPACE_FIELDS,
+  type WorkspaceManifest,
   readMod,
   readWorkspace,
 } from './enf';
@@ -53,6 +54,8 @@ export interface Form {
   readonly kind: ManifestKind;
   /** What the mod says about itself; a `workspace.enf` says nothing about any one mod. */
   readonly mod: ModManifest | undefined;
+  /** What the workspace says about itself — the folders it ignores; a `mod.enf` has not got it. */
+  readonly workspace: WorkspaceManifest | undefined;
   /**
    * The launch block, lifted out of whichever file this is so that one set of fields shows it in
    * both. Never undefined: a file with no block is a form with empty fields, not a form without.
@@ -97,6 +100,7 @@ export function formOf(kind: ManifestKind, source: string): Form {
   return {
     kind,
     mod: read.mod,
+    workspace: read.workspace,
     launch: read.launch,
     problems: read.problems,
     refusal: refusalOf(kind, source),
@@ -231,11 +235,15 @@ const MOD_LISTS: readonly FormPath[] = [
   [LAUNCH, TARGETS],
 ];
 
-const WORKSPACE_LISTS: readonly FormPath[] = MOD_LISTS.filter((path) => path[0] === LAUNCH);
+const WORKSPACE_LISTS: readonly FormPath[] = [
+  ['ignore'],
+  ...MOD_LISTS.filter((path) => path[0] === LAUNCH),
+];
 
 /** The manifest as the form's own two questions want it: the fields, and what went wrong. */
 interface Read {
   readonly mod: ModManifest | undefined;
+  readonly workspace: WorkspaceManifest | undefined;
   readonly launch: Launch;
   readonly problems: readonly ManifestProblem[];
 }
@@ -243,11 +251,21 @@ interface Read {
 function readOf(kind: ManifestKind, source: string): Read {
   if (kind === 'workspace') {
     const read = readWorkspace(source);
-    return { mod: undefined, launch: read.value.launch ?? NO_LAUNCH, problems: read.problems };
+    return {
+      mod: undefined,
+      workspace: read.value,
+      launch: read.value.launch ?? NO_LAUNCH,
+      problems: read.problems,
+    };
   }
 
   const read = readMod(source);
-  return { mod: read.value, launch: read.value.launch ?? NO_LAUNCH, problems: read.problems };
+  return {
+    mod: read.value,
+    workspace: undefined,
+    launch: read.value.launch ?? NO_LAUNCH,
+    problems: read.problems,
+  };
 }
 
 /** Where the write lands and what goes there; `undefined` takes out whatever is there now. */
@@ -547,6 +565,9 @@ function shownListLengthOf(read: Read, path: FormPath): number {
   if (field === 'exclude') {
     return read.mod?.exclude.length ?? 0;
   }
+  if (field === 'ignore') {
+    return read.workspace?.ignore.length ?? 0;
+  }
   if (field === TARGETS) {
     return read.launch.targets.length;
   }
@@ -589,8 +610,12 @@ function insertionIndexOf(
   kind: ManifestKind,
   path: FormPath,
 ): ((properties: string[]) => number) | undefined {
-  const field = path.at(-1);
-  const order = orderOf(kind, path);
+  // A list the file has not got yet is made by its first item, and the parser asks where to put
+  // the list rather than the item - so it is the list that is placed, among the fields of the block
+  // it goes into, the way a field of its own would be.
+  const placed = path.at(-1) === APPEND ? path.slice(0, -1) : path;
+  const field = placed.at(-1);
+  const order = orderOf(kind, placed);
 
   if (typeof field !== 'string' || order === undefined) {
     return undefined;

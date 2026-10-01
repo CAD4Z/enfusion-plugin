@@ -64,12 +64,29 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
   assert.deepEqual(form.problems, []);
 });
 
-test('a workspace manifest has no fields of its own and the same launch block', () => {
-  const form = formOf('workspace', '{ "launch": { "modsDirectory": "Built" } }');
+test('a workspace manifest has the folders it ignores and the same launch block', () => {
+  const form = formOf('workspace', '{ "ignore": ["Maps"], "launch": { "modsDirectory": "Built" } }');
 
   assert.equal(form.mod, undefined);
+  assert.deepEqual(form.workspace?.ignore, ['Maps']);
   assert.equal(form.launch.modsDirectory, 'Built');
   assert.equal(form.refusal, undefined);
+  assert.equal(formOf('mod', MANIFEST).workspace, undefined);
+});
+
+test('a folder to ignore is written where the schema writes it, ahead of the launch block', () => {
+  assert.equal(
+    edited(
+      '{\n  "launch": {\n    "modsDirectory": "Built"\n  }\n}\n',
+      { kind: 'append', path: ['ignore'], value: 'Maps' },
+      'workspace',
+    ),
+    '{\n  "ignore": [\n    "Maps"\n  ],\n  "launch": {\n    "modsDirectory": "Built"\n  }\n}\n',
+  );
+});
+
+test('a list of ignored folders the reader could not read whole is not written into', () => {
+  assert.ok(formOf('workspace', '{ "ignore": [1, "Maps"] }').refusal?.includes('ignore'));
 });
 
 test('an empty file is a form with empty fields rather than one that refuses', () => {
@@ -328,6 +345,22 @@ test('a list the file has not got is made by the first item added to it', () => 
   assert.equal(
     edited('{}', { kind: 'append', path: ['exclude'], value: '*.psd' }),
     '{\n  "exclude": [\n    "*.psd"\n  ]\n}',
+  );
+});
+
+test('a list made by its first item stands where the schema writes it, not at the end', () => {
+  const written = edited(MANIFEST, { kind: 'append', path: ['exclude'], value: '*.psd' });
+
+  assert.ok(
+    written.includes('"version": "1.0.0",\n  "exclude": [\n    "*.psd"\n  ],\n\n  "launch"'),
+    written,
+  );
+
+  const launched = edited(MANIFEST, { kind: 'append', path: ['launch', 'mods'], value: '@CF' });
+
+  assert.ok(
+    launched.includes('"modsDirectory": "Addons",\n    "mods": [\n      "@CF"\n    ],\n    "targets"'),
+    launched,
   );
 });
 

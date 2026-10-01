@@ -14,7 +14,8 @@
  * The cascade rule is the one thing this file decides rather than reads: when a `workspace.enf`
  * exists it owns the launch block **whole**, and the block in `mod.enf` is ignored rather than
  * merged into it. Levels that merge are levels nobody can trace a setting through. See
- * `docs/adr/0002-enf-is-the-only-project-configuration.md`.
+ * `docs/adr/0002-enf-is-the-only-project-configuration.md`. The other is what a workspace sees at
+ * all, which is everything outside the folders its `ignore` names — see `unignored`.
  *
  * The same shape is written out three times on purpose: here, for the extension, and once per file
  * in `schemas/`, for the editor. The schema is what the developer sees while typing; this is what
@@ -23,7 +24,7 @@
 
 import { type Node, type ParseError, parseTree, printParseErrorCode } from 'jsonc-parser';
 import { loadedModNameProblemOf, modNameProblemOf } from './modName';
-import { folderOf, isWithin, nameOf } from './paths';
+import { folderOf, isWithin, nameOf, samePath } from './paths';
 
 /** The file a monorepo puts above its mods; a single mod does without one. */
 export const WORKSPACE_FILE = 'workspace.enf';
@@ -58,8 +59,14 @@ export interface ModManifest {
   readonly launch: Launch | undefined;
 }
 
-/** `workspace.enf`: nothing about any one mod, and the launch block for all of them. */
+/** `workspace.enf`: nothing about any one mod — the folders it leaves out, and the launch block. */
 export interface WorkspaceManifest {
+  /**
+   * Folders the workspace does not see, each written relative to the file and inside its folder:
+   * nothing under one is listed, built, linked or launched — a mod, an addon, a Workbench project,
+   * another `workspace.enf`. Folders rather than masks. See `unignored`.
+   */
+  readonly ignore: readonly string[];
   readonly launch: Launch | undefined;
 }
 
@@ -154,7 +161,10 @@ export function readWorkspace(source: string): Parsed<WorkspaceManifest> {
   const reading = read(source);
   const root = reading.root;
 
-  const value: WorkspaceManifest = { launch: launchOf(reading, root) };
+  const value: WorkspaceManifest = {
+    ignore: reading.texts(root, 'ignore', ignoredFolderProblemOf),
+    launch: launchOf(reading, root),
+  };
   reading.only(root, WORKSPACE_FIELDS);
 
   return { value, problems: reading.problems };
@@ -226,6 +236,56 @@ export function workspaceFor(modRoot: string, files: readonly string[]): string 
     .at(0);
 }
 
+/**
+ * What a scan leaves to the window once every `workspace.enf` in it has said which folders it
+ * ignores: a path in one of those folders is gone, whatever it is — a mod's manifest or config, a
+ * Workbench project, another `workspace.enf`. So a set of mods the workspace does not build every
+ * day — too heavy to pack on every build, say, or a workspace of its own kept in a folder of this
+ * one — sits beside it without the panel listing, building, linking or launching any of it. What
+ * that set builds is loaded all the same, by its folder in `mods`, like a mod of somebody else's.
+ *
+ * Folders are compared the way Windows compares them, so `maps\` ignores what `Maps` holds. A
+ * folder written wrong ignores nothing: it is reported where it is written (`readWorkspace`), and
+ * a guess at what it meant could hide a mod nobody asked to hide.
+ */
+export function unignored(paths: readonly string[], workspaces: readonly ManifestSource[]): string[] {
+  const ignored = workspaces.flatMap((file) =>
+    readWorkspace(file.source)
+      .value.ignore.filter((folder) => ignoredFolderProblemOf(folder) === undefined)
+      .map((folder) => samePath(`${folderOf(file.path)}/${folder}`)),
+  );
+
+  return paths.filter((path) => !ignored.some((folder) => isWithin(samePath(folderOf(path)), folder)));
+}
+
+/**
+ * What is wrong with a folder written into `ignore`, or undefined where nothing is. The folder is
+ * one of this workspace's, so it is written relative to the file and stays inside its folder: a
+ * folder that starts at a root or walks out with `..` is somebody else's to leave out, and an empty
+ * one would be the whole workspace. A mask is refused rather than half-read: the list is folders,
+ * and one language for it is what lets a developer tell what it leaves out by looking.
+ */
+function ignoredFolderProblemOf(value: string): string | undefined {
+  const parts = value
+    .trim()
+    .split(/[\\/]/)
+    .filter((part) => part !== '' && part !== '.');
+
+  if (parts.length === 0) {
+    return 'An ignored folder has to be named: an empty one would be the whole workspace.';
+  }
+
+  if (/^([\\/]|[A-Za-z]:)/.test(value.trim()) || parts.includes('..')) {
+    return 'An ignored folder is written relative to this file and stays inside its folder.';
+  }
+
+  if (/[*?[\]{}]/.test(value)) {
+    return 'An ignored folder is a folder rather than a mask.';
+  }
+
+  return undefined;
+}
+
 /** What a mod that configures no launch is launched by, which is nothing at all. */
 export const NO_LAUNCH: Launch = {
   modsDirectory: undefined,
@@ -253,7 +313,7 @@ export const MOD_FIELDS = [
   'launch',
 ];
 
-export const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'launch'];
+export const WORKSPACE_FIELDS = [SCHEMA_FIELD, 'ignore', 'launch'];
 
 export const LAUNCH_FIELDS = ['modsDirectory', 'mods', 'serverMods', 'targets'];
 

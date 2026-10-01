@@ -157,6 +157,18 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
+A `workspace.enf` may also name, in `ignore`, folders the workspace does not see. Nothing under one
+is listed, built, linked or launched from that window — not a mod, not an addon, not a Workbench
+project and not another `workspace.enf`. That is how a monorepo keeps mods it does not build every
+day beside the ones it does — a workspace of its own, say, too heavy to pack on every build —
+without the **Build** at the top carrying them along: the ignored workspace is worked on from a
+window opened on its own folder, and what it builds is still loaded the way any other built mod is,
+named in `mods` by its folder under `modsDirectory`. Each folder is written relative to the file
+and stays inside its folder, and it is a folder rather than a mask, compared the way Windows
+compares paths. One written wrong — empty, absolute, walking out with `..`, or a mask — ignores
+nothing and is underlined where it is written, because a guess at what it meant could hide a mod
+nobody asked to hide.
+
 The `name` field in `mod.enf` is not a title but a name: the panel shows the mod under it, its
 prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the same name has to
 stand in `dir` in `CfgMods`. A mod that did not name itself is called after its folder — which is

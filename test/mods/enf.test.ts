@@ -5,6 +5,7 @@ import {
   configurationsOf,
   readMod,
   readWorkspace,
+  unignored,
   workspaceFor,
 } from '../../src/mods/enf';
 
@@ -331,6 +332,107 @@ test('a mod answers to the nearest workspace.enf above it, and to none where the
   assert.equal(workspaceFor('/w/CADMap', files), '/w/workspace.enf');
   assert.equal(workspaceFor('/elsewhere/CADMap', files), undefined);
   assert.equal(workspaceFor('/w/CADMap', []), undefined);
+});
+
+test('a workspace names the folders it ignores, and one written wrong is reported where it is', () => {
+  const read = readWorkspace(`{
+  "ignore": ["Maps", "Archive/Old", "", "../Elsewhere", "C:/Mods", "**/Tiles"]
+}`);
+
+  assert.deepEqual(read.value.ignore, ['Maps', 'Archive/Old', '', '../Elsewhere', 'C:/Mods', '**/Tiles']);
+  assert.deepEqual(read.problems, [
+    {
+      message: 'An ignored folder has to be named: an empty one would be the whole workspace.',
+      line: 2,
+      column: 37,
+    },
+    {
+      message: 'An ignored folder is written relative to this file and stays inside its folder.',
+      line: 2,
+      column: 41,
+    },
+    {
+      message: 'An ignored folder is written relative to this file and stays inside its folder.',
+      line: 2,
+      column: 57,
+    },
+    { message: 'An ignored folder is a folder rather than a mask.', line: 2, column: 68 },
+  ]);
+});
+
+test('a workspace that ignores nothing says so by leaving the field out', () => {
+  assert.deepEqual(readWorkspace('{}').value.ignore, []);
+  assert.deepEqual(readWorkspace('{ "ignore": "Maps" }').problems.map((problem) => problem.message), [
+    '"ignore" must be an array of strings.',
+  ]);
+});
+
+test('what a workspace ignores is gone from the scan, whatever it is', () => {
+  const scan = [
+    '/w/workspace.enf',
+    '/w/CADCore/mod.enf',
+    '/w/CADCore/config.cpp',
+    '/w/CADCore/Workbench/dayz.gproj',
+    '/w/Maps/workspace.enf',
+    '/w/Maps/Chernarus/mod.enf',
+    '/w/Maps/Chernarus/config.cpp',
+    '/w/Maps/Loose/config.cpp',
+    '/w/MapsArchive/Old/config.cpp',
+  ];
+  const workspaces = [
+    { path: '/w/workspace.enf', source: '{ "ignore": ["Maps"] }' },
+    { path: '/w/Maps/workspace.enf', source: '{ "launch": { "modsDirectory": "P:/Mods" } }' },
+  ];
+
+  // The workspace kept in the ignored folder goes with everything else in it, and a folder whose
+  // name merely starts the same way stays
+  assert.deepEqual(unignored(scan, workspaces), [
+    '/w/workspace.enf',
+    '/w/CADCore/mod.enf',
+    '/w/CADCore/config.cpp',
+    '/w/CADCore/Workbench/dayz.gproj',
+    '/w/MapsArchive/Old/config.cpp',
+  ]);
+
+  // Opened on its own folder, the ignored workspace has nobody to ignore it
+  const alone = scan.filter((path) => path.startsWith('/w/Maps/'));
+
+  assert.deepEqual(unignored(alone, [workspaces[1]]), alone);
+});
+
+test('an ignored folder is compared the way Windows compares paths', () => {
+  const scan = [
+    '/f:/Repo/workspace.enf',
+    '/f:/Repo/Maps/Chernarus/mod.enf',
+    '/f:/Repo/Tools/Old/A/mod.enf',
+    '/f:/Repo/Tools/New/mod.enf',
+  ];
+  const workspaces = [
+    { path: '/f:/Repo/workspace.enf', source: '{ "ignore": ["maps\\\\", "./Tools/Old/"] }' },
+  ];
+
+  assert.deepEqual(unignored(scan, workspaces), [
+    '/f:/Repo/workspace.enf',
+    '/f:/Repo/Tools/New/mod.enf',
+  ]);
+});
+
+test('a folder is ignored by the workspace that names it, counted from that workspace', () => {
+  const scan = ['/a/workspace.enf', '/a/Maps/mod.enf', '/b/workspace.enf', '/b/Maps/mod.enf'];
+  const workspaces = [
+    { path: '/a/workspace.enf', source: '{ "ignore": ["Maps"] }' },
+    { path: '/b/workspace.enf', source: '{}' },
+  ];
+
+  assert.deepEqual(unignored(scan, workspaces), ['/a/workspace.enf', '/b/workspace.enf', '/b/Maps/mod.enf']);
+});
+
+test('a folder written wrong ignores nothing rather than a guess at what it meant', () => {
+  const scan = ['/w/workspace.enf', '/w/Maps/mod.enf', '/elsewhere/Mod/mod.enf'];
+  const wrong = { path: '/w/workspace.enf', source: '{ "ignore": ["../elsewhere", "", "**", "/w/Maps"] }' };
+
+  assert.deepEqual(unignored(scan, [wrong]), scan);
+  assert.deepEqual(unignored(scan, []), scan);
 });
 
 test('the line an editor is pointed at the schema by is a field like any other', () => {

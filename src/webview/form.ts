@@ -53,6 +53,7 @@ function render(message: ManifestMessage): void {
     ...(message.refusal === undefined ? [] : [refusal(message.refusal)]),
     ...(message.problems.length === 0 ? [] : [problemsOf(message.problems)]),
     ...(message.mod === undefined ? [] : [modSection(message.mod, writable)]),
+    ...(message.workspace === undefined ? [] : [workspaceSection(message.workspace, writable)]),
     launchSection(message, writable),
   );
 
@@ -149,6 +150,30 @@ function modSection(mod: NonNullable<ManifestMessage['mod']>, writable: boolean)
           'no business carrying. Naming any replaces the default list whole.',
         items: mod.exclude,
         placeholder: '*.psd',
+      },
+      writable,
+    ),
+  );
+}
+
+/** What the workspace says about itself, which is the half of `workspace.enf` a `mod.enf` has not got. */
+function workspaceSection(
+  workspace: NonNullable<ManifestMessage['workspace']>,
+  writable: boolean,
+): HTMLElement {
+  return section(
+    'Workspace',
+    undefined,
+    list(
+      {
+        path: ['ignore'],
+        label: 'Ignore',
+        help:
+          'Folders this workspace does not see, relative to this file: nothing under one is ' +
+          'listed, built, linked or launched from here. What a workspace kept in one builds is ' +
+          'still loaded by its folder name in Mods.',
+        items: workspace.ignore,
+        placeholder: 'Archive',
       },
       writable,
     ),

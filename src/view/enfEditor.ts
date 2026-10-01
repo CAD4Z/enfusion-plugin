@@ -139,6 +139,7 @@ function messageOf(
     kind,
     file: nameOf(document.uri.path),
     mod: form.mod,
+    workspace: form.workspace,
     launch: form.launch,
     problems: form.problems,
     refusal: form.refusal,
