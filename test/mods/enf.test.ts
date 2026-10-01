@@ -5,6 +5,7 @@ import {
   configurationsOf,
   readMod,
   readWorkspace,
+  seenFrom,
   workspaceFor,
 } from '../../src/mods/enf';
 
@@ -331,6 +332,54 @@ test('a mod answers to the nearest workspace.enf above it, and to none where the
   assert.equal(workspaceFor('/w/CADMap', files), '/w/workspace.enf');
   assert.equal(workspaceFor('/elsewhere/CADMap', files), undefined);
   assert.equal(workspaceFor('/w/CADMap', []), undefined);
+});
+
+test('a workspace inside another one is its own, and the outer one does not see any of it', () => {
+  const scan = [
+    '/w/workspace.enf',
+    '/w/CADCore/mod.enf',
+    '/w/CADCore/config.cpp',
+    '/w/CADCore/Workbench/dayz.gproj',
+    '/w/Maps/workspace.enf',
+    '/w/Maps/Chernarus/mod.enf',
+    '/w/Maps/Chernarus/config.cpp',
+    '/w/Maps/Loose/config.cpp',
+    '/w/MapsArchive/Old/config.cpp',
+  ];
+
+  // Everything under the inner workspace goes - its own file, its mods, a mod with no manifest -
+  // and a folder whose name merely starts the same way stays
+  assert.deepEqual(seenFrom(scan), [
+    '/w/workspace.enf',
+    '/w/CADCore/mod.enf',
+    '/w/CADCore/config.cpp',
+    '/w/CADCore/Workbench/dayz.gproj',
+    '/w/MapsArchive/Old/config.cpp',
+  ]);
+
+  // Opened on its own folder, the inner workspace has nothing above it and is seen whole
+  const alone = scan.filter((path) => path.startsWith('/w/Maps/'));
+
+  assert.deepEqual(seenFrom(alone), alone);
+});
+
+test('workspaces side by side are both seen, and so is everything with no workspace at all', () => {
+  const scan = [
+    '/a/workspace.enf',
+    '/a/CADCore/mod.enf',
+    '/b/workspace.enf',
+    '/b/CADMap/mod.enf',
+    '/c/Alone/mod.enf',
+  ];
+
+  assert.deepEqual(seenFrom(scan), scan);
+  assert.deepEqual(seenFrom([]), []);
+});
+
+test('a workspace two levels down is dropped with the one it stands in', () => {
+  const scan = ['/w/workspace.enf', '/w/x/workspace.enf', '/w/x/y/workspace.enf', '/w/x/y/Mod/mod.enf'];
+
+  assert.deepEqual(seenFrom(scan), ['/w/workspace.enf']);
 });
 
 test('the line an editor is pointed at the schema by is a field like any other', () => {

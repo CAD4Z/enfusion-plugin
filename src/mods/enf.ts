@@ -226,6 +226,27 @@ export function workspaceFor(modRoot: string, files: readonly string[]): string 
     .at(0);
 }
 
+/**
+ * What a window sees of a scan: everything except what lies in the folder of a `workspace.enf`
+ * that has another one above it. A workspace file is where a workspace ends as well as where it
+ * begins, so a workspace kept inside another one's folder is a workspace of its own: the outer
+ * one neither lists, builds, links nor launches anything of it, and it is worked on from a window
+ * opened on its own folder — where nothing stands above it and it is seen whole.
+ *
+ * That is what lets a monorepo keep mods beside the ones it builds every day without carrying
+ * them along: a set of mods too heavy to pack on every build, say, or one that is somebody
+ * else's to release. Side by side the two workspaces are both seen, which is the case
+ * `workspaceFor` already answers.
+ */
+export function seenFrom(paths: readonly string[]): string[] {
+  const workspaces = paths.filter((path) => nameOf(path) === WORKSPACE_FILE).map(folderOf);
+  const nested = workspaces.filter((folder) =>
+    workspaces.some((outer) => outer !== folder && isWithin(folder, outer)),
+  );
+
+  return paths.filter((path) => !nested.some((folder) => isWithin(folderOf(path), folder)));
+}
+
 /** What a mod that configures no launch is launched by, which is nothing at all. */
 export const NO_LAUNCH: Launch = {
   modsDirectory: undefined,

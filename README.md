@@ -157,6 +157,15 @@ registered by file name, so the editor completes the fields and underlines the t
 block may be written in either file, but only one of them owns it: where a `workspace.enf` exists,
 the block in `mod.enf` is ignored entirely.
 
+A `workspace.enf` is also where a workspace ends. One kept inside the folder of another is a
+workspace of its own, and a window opened above it does not see it: neither that file nor any mod
+under it is listed, built, linked or launched there. It is worked on from a window opened on its own
+folder, where nothing stands above it. That is how a monorepo keeps mods it does not build every
+day — a set too heavy to pack on every build, say — beside the ones it does, without the **Build**
+at the top carrying them along. What such a workspace builds is still loaded the way any other
+built mod is: named in `mods` by its folder under `modsDirectory`. Workspaces side by side are
+both seen, each mod answering to the nearest `workspace.enf` above it.
+
 The `name` field in `mod.enf` is not a title but a name: the panel shows the mod under it, its
 prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the same name has to
 stand in `dir` in `CfgMods`. A mod that did not name itself is called after its folder — which is
