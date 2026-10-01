@@ -13,7 +13,6 @@ import {
   NO_LAUNCH,
   WORKSPACE_FILE,
   configurationsOf,
-  seenFrom,
   workspaceFor,
 } from '../mods/enf';
 import { sameName } from '../mods/config';
@@ -42,17 +41,9 @@ export interface Discovery {
   readonly projects: readonly string[];
 }
 
-/**
- * Every mod of the open folders. Honours the user's `files.exclude` and `search.exclude`.
- *
- * Except for what a workspace nested in another one holds: that is a workspace of its own, and
- * the outer one does not see it — which is the domain's call, `seenFrom`, made before anything
- * else is read, so that no list, build, link or launch below can reach what it dropped.
- */
+/** Every mod of the open folders. Honours the user's `files.exclude` and `search.exclude`. */
 export async function findMods(): Promise<Discovery> {
-  const scanned = await vscode.workspace.findFiles(SCAN_GLOB, EXCLUDE_GLOB);
-  const seen = new Set(seenFrom(scanned.map((uri) => uri.path)));
-  const found = scanned.filter((uri) => seen.has(uri.path));
+  const found = await vscode.workspace.findFiles(SCAN_GLOB, EXCLUDE_GLOB);
   const uris = new Map(found.map((uri) => [uri.path, uri] as const));
 
   const [enf, configs] = await Promise.all([
