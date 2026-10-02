@@ -503,11 +503,9 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         }
     }
     quality_text(metadata->profile.conversion_quality, quality);
-    for (const char *at = metadata->guid; *at != '\0'; ++at) {
-        if (!isxdigit((unsigned char)*at)) {
-            fail(error, "malformed-guid", "The metadata GUID must be exactly 16 hexadecimal characters.");
-            return EDDS_INVALID_INPUT;
-        }
+    if (!meta_valid_guid(metadata->guid)) {
+        fail(error, "malformed-guid", "The metadata GUID must be exactly 16 hexadecimal characters.");
+        return EDDS_INVALID_INPUT;
     }
     written = fprintf(output,
         "MetaFileClass {\n"

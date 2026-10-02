@@ -1,3 +1,4 @@
+#include "bytes.h"
 #include "font_internal.h"
 
 #include <math.h>
@@ -9,27 +10,14 @@
  * engine's KERN chunk can hold: one advance shift for the first character of each pair.
  */
 
-#define TAG(a, b, c, d) (((uint32_t)(a) << 24) | ((uint32_t)(b) << 16) | ((uint32_t)(c) << 8) | (uint32_t)(d))
-
-static uint16_t u16(const uint8_t *at) {
-    return (uint16_t)(((unsigned)at[0] << 8) | at[1]);
-}
-
-static int16_t s16(const uint8_t *at) {
-    return (int16_t)u16(at);
-}
-
-static uint32_t u32(const uint8_t *at) {
-    return ((uint32_t)at[0] << 24) | ((uint32_t)at[1] << 16) | ((uint32_t)at[2] << 8) | at[3];
-}
-
-static int inside(uint64_t size, uint64_t offset, uint64_t length) {
-    return offset <= size && length <= size - offset;
-}
-
 static edds_status malformed(edds_error *error, const char *what) {
     font_fail(error, "malformed-kerning", "The font's kerning is malformed: %s.", what);
     return EDDS_INVALID_INPUT;
+}
+
+static edds_status too_many_pairs(edds_error *error) {
+    font_fail(error, "kerning-limit", "The font has more than %zu kerning pairs in this set.", FONT_MAX_PAIRS);
+    return EDDS_UNSUPPORTED_FORMAT;
 }
 
 static unsigned bits_set(unsigned value) {
@@ -180,7 +168,11 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
     return EDDS_OK;
 }
 
-/** Marks the lookups of every `kern` feature a language system of `script` enables. */
+/**
+ * Marks the lookups of every `kern` feature the default language system of `script` enables: what
+ * text in that script with no language set is kerned by. A language's own system is a tailoring
+ * the engine has no way to ask for.
+ */
 static edds_status mark_script_lookups(
     const gpos_reader *gpos,
     uint32_t script,
@@ -188,42 +180,28 @@ static edds_status mark_script_lookups(
     uint8_t *marked,
     edds_error *error
 ) {
-    uint32_t systems[1 + 512];
-    uint32_t system_count = 0;
-    uint32_t feature_count;
+    uint32_t system, indices, feature_count;
     if (!inside(gpos->length, script, 4u)) return malformed(error, "a script table");
-    if (u16(gpos->data + script) != 0) systems[system_count++] = script + u16(gpos->data + script);
-    {
-        const uint32_t count = u16(gpos->data + script + 2);
-        if (count > 512u || !inside(gpos->length, script + 4u, 6u * (uint64_t)count)) {
-            return malformed(error, "a script's language systems");
-        }
-        for (uint32_t at = 0; at < count; ++at) {
-            systems[system_count++] = script + u16(gpos->data + script + 4u + 6u * at + 4u);
-        }
-    }
+    if (u16(gpos->data + script) == 0) return EDDS_OK;
+    system = script + u16(gpos->data + script);
+    if (!inside(gpos->length, system, 6u)) return malformed(error, "a language system");
+    indices = u16(gpos->data + system + 4);
+    if (!inside(gpos->length, system + 6u, 2u * (uint64_t)indices)) return malformed(error, "a language system");
     if (!inside(gpos->length, features, 2u)) return malformed(error, "the feature list");
     feature_count = u16(gpos->data + features);
     if (!inside(gpos->length, features + 2u, 6u * (uint64_t)feature_count)) return malformed(error, "the feature list");
-    for (uint32_t system = 0; system < system_count; ++system) {
-        const uint32_t at = systems[system];
-        uint32_t indices;
-        if (!inside(gpos->length, at, 6u)) return malformed(error, "a language system");
-        indices = u16(gpos->data + at + 4);
-        if (!inside(gpos->length, at + 6u, 2u * (uint64_t)indices)) return malformed(error, "a language system");
-        for (uint32_t index = 0; index <= indices; ++index) {
-            /* The required feature, when there is one, applies like any listed one. */
-            const uint32_t feature = index == indices ? u16(gpos->data + at + 2) : u16(gpos->data + at + 6u + 2u * index);
-            uint32_t table, lookups;
-            if (feature == 0xFFFFu && index == indices) continue;
-            if (feature >= feature_count) return malformed(error, "a language system names a missing feature");
-            if (u32(gpos->data + features + 2u + 6u * feature) != TAG('k', 'e', 'r', 'n')) continue;
-            table = features + u16(gpos->data + features + 2u + 6u * feature + 4u);
-            if (!inside(gpos->length, table, 4u)) return malformed(error, "a feature table");
-            lookups = u16(gpos->data + table + 2);
-            if (!inside(gpos->length, table + 4u, 2u * (uint64_t)lookups)) return malformed(error, "a feature table");
-            for (uint32_t lookup = 0; lookup < lookups; ++lookup) marked[u16(gpos->data + table + 4u + 2u * lookup)] = 1;
-        }
+    for (uint32_t index = 0; index <= indices; ++index) {
+        /* The required feature, when there is one, applies like any listed one. */
+        const uint32_t feature = index == indices ? u16(gpos->data + system + 2) : u16(gpos->data + system + 6u + 2u * index);
+        uint32_t table, lookups;
+        if (feature == 0xFFFFu && index == indices) continue;
+        if (feature >= feature_count) return malformed(error, "a language system names a missing feature");
+        if (u32(gpos->data + features + 2u + 6u * feature) != TAG('k', 'e', 'r', 'n')) continue;
+        table = features + u16(gpos->data + features + 2u + 6u * feature + 4u);
+        if (!inside(gpos->length, table, 4u)) return malformed(error, "a feature table");
+        lookups = u16(gpos->data + table + 2);
+        if (!inside(gpos->length, table + 4u, 2u * (uint64_t)lookups)) return malformed(error, "a feature table");
+        for (uint32_t lookup = 0; lookup < lookups; ++lookup) marked[u16(gpos->data + table + 4u + 2u * lookup)] = 1;
     }
     return EDDS_OK;
 }
@@ -414,7 +392,7 @@ static edds_status read_kern(
                     for (size_t right = first_right; right < slot_count && slots[right].glyph == right_glyph; ++right) {
                         if (*entry_count == capacity) {
                             kern_entry *grown;
-                            if (capacity >= FONT_MAX_PAIRS) return malformed(error, "too many kern pairs");
+                            if (capacity >= FONT_MAX_PAIRS) return too_many_pairs(error);
                             capacity = capacity == 0 ? 256u : capacity * 2u;
                             grown = realloc(*entries, capacity * sizeof *grown);
                             if (grown == NULL) {
@@ -451,10 +429,7 @@ static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, dou
     if (rounded == 0 || left > 0xFFFFu || right > 0xFFFFu) return EDDS_OK;
     if (list->count == list->capacity) {
         font_pair *grown;
-        if (list->capacity >= FONT_MAX_PAIRS) {
-            font_fail(error, "kerning-limit", "The font has more than %zu kerning pairs in this set.", FONT_MAX_PAIRS);
-            return EDDS_UNSUPPORTED_FORMAT;
-        }
+        if (list->capacity >= FONT_MAX_PAIRS) return too_many_pairs(error);
         list->capacity = list->capacity == 0 ? 256u : list->capacity * 2u;
         grown = realloc(list->pairs, list->capacity * sizeof *grown);
         if (grown == NULL) {

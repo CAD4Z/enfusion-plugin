@@ -1,5 +1,6 @@
 #include "font_internal.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -222,6 +223,9 @@ static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *inf
     info->bold = at[23];
     info->italic = at[24];
     info->c = read_float(at + 25);
+    if (!isfinite(info->cap_height) || !isfinite(info->line_height) || !isfinite(info->c)) {
+        return malformed(error, "a HEAD metric is not a finite number");
+    }
     return EDDS_OK;
 }
 

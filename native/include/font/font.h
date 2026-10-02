@@ -152,7 +152,11 @@ typedef struct font_range {
     uint32_t count;
 } font_range;
 
-/** The header and tables of an FNT5 file, as the engine would read them. */
+/**
+ * The header and tables of an FNT5 file, as the engine would read them. The header's three floats
+ * are `cap_height` (A), `line_height` (B, the step from one line to the next) and `c` (C, which a
+ * generated font sets to its size like B); `r` is the field range R the shader scales edges by.
+ */
 typedef struct font_info {
     char name[256];
     int32_t size;

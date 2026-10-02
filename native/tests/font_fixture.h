@@ -65,8 +65,9 @@ typedef struct font_fixture_pair {
 
 /**
  * The pairs a correct reader takes from the font, before rounding: only the `kern` feature, only
- * DFLT, latn and cyrl, the first matching subtable of each lookup. Pairs the font also holds and a
- * correct reader leaves out — another script, another feature, a later subtable — are not listed.
+ * the default language systems of DFLT, latn and cyrl, the first matching subtable of each lookup.
+ * Pairs the font also holds and a correct reader leaves out — another script, a language's own
+ * system, another feature, a later subtable — are not listed.
  */
 size_t font_fixture_pairs(font_fixture_variant variant, const font_fixture_pair **pairs);
 

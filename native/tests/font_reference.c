@@ -469,13 +469,13 @@ static long compare_glyph(const polygon *truth, const glyph_box *box, int32_t ce
     return faults;
 }
 
-/** The smallest power-of-two atlas, width at least height, with 1 px around and between cells. */
+/** The smallest power-of-two atlas, width at least height, with 1 px of zeros between cells. */
 static int smallest_atlas(uint32_t cells, int32_t cell, uint32_t *width, uint32_t *height) {
     for (int area = 0; area <= 24; ++area) {
         for (int high = area / 2; high >= 0; --high) {
             const int wide = area - high;
             if (wide > 12) break;
-            if ((uint64_t)(((1u << wide) - 1u) / (uint32_t)(cell + 1)) * (((1u << high) - 1u) / (uint32_t)(cell + 1)) >= cells) {
+            if ((uint64_t)(((1u << wide) + 1u) / (uint32_t)(cell + 1)) * (((1u << high) + 1u) / (uint32_t)(cell + 1)) >= cells) {
                 *width = 1u << wide;
                 *height = 1u << high;
                 return 1;
@@ -556,9 +556,21 @@ int main(int argc, char **argv) {
     if (font.b != (float)size || font.c != (float)size) fail("%s %ld", "HEAD B and C are not the size", (long)font.b);
     {
         const int cap = font_fixture_cap_height(variant);
-        /* Without OS/2 cap height, the top of H: 700 units. */
-        const double expected = round_half_away((cap > 0 ? cap : 700) * scale);
-        if (font.a != (float)expected) fail("%s %ld", "HEAD cap height", (long)font.a);
+        double expected = cap * scale;
+        if (cap < 0) {
+            /* Without OS/2 cap height, the top of the planted H, whether or not the set holds it. */
+            font_fixture_outline outline;
+            polygon truth;
+            if (!font_fixture_outline_of(variant, 0x48u, &outline)) {
+                fail("%s %ld", "no truth for H", 0);
+            } else {
+                flatten(&outline, scale, &truth);
+                expected = truth.box[3];
+                free(truth.segments);
+                font_fixture_outline_free(&outline);
+            }
+        }
+        if (font.a != (float)round_half_away(expected)) fail("%s %ld", "HEAD cap height", (long)font.a);
     }
 
     /* Every planted code, the box drawn for U+25A1, nothing else; each box from its outline. */
@@ -615,8 +627,8 @@ int main(int argc, char **argv) {
             else if (!apart) fail("%s U+%04lX", "a cell overlaps or touches another:", (long)box->code);
         }
         if (!shared) ++unique_cells;
-        if (box->x < 1 || box->y < 1 || box->x + font.cell + 1 > (int32_t)width || box->y + font.cell + 1 > (int32_t)height) {
-            fail("%s U+%04lX", "a cell leaves no zero pixel at the atlas edge:", (long)box->code);
+        if (box->x + font.cell > (int32_t)width || box->y + font.cell > (int32_t)height) {
+            fail("%s U+%04lX", "a cell runs past the atlas:", (long)box->code);
         }
     }
     if (font.cell != largest + 10) fail("%s %ld", "cell", font.cell);

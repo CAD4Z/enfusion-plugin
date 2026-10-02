@@ -57,8 +57,9 @@ typedef struct glyph_def {
     size_t component_count;
 } glyph_def;
 
+/* Taller than the other capitals, so a cap height taken from H differs from the 0.7 em fallback. */
 static const font_fixture_point h_points[] = {
-    RECT(80, 0, 180, 700), RECT(520, 0, 620, 700), RECT(100, 300, 600, 400)
+    RECT(80, 0, 180, 720), RECT(520, 0, 620, 720), RECT(100, 300, 600, 400)
 };
 static const size_t h_ends[] = { 4, 8, 12 };
 static const simple_glyph h_glyph = { h_points, 12, h_ends, 3 };
@@ -884,10 +885,14 @@ static void lang_sys(buffer *out, const uint16_t *features, size_t count) {
 }
 
 static void gpos_table(buffer *out) {
-    /* Features sorted by tag: 0 'dist', 1 'kern' (DFLT, latn, cyrl), 2 'kern' (grek only). */
+    /*
+     * Features sorted by tag: 0 'dist', 1 'kern' (DFLT, latn, cyrl), 2 'kern' (grek only), 3 'kern'
+     * (latn's Turkish only: a language a font may tailor, not what text without one gets).
+     */
     static const uint16_t kern_feature[] = { 1 };
     static const uint16_t latin_features[] = { 1, 0 };
     static const uint16_t greek_feature[] = { 2 };
+    static const uint16_t turkish_features[] = { 1, 3 };
     static const uint16_t first_glyphs[] = { GID_H, GID_A, GID_V };
     static const pair_value h_set[] = { { GID_H, 3 } };
     static const pair_value a_set[] = { { GID_O, 0 }, { GID_V, -80 }, { GID_EMOJI, -50 } };
@@ -904,12 +909,15 @@ static void gpos_table(buffer *out) {
     static const uint16_t v_only[] = { GID_V };
     static const pair_value v_distance[] = { { GID_V, -300 } };
     static const pair_value *const distance_sets[] = { v_distance };
+    static const uint16_t o_only[] = { GID_O };
+    static const pair_value o_turkish[] = { { GID_O, -400 } };
+    static const pair_value *const turkish_sets[] = { o_turkish };
     static const size_t one[] = { 1 };
-    buffer scripts[4] = { { 0 } }, features[3] = { { 0 } }, lookups[4] = { { 0 } };
+    buffer scripts[4] = { { 0 } }, features[4] = { { 0 } }, lookups[5] = { { 0 } };
     buffer script_list = { 0 }, feature_list = { 0 }, lookup_list = { 0 };
     buffer subtables[2] = { { 0 } }, inner = { 0 };
     static const char *const script_tags[] = { "DFLT", "cyrl", "grek", "latn" };
-    static const char *const feature_tags[] = { "dist", "kern", "kern" };
+    static const char *const feature_tags[] = { "dist", "kern", "kern", "kern" };
 
     /* DFLT and cyrl: the kern feature only; grek: the other kern feature; latn: kern, dist, TRK. */
     for (int at = 0; at < 4; ++at) {
@@ -918,7 +926,7 @@ static void gpos_table(buffer *out) {
         else if (at == 3) lang_sys(&default_lang, latin_features, 2);
         else lang_sys(&default_lang, kern_feature, 1);
         if (at == 3) {
-            lang_sys(&turkish, kern_feature, 1);
+            lang_sys(&turkish, turkish_features, 2);
             put16(&scripts[at], 10);
             put16(&scripts[at], 1);
             put_tag(&scripts[at], "TRK ");
@@ -943,23 +951,23 @@ static void gpos_table(buffer *out) {
         for (int at = 0; at < 4; ++at) put_buffer(&script_list, &scripts[at]);
     }
     {
-        static const uint16_t feature_lookups[3][2] = { { 3, 0 }, { 0, 1 }, { 2, 0 } };
-        static const size_t feature_sizes[3] = { 1, 2, 1 };
-        size_t offset = 2u + 6u * 3u;
-        for (int at = 0; at < 3; ++at) {
+        static const uint16_t feature_lookups[4][2] = { { 3, 0 }, { 0, 1 }, { 2, 0 }, { 4, 0 } };
+        static const size_t feature_sizes[4] = { 1, 2, 1, 1 };
+        size_t offset = 2u + 6u * 4u;
+        for (int at = 0; at < 4; ++at) {
             put16(&features[at], 0);
             put16(&features[at], (int)feature_sizes[at]);
             for (size_t index = 0; index < feature_sizes[at]; ++index) {
                 put16(&features[at], feature_lookups[at][index]);
             }
         }
-        put16(&feature_list, 3);
-        for (int at = 0; at < 3; ++at) {
+        put16(&feature_list, 4);
+        for (int at = 0; at < 4; ++at) {
             put_tag(&feature_list, feature_tags[at]);
             put16(&feature_list, (int)offset);
             offset += features[at].size;
         }
-        for (int at = 0; at < 3; ++at) put_buffer(&feature_list, &features[at]);
+        for (int at = 0; at < 4; ++at) put_buffer(&feature_list, &features[at]);
     }
 
     pair_list(&subtables[0], first_glyphs, 3, sets, set_sizes);
@@ -983,7 +991,10 @@ static void gpos_table(buffer *out) {
     pair_list(&subtables[0], v_only, 1, distance_sets, one);
     lookup(&lookups[3], 2, subtables, 1);
     release(&subtables[0]);
-    offset_list(&lookup_list, lookups, 4);
+    pair_list(&subtables[0], o_only, 1, turkish_sets, one);
+    lookup(&lookups[4], 2, subtables, 1);
+    release(&subtables[0]);
+    offset_list(&lookup_list, lookups, 5);
 
     put16(out, 1);
     put16(out, 0);
@@ -995,9 +1006,9 @@ static void gpos_table(buffer *out) {
     put_buffer(out, &lookup_list);
     for (int at = 0; at < 4; ++at) {
         release(&scripts[at]);
-        release(&lookups[at]);
+        release(&features[at]);
     }
-    for (int at = 0; at < 3; ++at) release(&features[at]);
+    for (int at = 0; at < 5; ++at) release(&lookups[at]);
     release(&script_list);
     release(&feature_list);
     release(&lookup_list);

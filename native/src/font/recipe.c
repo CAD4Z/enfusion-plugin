@@ -1,7 +1,6 @@
 #include "font_internal.h"
 #include "meta_text.h"
 
-#include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -225,15 +224,9 @@ edds_status font_recipe_write(FILE *output, const font_recipe *recipe, edds_erro
         font_fail(error, "invalid-api-argument", "The recipe value and output are required.");
         return EDDS_INTERNAL_FAILURE;
     }
-    if (strlen(recipe->guid) != 16u) {
+    if (!meta_valid_guid(recipe->guid)) {
         font_fail(error, "malformed-guid", "The recipe GUID must be exactly 16 hexadecimal characters.");
         return EDDS_INVALID_INPUT;
-    }
-    for (const char *at = recipe->guid; *at != '\0'; ++at) {
-        if (!isxdigit((unsigned char)*at)) {
-            font_fail(error, "malformed-guid", "The recipe GUID must be exactly 16 hexadecimal characters.");
-            return EDDS_INVALID_INPUT;
-        }
     }
     if (!quotable(recipe->name, 0) || !quotable(recipe->source_file, 0) ||
         !quotable(recipe->characters, 1)) {

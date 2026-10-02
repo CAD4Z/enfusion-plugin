@@ -58,7 +58,7 @@ FILE *open_input(const cli_char *path) {
 #endif
 }
 
-FILE *open_output(const cli_char *path) {
+static FILE *open_output(const cli_char *path) {
 #ifdef _WIN32
     FILE *file = NULL;
     return _wfopen_s(&file, path, L"w+b") == 0 ? file : NULL;
@@ -618,12 +618,12 @@ unsupported:
     return EDDS_UNSUPPORTED_FORMAT;
 }
 
-static int ascii_lower(cli_char value) {
+int ascii_lower(cli_char value) {
     return value >= (cli_char)'A' && value <= (cli_char)'Z'
         ? value + ((cli_char)'a' - (cli_char)'A') : value;
 }
 
-static int ends_with(const cli_char *path, const char *suffix) {
+int ends_with(const cli_char *path, const char *suffix) {
     const size_t path_size = cli_strlen(path);
     const size_t suffix_size = strlen(suffix);
     if (path_size < suffix_size) return 0;
@@ -638,7 +638,7 @@ static int ends_with(const cli_char *path, const char *suffix) {
  * trailing one, a `.` segment, and a `..` the path walks back through. A root is never walked
  * above, so a drive and a UNC share stay whole. Returns a malloc'd normal form, or NULL.
  */
-static int is_separator(cli_char value) {
+int is_separator(cli_char value) {
     return value == (cli_char)'/' || value == (cli_char)'\\';
 }
 
@@ -726,7 +726,7 @@ static int same_path_literally(const cli_char *left, const cli_char *right) {
     return *left == 0 && *right == 0;
 }
 
-int same_path(const cli_char *left, const cli_char *right) {
+static int same_path(const cli_char *left, const cli_char *right) {
     cli_char *canonical_left = normalized_path(left);
     cli_char *canonical_right = normalized_path(right);
     /* Out of memory, the coarser answer is the safe one: a collision missed writes two jobs to
@@ -739,7 +739,7 @@ int same_path(const cli_char *left, const cli_char *right) {
     return same;
 }
 
-cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
+static cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
     const size_t base = cli_strlen(output);
     cli_char *path = malloc((base + 96u) * sizeof *path);
     if (path == NULL) return NULL;
@@ -762,6 +762,8 @@ int path_exists(const cli_char *path) {
     (void)fclose(file);
     return 1;
 }
+
+static cli_char *append_suffix(const cli_char *path, const char *suffix);
 
 typedef struct file_revision {
     int exists;
@@ -859,7 +861,7 @@ static edds_status validate_revisions(
     return EDDS_OK;
 }
 
-cli_char *append_suffix(const cli_char *path, const char *suffix) {
+static cli_char *append_suffix(const cli_char *path, const char *suffix) {
     const size_t path_size = cli_strlen(path);
     const size_t suffix_size = strlen(suffix);
     cli_char *result = malloc((path_size + suffix_size + 1u) * sizeof *result);

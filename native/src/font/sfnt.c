@@ -1,3 +1,4 @@
+#include "bytes.h"
 #include "font_internal.h"
 
 #include <stdlib.h>
@@ -7,8 +8,6 @@
  * The TrueType reader. Every offset and length is checked against the bytes it claims before it is
  * followed, and every count against a hard limit before anything is allocated from it.
  */
-
-#define TAG(a, b, c, d) (((uint32_t)(a) << 24) | ((uint32_t)(b) << 16) | ((uint32_t)(c) << 8) | (uint32_t)(d))
 
 enum {
     ARG_1_AND_2_ARE_WORDS = 0x0001,
@@ -21,23 +20,6 @@ enum {
     SCALED_COMPONENT_OFFSET = 0x0800,
     UNSCALED_COMPONENT_OFFSET = 0x1000
 };
-
-static uint16_t u16(const uint8_t *at) {
-    return (uint16_t)(((unsigned)at[0] << 8) | at[1]);
-}
-
-static int16_t s16(const uint8_t *at) {
-    return (int16_t)u16(at);
-}
-
-static uint32_t u32(const uint8_t *at) {
-    return ((uint32_t)at[0] << 24) | ((uint32_t)at[1] << 16) | ((uint32_t)at[2] << 8) | at[3];
-}
-
-/** Whether `length` bytes from `offset` lie inside `size` bytes, without overflowing. */
-static int inside(uint64_t size, uint64_t offset, uint64_t length) {
-    return offset <= size && length <= size - offset;
-}
 
 static edds_status malformed(edds_error *error, const char *what) {
     font_fail(error, "malformed-font", "The TrueType font is malformed: %s.", what);
@@ -176,7 +158,7 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     face->size = size;
     face->cap_height = -1;
     if (size > FONT_MAX_FILE_BYTES) {
-        font_fail(error, "font-size-limit", "A font file is at most %u bytes.", FONT_MAX_FILE_BYTES);
+        font_fail(error, "font-file-limit", "A font file is at most %u bytes.", FONT_MAX_FILE_BYTES);
         return EDDS_INVALID_INPUT;
     }
     if (size < 12u) {

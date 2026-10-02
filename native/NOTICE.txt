@@ -1,4 +1,5 @@
-EDDS Converter
+Enfusion native executable (enfusion.exe)
 Copyright (c) 2026 Enfusion extension contributors
 
 This program is distributed under the MIT License in the repository root.
+Third-party notices are in THIRD-PARTY.md beside this file.

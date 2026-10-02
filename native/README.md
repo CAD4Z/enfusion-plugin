@@ -1,7 +1,8 @@
 # Native executable
 
 `enfusion` is the extension's C17 process. Its first argument names an area — `edds` converts and
-inspects textures — and each area is a static library linked into the one executable. It has no
+inspects textures, `font` makes SDF fonts from TrueType — and each area is a static library linked
+into the one executable. It has no
 third-party runtime dependencies and is linked with the static MSVC runtime. The extension invokes
 only the installed Windows x64 executable at `dist/native/win32-x64/enfusion.exe`, with
 `shell: false`.
@@ -197,39 +198,49 @@ What the engine is given:
   letters, the parts inside another contour are not an edge. Every texel at which the median of
   the three channels, or its bilinear interpolation, would disagree with the outline beyond a
   quarter pixel gets the true distance in all three channels.
-- One square cell per glyph, the largest box plus 10, with one pixel of zeros around and between
-  cells, in the smallest power-of-two atlas no taller than wide and at most 4096. Characters that
-  share a glyph share its cell.
+- One square cell per glyph, the largest box plus 10, with one pixel of zeros between cells, in the
+  smallest power-of-two atlas no taller than wide and at most 4096. Characters that share a glyph
+  share its cell.
 - Whole-pixel boxes from the exact outline extent at atlas size (`bx = floor(xMin)`,
   `by = ceil(yMax)`), placed so that the outline is exactly where it belongs after the engine
   centres the box in its cell, half pixels included. The advance is rounded.
-- `HEAD` carries the cap height from `OS/2.sCapHeight`, or the top of H when there is none,
-  `B = C = FontSize`, and zero bold and italic flags; the widget sets those itself.
+- `HEAD` carries the cap height from `OS/2.sCapHeight`; without one, the top of the font's H, of
+  Cyrillic Н when it has no H, or 0.7 em when it has neither, whether or not the set holds them.
+  `B = C = FontSize`, and the bold and italic flags are zero; the widget sets those itself.
 - `KERN` holds the GPOS `PairPos` format 1 and 2 pairs (`Extension` included) of the `kern`
-  feature of the DFLT, latn and cyrl scripts, the first matching subtable per lookup, or a format 0
-  `kern` table when the font has no GPOS. A pair is the first glyph's `XAdvance` in whole atlas
-  pixels; zeros, non-BMP characters and characters outside the set are left out. Pairs are sorted
-  by `(left << 16) | right`, as the engine's binary search expects.
+  feature in the default language system of the DFLT, latn and cyrl scripts — what text with no
+  language set is kerned by — the first matching subtable per lookup, or a format 0 `kern` table
+  when the font has no GPOS. A pair is the first glyph's `XAdvance` in whole atlas pixels; zeros,
+  non-BMP characters and characters outside the set are left out. Pairs are sorted by
+  `(left << 16) | right`, as the engine's binary search expects.
 - The atlas is BGRA8 with alpha 255, LZ4 without loss and without mips, written through
   `edds_core` in the same process.
 
 The three files are built and flushed in sibling temporaries and replaced together, with rollback
-on any failure. A font that cannot be made is refused with its reason: CFF or CFF2 outlines
-(`unsupported-outline-format`), a variable font (`variable-font-unsupported`), a collection
-(`font-collection-unsupported`), a `FontSize` outside 8 to 40 (`font-size-out-of-range`), and more
-cells than one 4096 atlas holds (`atlas-too-large`); the exit categories are those of `edds`.
-Every offset and length in the TrueType file is checked before it is followed. Hard limits: a font
-file of 64 MiB, 16384 points, 4096 contours and 4096 components per glyph, components nested 16
-deep, 8192 characters, a character file of 1 MiB, and 2^20 kerning pairs.
+on any failure; the black-box tests make that transaction fail through the same
+`EDDS_CONVERT_FAIL`, at stages named `font-*`. A font that cannot be made is refused with its
+reason: CFF or CFF2 outlines (`unsupported-outline-format`), a variable font
+(`variable-font-unsupported`), a collection (`font-collection-unsupported`), a `FontSize` outside 8
+to 40 (`font-size-out-of-range`), and more cells than one 4096 atlas holds (`atlas-too-large`); the
+exit categories are those of `edds`. Every offset and length in the TrueType file is checked
+before it is followed. Hard limits: a font file of 64 MiB (`font-file-limit`); 16384 points, 4096
+contours and 4096 components per glyph, components nested 16 deep (`glyph-size-limit`); 8192
+characters (`character-set-limit`) and a character file of 1 MiB (`character-file-limit`); 2^20
+kerning pairs (`kerning-limit`). A glyph whose box does not fit an atlas is `glyph-too-large`.
 
-`inspect` of an `.fnt` reports its header, cell, ranges, and glyph and pair counts; of a TrueType
-file, its family and style, typographic names first, from which a caller names a new font.
+A made font is reported as `font-generate` with its `guid`, `glyphCount`, `rangeCount`,
+`pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points the font lacks (`missing`)
+and those the generator drew (`drawn`), and the `source` family and style. `inspect` of an `.fnt`
+(`font-inspect`) reports its header — `name`, `size`, `type`, `cell`, `capHeight` (A),
+`lineHeight` (B), `c` (C), `r`, `bold`, `italic` — with `glyphCount`, `pairCount` and the code
+`ranges`; of a TrueType file (`font-source`), its `family` and `style`, typographic names first,
+`unitsPerEm` and `glyphCount`, from which a caller names a new font.
 
 Tests follow the EDDS rule: production code is never its own oracle. `enfusion-font-fixture`
 writes synthetic TrueType fonts — overlapping contours shaped like Ц, a contour with a hole,
 composite glyphs with offsets, scale, a two-by-two matrix, nesting and point matching, GPOS pairs
-behind PairPos 1, PairPos 2 and an Extension lookup, a variant with a `kern` table, and the fonts
-that must be refused. `enfusion-font-reference` reads the result with its own FNT5, EDDS and LZ4
+behind PairPos 1, PairPos 2 and an Extension lookup next to pairs only a language's own system
+enables, a variant with a `kern` table and no cap height, and the fonts that must be refused. `enfusion-font-reference` reads the result with its own FNT5, EDDS and LZ4
 readers, rebuilds every glyph from the atlas with the shader's formula at four times atlas
 resolution and compares it with its own rasterization of the planted outline, measures the field
 range from the commonest step of the median, and checks `KERN` against the planted pairs and the

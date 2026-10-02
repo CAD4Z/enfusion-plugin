@@ -42,6 +42,9 @@ int meta_skip_open_block(meta_scanner *scan);
 
 int meta_copy_text(char *destination, size_t capacity, const char *source);
 
+/** Whether `text` is exactly sixteen hexadecimal digits, the way a GUID is written. */
+int meta_valid_guid(const char *text);
+
 /**
  * `Name "{GUID}path"`: exactly sixteen hexadecimal digits in braces, then a non-empty resource
  * path. The GUID is copied character for character, case included.

@@ -89,8 +89,8 @@ typedef struct font_pair {
 
 /**
  * Kerning between the given characters, in whole atlas pixels: GPOS PairPos from the `kern`
- * feature of DFLT, latn and cyrl, or a format 0 `kern` table when there is no GPOS. Only BMP
- * characters, no zero values, ordered by `(left << 16) | right`.
+ * feature of the default language systems of DFLT, latn and cyrl, or a format 0 `kern` table when
+ * there is no GPOS. Only BMP characters, no zero values, ordered by `(left << 16) | right`.
  */
 edds_status font_face_kerning(
     const font_face *face,
@@ -147,6 +147,9 @@ int font_shape_bounds(const font_shape *shape, double box[4]);
 
 /** Nonzero-rule winding number of a point against every edge of the shape. */
 int font_shape_winding(const font_shape *shape, font_vec point);
+
+/** Appends an edge to the open loop; 0 when memory runs out. */
+int font_shape_push(font_shape *shape, const font_edge *edge);
 
 void font_shape_free(font_shape *shape);
 

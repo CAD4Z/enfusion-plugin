@@ -1,4 +1,4 @@
-#include "font_internal.h"
+#include "geometry.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -10,6 +10,9 @@
  * sharp. Where the median would say inside and the outline says outside, or the other way round —
  * at a texel or anywhere the shader interpolates between texels — the texel falls back to the true
  * distance in all three channels.
+ *
+ * The edge colouring, the signed and pseudo-distances and the equation solvers are adapted from
+ * msdfgen by Viktor Chlumský, MIT licence; the notice is in THIRD-PARTY.md.
  */
 
 #define RED 1u
@@ -31,45 +34,14 @@ typedef struct signed_distance {
     double dot;
 } signed_distance;
 
-static font_vec vec(double x, double y) {
-    font_vec result;
-    result.x = x;
-    result.y = y;
-    return result;
-}
-
-static font_vec minus(font_vec a, font_vec b) { return vec(a.x - b.x, a.y - b.y); }
-static font_vec plus(font_vec a, font_vec b) { return vec(a.x + b.x, a.y + b.y); }
-static font_vec times(font_vec a, double factor) { return vec(a.x * factor, a.y * factor); }
-static double dot(font_vec a, font_vec b) { return a.x * b.x + a.y * b.y; }
-static double cross(font_vec a, font_vec b) { return a.x * b.y - a.y * b.x; }
-static double length_of(font_vec a) { return sqrt(dot(a, a)); }
 
 static font_vec normalized(font_vec a) {
-    const double size = length_of(a);
-    return size == 0 ? vec(0, 1) : times(a, 1.0 / size);
+    const double size = vec_length(a);
+    return size == 0 ? vec_of(0, 1) : vec_times(a, 1.0 / size);
 }
 
 static double nonzero_sign(double value) {
     return value > 0 ? 1.0 : -1.0;
-}
-
-static font_vec point_at(const font_edge *edge, double t) {
-    if (!edge->quad) return plus(edge->p[0], times(minus(edge->p[2], edge->p[0]), t));
-    {
-        const double s = 1.0 - t;
-        return vec(s * s * edge->p[0].x + 2.0 * s * t * edge->p[1].x + t * t * edge->p[2].x,
-            s * s * edge->p[0].y + 2.0 * s * t * edge->p[1].y + t * t * edge->p[2].y);
-    }
-}
-
-static font_vec direction_at(const font_edge *edge, double t) {
-    if (edge->quad) {
-        const font_vec tangent = plus(times(minus(edge->p[1], edge->p[0]), 1.0 - t),
-            times(minus(edge->p[2], edge->p[1]), t));
-        if (tangent.x != 0 || tangent.y != 0) return tangent;
-    }
-    return minus(edge->p[2], edge->p[0]);
 }
 
 /* --- Colouring -------------------------------------------------------------------------------- */
@@ -99,34 +71,7 @@ static int trichotomy(size_t position, size_t count) {
 }
 
 static int is_corner(font_vec a, font_vec b, double threshold) {
-    return dot(a, b) <= 0 || fabs(cross(a, b)) > threshold;
-}
-
-static int push_colored(font_shape *shape, const font_edge *edge) {
-    if (shape->count == shape->capacity) {
-        const size_t capacity = shape->capacity == 0 ? 32u : shape->capacity * 2u;
-        font_edge *grown = realloc(shape->edges, capacity * sizeof *grown);
-        if (grown == NULL) return 0;
-        shape->edges = grown;
-        shape->capacity = capacity;
-    }
-    shape->edges[shape->count++] = *edge;
-    return 1;
-}
-
-static font_edge third_of(const font_edge *edge, int part) {
-    const double from = part / 3.0, to = (part + 1) / 3.0;
-    font_edge result = *edge;
-    result.p[0] = point_at(edge, from);
-    result.p[2] = point_at(edge, to);
-    if (edge->quad) {
-        const double a = (1.0 - from) * (1.0 - to), b = (1.0 - from) * to + from * (1.0 - to), c = from * to;
-        result.p[1] = vec(a * edge->p[0].x + b * edge->p[1].x + c * edge->p[2].x,
-            a * edge->p[0].y + b * edge->p[1].y + c * edge->p[2].y);
-    } else {
-        result.p[1] = point_at(edge, 0.5 * (from + to));
-    }
-    return result;
+    return vec_dot(a, b) <= 0 || fabs(vec_cross(a, b)) > threshold;
 }
 
 /**
@@ -151,8 +96,8 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
         const font_edge *edges = loops->edges + start;
         size_t corner_count = 0;
         for (size_t at = 0; at < count; ++at) {
-            const font_vec before = normalized(direction_at(&edges[(at + count - 1u) % count], 1.0));
-            const font_vec after = normalized(direction_at(&edges[at], 0.0));
+            const font_vec before = normalized(edge_direction(&edges[(at + count - 1u) % count], 1.0));
+            const font_vec after = normalized(edge_direction(&edges[at], 0.0));
             if (is_corner(before, after, threshold)) corners[corner_count++] = at;
         }
         if (corner_count == 0) {
@@ -160,7 +105,7 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
             for (size_t at = 0; at < count; ++at) {
                 font_edge edge = edges[at];
                 edge.color = color;
-                if (!push_colored(colored, &edge)) goto failed;
+                if (!font_shape_push(colored, &edge)) goto failed;
             }
         } else if (corner_count == 1) {
             unsigned colors[3];
@@ -173,15 +118,16 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                 for (size_t at = 0; at < count; ++at) {
                     font_edge edge = edges[(corners[0] + at) % count];
                     edge.color = colors[1 + trichotomy(at, count)];
-                    if (!push_colored(colored, &edge)) goto failed;
+                    if (!font_shape_push(colored, &edge)) goto failed;
                 }
             } else {
                 /* Too few edges for three runs: every edge splits in thirds, starting at the corner. */
                 const size_t parts = 3u * count;
                 for (size_t at = 0; at < parts; ++at) {
-                    font_edge edge = third_of(&edges[(corners[0] + at / 3u) % count], (int)(at % 3u));
+                    font_edge edge = edge_part(&edges[(corners[0] + at / 3u) % count],
+                        (double)(at % 3u) / 3.0, (double)(at % 3u + 1u) / 3.0);
                     edge.color = colors[1 + trichotomy(at, parts)];
-                    if (!push_colored(colored, &edge)) goto failed;
+                    if (!font_shape_push(colored, &edge)) goto failed;
                 }
             }
         } else {
@@ -197,7 +143,7 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                     switch_color(&color, &seed, spline == corner_count - 1u ? initial : 0u);
                 }
                 edge.color = color;
-                if (!push_colored(colored, &edge)) goto failed;
+                if (!font_shape_push(colored, &edge)) goto failed;
             }
         }
         start = end;
@@ -216,28 +162,6 @@ failed:
 
 static int closer(signed_distance a, signed_distance b) {
     return fabs(a.distance) < fabs(b.distance) || (fabs(a.distance) == fabs(b.distance) && a.dot < b.dot);
-}
-
-static int solve_quadratic(double roots[2], double a, double b, double c) {
-    if (a == 0 || fabs(b) > 1e12 * fabs(a)) {
-        if (b == 0) return 0;
-        roots[0] = -c / b;
-        return 1;
-    }
-    {
-        const double discriminant = b * b - 4.0 * a * c;
-        if (discriminant > 0) {
-            const double root = sqrt(discriminant);
-            roots[0] = (-b + root) / (2.0 * a);
-            roots[1] = (-b - root) / (2.0 * a);
-            return 2;
-        }
-        if (discriminant == 0) {
-            roots[0] = -b / (2.0 * a);
-            return 1;
-        }
-        return 0;
-    }
 }
 
 /** Real roots of x³ + a·x² + b·x + c: trigonometric for three, Cardano for one. */
@@ -278,61 +202,61 @@ static int solve_cubic(double roots[3], double a, double b, double c, double d) 
         /* Beyond this ratio the cubic term is noise and the quadratic is the better answer. */
         if (fabs(normed) < 1e6) return solve_normed_cubic(roots, normed, c / a, d / a);
     }
-    return solve_quadratic(roots, b, c, d);
+    return quadratic_roots(roots, b, c, d);
 }
 
 /** Signed distance from `origin` to an edge; positive on the edge's right, where the fill is. */
 static signed_distance edge_distance(const font_edge *edge, font_vec origin, double *param) {
     signed_distance result;
     if (!edge->quad) {
-        const font_vec aq = minus(origin, edge->p[0]);
-        const font_vec ab = minus(edge->p[2], edge->p[0]);
+        const font_vec aq = vec_minus(origin, edge->p[0]);
+        const font_vec ab = vec_minus(edge->p[2], edge->p[0]);
         font_vec nearer;
         double endpoint;
-        *param = dot(aq, ab) / dot(ab, ab);
-        nearer = minus(*param > 0.5 ? edge->p[2] : edge->p[0], origin);
-        endpoint = length_of(nearer);
+        *param = vec_dot(aq, ab) / vec_dot(ab, ab);
+        nearer = vec_minus(*param > 0.5 ? edge->p[2] : edge->p[0], origin);
+        endpoint = vec_length(nearer);
         if (*param > 0 && *param < 1) {
-            const double orthogonal = dot(normalized(vec(ab.y, -ab.x)), aq);
+            const double orthogonal = vec_dot(normalized(vec_of(ab.y, -ab.x)), aq);
             if (fabs(orthogonal) < endpoint) {
                 result.distance = orthogonal;
                 result.dot = 0;
                 return result;
             }
         }
-        result.distance = nonzero_sign(cross(aq, ab)) * endpoint;
-        result.dot = fabs(dot(normalized(ab), normalized(nearer)));
+        result.distance = nonzero_sign(vec_cross(aq, ab)) * endpoint;
+        result.dot = fabs(vec_dot(normalized(ab), normalized(nearer)));
         return result;
     }
     {
-        const font_vec qa = minus(edge->p[0], origin);
-        const font_vec ab = minus(edge->p[1], edge->p[0]);
-        const font_vec br = minus(minus(edge->p[2], edge->p[1]), ab);
-        const double a = dot(br, br);
-        const double b = 3.0 * dot(ab, br);
-        const double c = 2.0 * dot(ab, ab) + dot(qa, br);
-        const double d = dot(qa, ab);
+        const font_vec qa = vec_minus(edge->p[0], origin);
+        const font_vec ab = vec_minus(edge->p[1], edge->p[0]);
+        const font_vec br = vec_minus(vec_minus(edge->p[2], edge->p[1]), ab);
+        const double a = vec_dot(br, br);
+        const double b = 3.0 * vec_dot(ab, br);
+        const double c = 2.0 * vec_dot(ab, ab) + vec_dot(qa, br);
+        const double d = vec_dot(qa, ab);
         double roots[3];
         const int count = solve_cubic(roots, a, b, c, d);
-        font_vec direction = direction_at(edge, 0);
-        double nearest = nonzero_sign(cross(direction, qa)) * length_of(qa);
-        *param = -dot(qa, direction) / dot(direction, direction);
+        font_vec direction = edge_direction(edge, 0);
+        double nearest = nonzero_sign(vec_cross(direction, qa)) * vec_length(qa);
+        *param = -vec_dot(qa, direction) / vec_dot(direction, direction);
         {
-            const font_vec end = minus(edge->p[2], origin);
-            const double distance = length_of(end);
+            const font_vec end = vec_minus(edge->p[2], origin);
+            const double distance = vec_length(end);
             if (distance < fabs(nearest)) {
-                direction = direction_at(edge, 1);
-                nearest = nonzero_sign(cross(direction, end)) * distance;
-                *param = dot(minus(origin, edge->p[1]), direction) / dot(direction, direction);
+                direction = edge_direction(edge, 1);
+                nearest = nonzero_sign(vec_cross(direction, end)) * distance;
+                *param = vec_dot(vec_minus(origin, edge->p[1]), direction) / vec_dot(direction, direction);
             }
         }
         for (int at = 0; at < count; ++at) {
             const double t = roots[at];
             if (t > 0 && t < 1) {
-                const font_vec qe = plus(plus(qa, times(ab, 2.0 * t)), times(br, t * t));
-                const double distance = length_of(qe);
+                const font_vec qe = vec_plus(vec_plus(qa, vec_times(ab, 2.0 * t)), vec_times(br, t * t));
+                const double distance = vec_length(qe);
                 if (distance <= fabs(nearest)) {
-                    nearest = nonzero_sign(cross(plus(ab, times(br, t)), qe)) * distance;
+                    nearest = nonzero_sign(vec_cross(vec_plus(ab, vec_times(br, t)), qe)) * distance;
                     *param = t;
                 }
             }
@@ -341,9 +265,9 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
         if (*param >= 0 && *param <= 1) {
             result.dot = 0;
         } else if (*param < 0.5) {
-            result.dot = fabs(dot(normalized(direction_at(edge, 0)), normalized(qa)));
+            result.dot = fabs(vec_dot(normalized(edge_direction(edge, 0)), normalized(qa)));
         } else {
-            result.dot = fabs(dot(normalized(direction_at(edge, 1)), normalized(minus(edge->p[2], origin))));
+            result.dot = fabs(vec_dot(normalized(edge_direction(edge, 1)), normalized(vec_minus(edge->p[2], origin))));
         }
         return result;
     }
@@ -355,17 +279,17 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
  */
 static double pseudo_distance(const font_edge *edge, font_vec origin, signed_distance distance, double param) {
     if (param < 0) {
-        const font_vec direction = normalized(direction_at(edge, 0));
-        const font_vec aq = minus(origin, edge->p[0]);
-        if (dot(aq, direction) < 0) {
-            const double pseudo = cross(aq, direction);
+        const font_vec direction = normalized(edge_direction(edge, 0));
+        const font_vec aq = vec_minus(origin, edge->p[0]);
+        if (vec_dot(aq, direction) < 0) {
+            const double pseudo = vec_cross(aq, direction);
             if (fabs(pseudo) <= fabs(distance.distance)) return pseudo;
         }
     } else if (param > 1) {
-        const font_vec direction = normalized(direction_at(edge, 1));
-        const font_vec bq = minus(origin, edge->p[2]);
-        if (dot(bq, direction) > 0) {
-            const double pseudo = cross(bq, direction);
+        const font_vec direction = normalized(edge_direction(edge, 1));
+        const font_vec bq = vec_minus(origin, edge->p[2]);
+        if (vec_dot(bq, direction) > 0) {
+            const double pseudo = vec_cross(bq, direction);
             if (fabs(pseudo) <= fabs(distance.distance)) return pseudo;
         }
     }
@@ -418,7 +342,7 @@ typedef struct cell_field {
 } cell_field;
 
 static font_vec glyph_point(const cell_field *field, double x, double y) {
-    return vec(x - field->box_left + field->box_x, field->box_y - (y - field->box_top));
+    return vec_of(x - field->box_left + field->box_x, field->box_y - (y - field->box_top));
 }
 
 static void settle(cell_field *field, size_t texel) {

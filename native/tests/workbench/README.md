@@ -105,8 +105,9 @@ TrueType file, independently of the generator. Every glyph is rebuilt from the a
 engine's shader does — bilinear between texel centres, median of three channels, ink from 0.5 —
 at four times atlas resolution, and compared with the glyph's composed outline filled by the
 nonzero rule; a disagreement farther than half an atlas pixel from the outline is a fault. The
-`KERN` pairs are compared with the pairs a shaper takes from GPOS for the `kern` feature of DFLT,
-latn and cyrl, or from a format 0 `kern` table, rounded to whole atlas pixels.
+`KERN` pairs are compared with the pairs a shaper takes from GPOS for the `kern` feature of the
+default language systems of DFLT, latn and cyrl, or from a format 0 `kern` table, rounded to whole
+atlas pixels.
 
 ```powershell
 py font_check.py ..\..\.build\Release\enfusion.exe Sans-Regular.ttf Sans.charset.txt 32 --preview sample.png "AV Ту Ц"

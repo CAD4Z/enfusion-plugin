@@ -291,6 +291,62 @@ static int a_font_carries_what_it_has_and_names_what_it_lacks(void) {
     return 1;
 }
 
+static int a_font_without_a_cap_height_measures_its_h_even_when_the_set_leaves_h_out(void) {
+    /* The kern variant has no OS/2 cap height and an H 720 units tall: 23.04 px at 32, not 0.7 em. */
+    uint32_t no_h[] = { 'A', 'V' };
+    const font_characters wanted = { no_h, 2 };
+    test_bytes font = font_fixture(FONT_FIXTURE_KERN);
+    font_request request;
+    font_output output;
+    edds_error error;
+    FILE *fnt = temporary();
+    font_info info;
+    CHECK(font.data != NULL && fnt != NULL);
+    request.data = font.data;
+    request.size = font.size;
+    request.characters = &wanted;
+    request.font_size = 32;
+    request.name = "SDF_Fixture32";
+    CHECK(font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size && fseek(fnt, 0, SEEK_SET) == 0);
+    CHECK(font_inspect(fnt, &info, &error) == EDDS_OK);
+    CHECK(info.cap_height == 23.0f);
+    font_info_free(&info);
+    font_output_free(&output);
+    fixture_free(font);
+    fclose(fnt);
+    return 1;
+}
+
+static int an_fnt_whose_header_metrics_are_not_numbers_is_refused(void) {
+    static const char name[] = "SDF_Fixture32";
+    /* FORM, size, FNT5, HEAD, size, name length, the name, size, zero, type and cell: then A. */
+    const size_t cap_height_at = 24u + sizeof name + 13u;
+    static const uint8_t not_a_number[4] = { 0x00, 0x00, 0xC0, 0x7F };
+    test_bytes font = font_fixture(FONT_FIXTURE_GPOS);
+    font_request request;
+    font_output output;
+    edds_error error;
+    FILE *fnt = temporary();
+    font_info info;
+    CHECK(font.data != NULL && fnt != NULL);
+    request.data = font.data;
+    request.size = font.size;
+    request.characters = NULL;
+    request.font_size = 32;
+    request.name = name;
+    CHECK(font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(output.fnt_size > cap_height_at + 4u);
+    memcpy(output.fnt + cap_height_at, not_a_number, sizeof not_a_number);
+    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size && fseek(fnt, 0, SEEK_SET) == 0);
+    CHECK(font_inspect(fnt, &info, &error) == EDDS_INVALID_INPUT);
+    CHECK(strcmp(error.code, "malformed-fnt") == 0);
+    font_output_free(&output);
+    fixture_free(font);
+    fclose(fnt);
+    return 1;
+}
+
 static int a_source_says_its_typographic_names_first(void) {
     test_bytes font = font_fixture(FONT_FIXTURE_KERN);
     font_source_info info;
@@ -313,6 +369,8 @@ int main(void) {
         a_character_file_is_its_characters_and_nothing_between_them() &&
         fonts_the_engine_cannot_draw_are_refused_with_their_reason() &&
         a_font_carries_what_it_has_and_names_what_it_lacks() &&
+        a_font_without_a_cap_height_measures_its_h_even_when_the_set_leaves_h_out() &&
+        an_fnt_whose_header_metrics_are_not_numbers_is_refused() &&
         a_source_says_its_typographic_names_first();
     return passed ? 0 : 1;
 }

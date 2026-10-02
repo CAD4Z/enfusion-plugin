@@ -139,7 +139,7 @@ static edds_status prepare_job(const font_face *face, glyph_job *job, double sca
     }
     if (job->box_x < INT16_MIN || job->box_y > INT16_MAX || job->width > 4096u || job->height > 4096u ||
         job->advance < INT16_MIN || job->advance > INT16_MAX) {
-        font_fail(error, "glyph-size-limit", "A glyph is too large for an atlas.");
+        font_fail(error, "glyph-too-large", "A glyph is too large for an atlas.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
     return EDDS_OK;
@@ -162,9 +162,9 @@ static int choose_atlas(size_t cells, uint32_t cell, uint32_t *width, uint32_t *
             const uint32_t width_bits = area_bits - (uint32_t)height_bits;
             uint32_t across, down;
             if (width_bits > 12u) break;
-            /* One pixel of zeros around and between cells. */
-            across = ((1u << width_bits) - 1u) / (cell + 1u);
-            down = ((1u << (uint32_t)height_bits) - 1u) / (cell + 1u);
+            /* One pixel of zeros between cells; the last cell of a row may touch the edge. */
+            across = ((1u << width_bits) + 1u) / (cell + 1u);
+            down = ((1u << (uint32_t)height_bits) + 1u) / (cell + 1u);
             if ((uint64_t)across * down >= cells) {
                 *width = 1u << width_bits;
                 *height = 1u << (uint32_t)height_bits;
@@ -205,21 +205,37 @@ static int push_code(uint32_t **list, size_t *count, uint32_t code) {
     return 1;
 }
 
-/** OS/2.sCapHeight, else the top of H (or of Cyrillic Н), rounded the way Font Editor rounds. */
-static float cap_height_of(const font_face *face, double scale, const character *characters, size_t count,
-    const glyph_job *jobs) {
+/**
+ * OS/2.sCapHeight, else the top of the font's H, else of its Cyrillic Н, else 0.7 em, rounded the
+ * way Font Editor rounds. The glyph is looked up in the font whether or not the set holds it.
+ */
+static edds_status cap_height_of(const font_face *face, double scale, float *cap_height, edds_error *error) {
     static const uint32_t probes[] = { 0x48u, 0x41Du };
-    if (face->cap_height > 0) return (float)rounded(face->cap_height * scale);
+    if (face->cap_height > 0) {
+        *cap_height = (float)rounded(face->cap_height * scale);
+        return EDDS_OK;
+    }
     for (size_t probe = 0; probe < sizeof probes / sizeof probes[0]; ++probe) {
-        for (size_t at = 0; at < count; ++at) {
-            const glyph_job *job = &jobs[characters[at].job];
-            if (characters[at].code == probes[probe] && job->origin == FROM_FONT && job->height > 0) {
-                double box[4];
-                if (font_shape_bounds(&job->boundary, box)) return (float)rounded(box[3]);
-            }
+        glyph_job job;
+        double box[4];
+        int inked;
+        edds_status status;
+        memset(&job, 0, sizeof job);
+        job.origin = FROM_FONT;
+        job.glyph = font_face_glyph(face, probes[probe]);
+        if (job.glyph == 0) continue;
+        status = prepare_job(face, &job, scale, error);
+        inked = status == EDDS_OK && font_shape_bounds(&job.boundary, box);
+        font_shape_free(&job.shape);
+        font_shape_free(&job.boundary);
+        if (status != EDDS_OK) return status;
+        if (inked) {
+            *cap_height = (float)rounded(box[3]);
+            return EDDS_OK;
         }
     }
-    return (float)rounded(0.7 * face->units_per_em * scale);
+    *cap_height = (float)rounded(0.7 * face->units_per_em * scale);
+    return EDDS_OK;
 }
 
 edds_status font_generate(
@@ -331,8 +347,8 @@ edds_status font_generate(
     for (size_t at = 0; at < job_count; ++at) {
         font_placement *placement = &jobs[at].placement;
         placement->cell = output->cell;
-        placement->cell_x = 1u + (uint32_t)(at % columns) * (output->cell + 1u);
-        placement->cell_y = 1u + (uint32_t)(at / columns) * (output->cell + 1u);
+        placement->cell_x = (uint32_t)(at % columns) * (output->cell + 1u);
+        placement->cell_y = (uint32_t)(at / columns) * (output->cell + 1u);
         placement->box_x = jobs[at].box_x;
         placement->box_y = jobs[at].box_y;
         placement->width = jobs[at].width;
@@ -387,7 +403,8 @@ edds_status font_generate(
         header.name = request->name;
         header.size = request->font_size;
         header.cell = output->cell;
-        header.cap_height = cap_height_of(&face, scale, characters, character_count, jobs);
+        status = cap_height_of(&face, scale, &header.cap_height, error);
+        if (status != EDDS_OK) goto done;
         status = font_fnt_write(&header, entries, character_count, pairs, pair_count,
             &output->fnt, &output->fnt_size, &output->range_count, error);
     }

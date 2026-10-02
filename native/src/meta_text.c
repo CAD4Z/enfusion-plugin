@@ -144,19 +144,26 @@ int meta_copy_text(char *destination, size_t capacity, const char *source) {
     return 1;
 }
 
+int meta_valid_guid(const char *text) {
+    size_t at = 0;
+    for (; text[at] != '\0'; ++at) {
+        if (at == 16u || !isxdigit((unsigned char)text[at])) return 0;
+    }
+    return at == 16u;
+}
+
 int meta_parse_name(
     const char *value,
     char guid[EDDS_METADATA_GUID_BYTES],
     char *name,
     size_t name_capacity
 ) {
+    char digits[EDDS_METADATA_GUID_BYTES];
     const char *close;
-    if (value[0] != '{' || (close = strchr(value, '}')) == NULL || close - value != 17) return 0;
-    for (const char *at = value + 1; at < close; ++at) {
-        if (!isxdigit((unsigned char)*at)) return 0;
-    }
-    if (close[1] == '\0') return 0;
-    memcpy(guid, value + 1, 16);
-    guid[16] = '\0';
+    if (value[0] != '{' || (close = strchr(value, '}')) == NULL || close - value != 17 || close[1] == '\0') return 0;
+    memcpy(digits, value + 1, 16);
+    digits[16] = '\0';
+    if (!meta_valid_guid(digits)) return 0;
+    memcpy(guid, digits, sizeof digits);
     return meta_copy_text(name, name_capacity, close + 1);
 }

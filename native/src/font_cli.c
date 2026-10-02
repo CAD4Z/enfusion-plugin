@@ -5,6 +5,7 @@
 #endif
 
 #include "cli.h"
+#include "meta_text.h"
 
 #include <font/font.h>
 
@@ -93,23 +94,6 @@ static int parse_options(int argc, cli_char **argv, font_options *options) {
         *path = argv[++at];
     }
     return options->machine && options->protocol_seen && options->protocol == FONT_PROTOCOL_VERSION;
-}
-
-static int ascii_lower(cli_char value) {
-    return value >= (cli_char)'A' && value <= (cli_char)'Z' ? value + ((cli_char)'a' - (cli_char)'A') : value;
-}
-
-static int ends_with(const cli_char *path, const char *suffix) {
-    const size_t path_size = cli_strlen(path), suffix_size = strlen(suffix);
-    if (path_size < suffix_size) return 0;
-    for (size_t at = 0; at < suffix_size; ++at) {
-        if (ascii_lower(path[path_size - suffix_size + at]) != (unsigned char)suffix[at]) return 0;
-    }
-    return 1;
-}
-
-static int is_separator(cli_char value) {
-    return value == (cli_char)'/' || value == (cli_char)'\\';
 }
 
 /** A copy of `path` without its last `cut` characters, with `suffix` appended. */
@@ -423,14 +407,6 @@ static edds_status new_guid(const cli_char *folder, char guid[EDDS_METADATA_GUID
     return refuse(error, EDDS_INTERNAL_FAILURE, "guid-generation-failed", "No unused GUID could be generated.");
 }
 
-static int valid_guid(const char *guid) {
-    if (strlen(guid) != 16u) return 0;
-    for (const char *at = guid; *at != '\0'; ++at) {
-        if (!isxdigit((unsigned char)*at)) return 0;
-    }
-    return 1;
-}
-
 /* --- Generate --------------------------------------------------------------------------------- */
 
 typedef struct font_paths {
@@ -541,7 +517,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
     }
     if (options->guid != NULL) {
         char *guid = utf8_of(options->guid);
-        const int valid = guid != NULL && valid_guid(guid);
+        const int valid = guid != NULL && meta_valid_guid(guid);
         if (valid && recipe->guid[0] != '\0' && strcmp(recipe->guid, guid) != 0) {
             free(guid);
             return refuse(error, EDDS_INVALID_INPUT, "metadata-guid-mismatch",
@@ -658,17 +634,9 @@ static int generate_command(const font_options *options) {
         status = recipe_from_input(options, &paths, &recipe, &error);
     }
     if (status != EDDS_OK) goto done;
-    if (recipe.font_size < FONT_MIN_SIZE || recipe.font_size > FONT_MAX_SIZE) {
-        status = EDDS_UNSUPPORTED_FORMAT;
-        memset(&error, 0, sizeof error);
-        (void)snprintf(error.code, sizeof error.code, "font-size-out-of-range");
-        (void)snprintf(error.message, sizeof error.message, "FontSize %u is outside %u to %u atlas pixels.",
-            recipe.font_size, FONT_MIN_SIZE, FONT_MAX_SIZE);
-        goto done;
-    }
     read = read_file(paths.source, FONT_MAX_FILE_BYTES, &source, &source_size);
     if (read <= 0) {
-        status = refuse(&error, EDDS_INVALID_INPUT, read < 0 ? "font-size-limit" : "input-open-failed",
+        status = refuse(&error, EDDS_INVALID_INPUT, read < 0 ? "font-file-limit" : "input-open-failed",
             read < 0 ? "The source font is larger than a font may be." : "The source font could not be read.");
         goto done;
     }
@@ -756,7 +724,7 @@ static int inspect_source(const cli_char *path) {
     edds_status status;
     const int read = read_file(path, FONT_MAX_FILE_BYTES, &data, &size);
     if (read <= 0) {
-        return report_failure(refuse(&error, EDDS_INVALID_INPUT, read < 0 ? "font-size-limit" : "input-open-failed",
+        return report_failure(refuse(&error, EDDS_INVALID_INPUT, read < 0 ? "font-file-limit" : "input-open-failed",
             "The source font could not be read within the font size limit."), &error);
     }
     status = font_source_describe(data, size, &info, &error);

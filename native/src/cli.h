@@ -51,24 +51,24 @@ void cli_watch_cancel_file(const cli_char *path);
 int was_cancelled(void *context);
 
 FILE *open_input(const cli_char *path);
-FILE *open_output(const cli_char *path);
 int path_exists(const cli_char *path);
-int same_path(const cli_char *left, const cli_char *right);
-cli_char *append_suffix(const cli_char *path, const char *suffix);
 char *utf8_of(const cli_char *value);
 cli_char *cli_of_utf8(const char *value);
+
+/** ASCII case folding, the only folding a path suffix or a Windows path comparison needs. */
+int ascii_lower(cli_char value);
+int ends_with(const cli_char *path, const char *suffix);
+int is_separator(cli_char value);
 
 /** `EDDS_CONVERT_FAIL` names the one transaction stage a black-box test makes fail. */
 int injected(const char *stage);
 int sync_output(FILE *file, const char *stage);
 
 /**
- * `<target>.enfusion-<kind>-<pid>-<attempt>.tmp`: the sibling a process writes or moves a target
- * aside to. The extension removes the ones a dead process left by that name.
+ * One destination of an atomic publish: built in a sibling temporary
+ * `<target>.enfusion-<kind>-<pid>-<attempt>.tmp`, the old file moved aside to another. The
+ * extension removes the ones a dead process left by that name.
  */
-cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt);
-
-/** One destination of an atomic publish: built in a sibling temporary, the old file moved aside. */
 typedef struct cli_artifact {
     const cli_char *target;
     cli_char *temporary;

@@ -2,8 +2,8 @@
 
 The generator is not its own oracle. fontTools reads the same TrueType file independently: the
 composed outline of every glyph, and the GPOS pairs a shaper applies for the `kern` feature of
-DFLT, latn and cyrl (PairPos 1 and 2, Extension, first matching subtable per lookup), or a format 0
-`kern` table when there is no GPOS. The check then rebuilds each glyph from the atlas the way the
+the default language systems of DFLT, latn and cyrl (PairPos 1 and 2, Extension, first matching
+subtable per lookup), or a format 0 `kern` table when there is no GPOS. The check then rebuilds each glyph from the atlas the way the
 engine's shader does — bilinear, median of three, ink from 0.5 — at four times atlas resolution,
 and compares it with the outline filled by the nonzero rule.
 
@@ -205,18 +205,16 @@ def gpos_pairs(font, codes, cmap):
     lookups = set()
     features = table.FeatureList.FeatureRecord
     for script in table.ScriptList.ScriptRecord:
-        if script.ScriptTag not in ('DFLT', 'latn', 'cyrl'):
+        # Text with no language set: the default language system only, never a language's own.
+        system = script.Script.DefaultLangSys
+        if script.ScriptTag not in ('DFLT', 'latn', 'cyrl') or system is None:
             continue
-        systems = [script.Script.DefaultLangSys] + [record.LangSys for record in script.Script.LangSysRecord]
-        for system in systems:
-            if system is None:
-                continue
-            indices = list(system.FeatureIndex)
-            if system.ReqFeatureIndex != 0xFFFF:
-                indices.append(system.ReqFeatureIndex)
-            for index in indices:
-                if features[index].FeatureTag == 'kern':
-                    lookups.update(features[index].Feature.LookupListIndex)
+        indices = list(system.FeatureIndex)
+        if system.ReqFeatureIndex != 0xFFFF:
+            indices.append(system.ReqFeatureIndex)
+        for index in indices:
+            if features[index].FeatureTag == 'kern':
+                lookups.update(features[index].Feature.LookupListIndex)
     glyphs = {code: cmap[code] for code in codes if code in cmap and code <= 0xFFFF}
     totals = {}
     for index in sorted(lookups):
