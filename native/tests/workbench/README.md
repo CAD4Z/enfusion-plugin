@@ -97,3 +97,22 @@ The public-domain NVIDIA implementation provides supplementary arithmetic docume
 [FloatImage.cpp](https://github.com/castano/nvidia-texture-tools/blob/master/src/nvimage/FloatImage.cpp),
 [Filter.cpp](https://github.com/castano/nvidia-texture-tools/blob/master/src/nvimage/Filter.cpp),
 and [CompressorRGB.cpp](https://github.com/castano/nvidia-texture-tools/blob/master/src/nvtt/CompressorRGB.cpp).
+
+## Font check
+
+`font_check.py` compares a font the executable generates with what fontTools reads from the same
+TrueType file, independently of the generator. Every glyph is rebuilt from the atlas the way the
+engine's shader does — bilinear between texel centres, median of three channels, ink from 0.5 —
+at four times atlas resolution, and compared with the glyph's composed outline filled by the
+nonzero rule; a disagreement farther than half an atlas pixel from the outline is a fault. The
+`KERN` pairs are compared with the pairs a shaper takes from GPOS for the `kern` feature of DFLT,
+latn and cyrl, or from a format 0 `kern` table, rounded to whole atlas pixels.
+
+```powershell
+py font_check.py ..\..\.build\Release\enfusion.exe Sans-Regular.ttf Sans.charset.txt 32 --preview sample.png "AV Ту Ц"
+```
+
+It needs fontTools and numpy; fonts never enter the repository. `--preview` draws a line of text
+with `KERN` applied for a visual check. `font-kerning-golden.json` holds the pairs fontTools reads
+from the synthetic fixture `fixture-gpos.ttf` at size 32 with `fixture.charset.txt`, written with
+`--golden`; CI compares the generated `KERN` with it, so fontTools itself is not needed there.

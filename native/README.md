@@ -138,3 +138,100 @@ refuses an existing sibling metadata file. The optional `--expect-*-revision siz
 `missing`) triplet lets a caller bind the publish step to the filesystem snapshot it presented.
 Both artifacts are built and flushed in sibling temporary files, then replaced with rollback.
 `EDDS_CONVERT_FAIL` is reserved for the black-box transaction tests.
+
+## Fonts: SDF fonts from TrueType
+
+```text
+enfusion font generate --machine --protocol 1 --meta FONT.fnt.meta [--resource-name NAME] [--cancel-file PATH]
+enfusion font generate --machine --protocol 1 --input SOURCE.ttf --output FONT.fnt --resource-name NAME \
+  [--size N] [--characters FILE] [--guid HEX] [--cancel-file PATH]
+enfusion font inspect --machine --protocol 1 --input FONT.fnt
+enfusion font inspect --machine --protocol 1 --input SOURCE.ttf
+```
+
+`generate` turns a static TrueType font into what the engine draws an SDF font from: `FONT.fnt`
+(FNT5) and its atlas `FONT.edds`. Beside them it writes the recipe `FONT.fnt.meta`, which is also
+the font's Workbench identity:
+
+```text
+MetaFileClass {
+ Name "{GUID}Mod/GUI/Fonts/SDF_SansRegular32.fnt"
+ Configurations {
+  FNTResourceClass PC {
+   SourceFile "Sans-Regular.ttf"
+   Characters "Sans.charset.txt"
+   FontSize 32
+  }
+  FNTResourceClass XBOX_ONE : PC {
+  }
+  FNTResourceClass PS4 : PC {
+  }
+  FNTResourceClass LINUX : PC {
+  }
+ }
+}
+```
+
+`--meta` rebuilds a font from its recipe; `--input` makes a new font and a new recipe. `SourceFile`
+and `Characters` are relative to the folder of the recipe, with forward slashes. `FontSize` is the
+atlas size in pixels, 8 to 40, 32 when absent. Without `Characters` the font holds the built-in
+set: Basic Latin, Latin-1 and Cyrillic U+0400–U+045F. The recipe is always written back in
+canonical form: unknown fields and other platforms are dropped, and only the GUID is carried over
+character for character. A recipe whose GUID cannot be read is refused before anything is
+written. A new font gets `--guid` or a random GUID no `.meta` beside it uses; a font that already
+has a recipe keeps its GUID, and a different `--guid` is refused. The atlas is not registered: no
+`.edds.meta` is written for it.
+
+A character file is UTF-8 text, and every character in it is in the font; line breaks, other
+control characters and spaces only separate them. The space and U+25A1 □ are always in the font.
+A font without □ gets a square frame drawn by the generator. Characters the font has no glyph for
+are left out and listed under `missing` in the result; the generator's own glyphs are listed under
+`drawn`.
+
+What the engine is given:
+
+- MSDF (type 2) with `R = 8` and a field that runs from 0 to 1 over `1.5 × R / √2` atlas pixels,
+  which the engine's shader turns into an edge one screen pixel wide at the default text sharpness.
+- The sign of the field follows the nonzero rule of the whole glyph, and distances are to the
+  boundary of the union of its contours: where contours overlap, as in many Cyrillic and accented
+  letters, the parts inside another contour are not an edge. Every texel at which the median of
+  the three channels, or its bilinear interpolation, would disagree with the outline beyond a
+  quarter pixel gets the true distance in all three channels.
+- One square cell per glyph, the largest box plus 10, with one pixel of zeros around and between
+  cells, in the smallest power-of-two atlas no taller than wide and at most 4096. Characters that
+  share a glyph share its cell.
+- Whole-pixel boxes from the exact outline extent at atlas size (`bx = floor(xMin)`,
+  `by = ceil(yMax)`), placed so that the outline is exactly where it belongs after the engine
+  centres the box in its cell, half pixels included. The advance is rounded.
+- `HEAD` carries the cap height from `OS/2.sCapHeight`, or the top of H when there is none,
+  `B = C = FontSize`, and zero bold and italic flags; the widget sets those itself.
+- `KERN` holds the GPOS `PairPos` format 1 and 2 pairs (`Extension` included) of the `kern`
+  feature of the DFLT, latn and cyrl scripts, the first matching subtable per lookup, or a format 0
+  `kern` table when the font has no GPOS. A pair is the first glyph's `XAdvance` in whole atlas
+  pixels; zeros, non-BMP characters and characters outside the set are left out. Pairs are sorted
+  by `(left << 16) | right`, as the engine's binary search expects.
+- The atlas is BGRA8 with alpha 255, LZ4 without loss and without mips, written through
+  `edds_core` in the same process.
+
+The three files are built and flushed in sibling temporaries and replaced together, with rollback
+on any failure. A font that cannot be made is refused with its reason: CFF or CFF2 outlines
+(`unsupported-outline-format`), a variable font (`variable-font-unsupported`), a collection
+(`font-collection-unsupported`), a `FontSize` outside 8 to 40 (`font-size-out-of-range`), and more
+cells than one 4096 atlas holds (`atlas-too-large`); the exit categories are those of `edds`.
+Every offset and length in the TrueType file is checked before it is followed. Hard limits: a font
+file of 64 MiB, 16384 points, 4096 contours and 4096 components per glyph, components nested 16
+deep, 8192 characters, a character file of 1 MiB, and 2^20 kerning pairs.
+
+`inspect` of an `.fnt` reports its header, cell, ranges, and glyph and pair counts; of a TrueType
+file, its family and style, typographic names first, from which a caller names a new font.
+
+Tests follow the EDDS rule: production code is never its own oracle. `enfusion-font-fixture`
+writes synthetic TrueType fonts — overlapping contours shaped like Ц, a contour with a hole,
+composite glyphs with offsets, scale, a two-by-two matrix, nesting and point matching, GPOS pairs
+behind PairPos 1, PairPos 2 and an Extension lookup, a variant with a `kern` table, and the fonts
+that must be refused. `enfusion-font-reference` reads the result with its own FNT5, EDDS and LZ4
+readers, rebuilds every glyph from the atlas with the shader's formula at four times atlas
+resolution and compares it with its own rasterization of the planted outline, measures the field
+range from the commonest step of the median, and checks `KERN` against the planted pairs and the
+pairs fontTools read from the same font (`tests/workbench/font-kerning-golden.json`).
+`tests/workbench/font_check.py` repeats both comparisons against fontTools for any real font.

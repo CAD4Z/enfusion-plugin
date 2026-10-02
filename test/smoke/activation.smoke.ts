@@ -77,7 +77,7 @@ export async function run(): Promise<void> {
     protocolVersion: 1,
     kind: 'protocol',
     toolVersion: '0.2.0',
-    areas: { edds: ['inspect', 'preview', 'convert', 'batch'] },
+    areas: { edds: ['inspect', 'preview', 'convert', 'batch'], font: ['generate', 'inspect'] },
   });
 
   const secondSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.tga');

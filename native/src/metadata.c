@@ -1,31 +1,11 @@
 #include "memory.h"
+#include "meta_text.h"
 #include <edds/edds.h>
 
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef enum token_kind {
-    TOKEN_END,
-    TOKEN_WORD,
-    TOKEN_STRING,
-    TOKEN_OPEN,
-    TOKEN_CLOSE,
-    TOKEN_COLON,
-    TOKEN_INVALID
-} token_kind;
-
-typedef struct token {
-    token_kind kind;
-    char text[EDDS_METADATA_PATH_BYTES];
-} token;
-
-typedef struct scanner {
-    const char *source;
-    size_t size;
-    size_t at;
-} scanner;
 
 enum setting_bit {
     SETTING_SOURCE = 1u << 0,
@@ -55,142 +35,9 @@ static void fail(edds_error *error, const char *code, const char *format, ...) {
     va_end(arguments);
 }
 
-static int read_text(FILE *input, char **source, size_t *size, edds_error *error) {
-    long length;
-    char *allocation;
-    *source = NULL;
-    *size = 0;
-    if (fseek(input, 0, SEEK_END) != 0 || (length = ftell(input)) < 0 ||
-        fseek(input, 0, SEEK_SET) != 0 || (uint64_t)length > EDDS_MAX_FILE_BYTES) {
-        fail(error, "metadata-size-limit", "The metadata could not be measured within the input limit.");
-        return 0;
-    }
-    allocation = edds_alloc((size_t)length + 1u);
-    if (allocation == NULL) {
-        fail(error, "allocation-failed", "Memory for the metadata could not be allocated.");
-        return 0;
-    }
-    if (fread(allocation, 1, (size_t)length, input) != (size_t)length) {
-        edds_free(allocation);
-        fail(error, "metadata-read-failed", "The metadata could not be read completely.");
-        return 0;
-    }
-    allocation[length] = '\0';
-    *source = allocation;
-    *size = (size_t)length;
-    return 1;
-}
-
-static int skip_space(scanner *scan) {
-    for (;;) {
-        while (scan->at < scan->size && isspace((unsigned char)scan->source[scan->at])) ++scan->at;
-        if (scan->at + 1u >= scan->size || scan->source[scan->at] != '/') return 1;
-        if (scan->source[scan->at + 1u] == '/') {
-            scan->at += 2;
-            while (scan->at < scan->size && scan->source[scan->at] != '\n') ++scan->at;
-        } else if (scan->source[scan->at + 1u] == '*') {
-            scan->at += 2;
-            while (scan->at + 1u < scan->size &&
-                   !(scan->source[scan->at] == '*' && scan->source[scan->at + 1u] == '/')) {
-                ++scan->at;
-            }
-            if (scan->at + 1u >= scan->size) return 0;
-            scan->at += 2;
-        } else {
-            return 1;
-        }
-    }
-}
-
-static token next_token(scanner *scan) {
-    token result;
-    size_t length = 0;
-    memset(&result, 0, sizeof result);
-    if (!skip_space(scan)) {
-        result.kind = TOKEN_INVALID;
-        return result;
-    }
-    if (scan->at == scan->size) {
-        result.kind = TOKEN_END;
-        return result;
-    }
-    if (scan->source[scan->at] == '{') {
-        ++scan->at;
-        result.kind = TOKEN_OPEN;
-        return result;
-    }
-    if (scan->source[scan->at] == '}') {
-        ++scan->at;
-        result.kind = TOKEN_CLOSE;
-        return result;
-    }
-    if (scan->source[scan->at] == ':') {
-        ++scan->at;
-        result.kind = TOKEN_COLON;
-        return result;
-    }
-    if (scan->source[scan->at] == '"') {
-        ++scan->at;
-        result.kind = TOKEN_STRING;
-        while (scan->at < scan->size && scan->source[scan->at] != '"') {
-            char value = scan->source[scan->at++];
-            if (value == '\\' && scan->at < scan->size &&
-                (scan->source[scan->at] == '\\' || scan->source[scan->at] == '"')) {
-                value = scan->source[scan->at++];
-            }
-            if (length + 1u >= sizeof result.text || (unsigned char)value < 0x20u) {
-                result.kind = TOKEN_INVALID;
-                return result;
-            }
-            result.text[length++] = value;
-        }
-        if (scan->at >= scan->size) {
-            result.kind = TOKEN_INVALID;
-            return result;
-        }
-        ++scan->at;
-        result.text[length] = '\0';
-        return result;
-    }
-    result.kind = TOKEN_WORD;
-    while (scan->at < scan->size && !isspace((unsigned char)scan->source[scan->at]) &&
-           scan->source[scan->at] != '{' && scan->source[scan->at] != '}' &&
-           scan->source[scan->at] != ':' && scan->source[scan->at] != '"') {
-        if (length + 1u >= sizeof result.text) {
-            result.kind = TOKEN_INVALID;
-            return result;
-        }
-        result.text[length++] = scan->source[scan->at++];
-    }
-    if (length == 0) {
-        result.kind = TOKEN_INVALID;
-        return result;
-    }
-    result.text[length] = '\0';
-    return result;
-}
-
-static int skip_open_block(scanner *scan) {
-    unsigned depth = 1;
-    while (depth != 0) {
-        const token value = next_token(scan);
-        if (value.kind == TOKEN_OPEN) ++depth;
-        else if (value.kind == TOKEN_CLOSE) --depth;
-        else if (value.kind == TOKEN_END || value.kind == TOKEN_INVALID) return 0;
-    }
-    return 1;
-}
-
-static int copy_text(char *destination, size_t capacity, const char *source) {
-    const size_t size = strlen(source);
-    if (size >= capacity) return 0;
-    memcpy(destination, source, size + 1u);
-    return 1;
-}
-
-static int unsigned_value(const token *value, uint32_t *result) {
+static int unsigned_value(const meta_token *value, uint32_t *result) {
     uint64_t parsed = 0;
-    if (value->kind != TOKEN_WORD || value->text[0] == '\0') return 0;
+    if (value->kind != META_TOKEN_WORD || value->text[0] == '\0') return 0;
     for (const char *at = value->text; *at != '\0'; ++at) {
         if (*at < '0' || *at > '9') return 0;
         parsed = parsed * 10u + (unsigned)(*at - '0');
@@ -205,12 +52,12 @@ static int unsigned_value(const token *value, uint32_t *result) {
  * decimals, and those are exactly the values that survive a round trip through this converter;
  * a fourth decimal would have to be rounded on the way back out and is refused instead.
  */
-static int quality_value(const token *value, uint32_t *result) {
+static int quality_value(const meta_token *value, uint32_t *result) {
     const char *at = value->text;
     uint32_t whole = 0;
     uint32_t fraction = 0;
     unsigned digits = 0;
-    if (value->kind != TOKEN_WORD || *at < '0' || *at > '9') return 0;
+    if (value->kind != META_TOKEN_WORD || *at < '0' || *at > '9') return 0;
     while (*at >= '0' && *at <= '9') {
         whole = whole * 10u + (uint32_t)(*at - '0');
         if (whole > 1u) return 0;
@@ -265,8 +112,8 @@ static edds_status unsupported(edds_error *error, const char *key, const char *v
 static edds_status recipe_setting(
     edds_metadata *metadata,
     uint32_t *seen,
-    const token *key,
-    const token *value,
+    const meta_token *key,
+    const meta_token *value,
     edds_error *error
 ) {
     uint32_t bit = 0;
@@ -293,11 +140,11 @@ static edds_status recipe_setting(
     }
     *seen |= bit;
     if (bit == SETTING_SOURCE) {
-        if (value->kind != TOKEN_STRING ||
-            !copy_text(metadata->source_file, sizeof metadata->source_file, value->text)) goto malformed;
+        if (value->kind != META_TOKEN_STRING ||
+            !meta_copy_text(metadata->source_file, sizeof metadata->source_file, value->text)) goto malformed;
         return EDDS_OK;
     }
-    if (value->kind != TOKEN_WORD) goto malformed;
+    if (value->kind != META_TOKEN_WORD) goto malformed;
     if (bit == SETTING_TARGET) {
         static const char *const known[] = { "EnfusionDDS", "EnfusionDDS_LZ0", "EnfusionDDS_LZ4", "DirectXDDS" };
         if (!is_one_of(value->text, known, sizeof known / sizeof known[0])) goto malformed;
@@ -373,7 +220,7 @@ malformed:
 }
 
 static edds_status parse_recipe(
-    scanner *scan,
+    meta_scanner *scan,
     edds_metadata *metadata,
     edds_error *error
 ) {
@@ -381,17 +228,17 @@ static edds_status parse_recipe(
     edds_status pending = EDDS_OK;
     edds_error pending_error = { { 0 }, { 0 } };
     for (;;) {
-        const token key = next_token(scan);
-        token value;
+        const meta_token key = meta_next_token(scan);
+        meta_token value;
         edds_status status;
-        if (key.kind == TOKEN_CLOSE) break;
-        if (key.kind != TOKEN_WORD) {
+        if (key.kind == META_TOKEN_CLOSE) break;
+        if (key.kind != META_TOKEN_WORD) {
             fail(error, "malformed-metadata", "The PC recipe is malformed.");
             return EDDS_INVALID_INPUT;
         }
-        value = next_token(scan);
-        if (value.kind == TOKEN_OPEN) {
-            if (!skip_open_block(scan)) {
+        value = meta_next_token(scan);
+        if (value.kind == META_TOKEN_OPEN) {
+            if (!meta_skip_open_block(scan)) {
                 fail(error, "malformed-metadata", "A metadata block is not closed.");
                 return EDDS_INVALID_INPUT;
             }
@@ -432,7 +279,7 @@ static edds_status parse_recipe(
 }
 
 static edds_status parse_configurations(
-    scanner *scan,
+    meta_scanner *scan,
     edds_metadata *metadata,
     int *found_pc,
     edds_error *error
@@ -440,23 +287,23 @@ static edds_status parse_configurations(
     edds_status pending = EDDS_OK;
     edds_error pending_error = { { 0 }, { 0 } };
     for (;;) {
-        token resource = next_token(scan);
-        token platform;
-        token next;
+        meta_token resource = meta_next_token(scan);
+        meta_token platform;
+        meta_token next;
         const edds_source_capability *recognized;
-        if (resource.kind == TOKEN_CLOSE) {
+        if (resource.kind == META_TOKEN_CLOSE) {
             if (pending != EDDS_OK) *error = pending_error;
             return pending;
         }
-        if (resource.kind != TOKEN_WORD) goto malformed;
-        platform = next_token(scan);
-        if (platform.kind != TOKEN_WORD) goto malformed;
-        next = next_token(scan);
-        if (next.kind == TOKEN_COLON) {
-            if (next_token(scan).kind != TOKEN_WORD) goto malformed;
-            next = next_token(scan);
+        if (resource.kind != META_TOKEN_WORD) goto malformed;
+        platform = meta_next_token(scan);
+        if (platform.kind != META_TOKEN_WORD) goto malformed;
+        next = meta_next_token(scan);
+        if (next.kind == META_TOKEN_COLON) {
+            if (meta_next_token(scan).kind != META_TOKEN_WORD) goto malformed;
+            next = meta_next_token(scan);
         }
-        if (next.kind != TOKEN_OPEN) goto malformed;
+        if (next.kind != META_TOKEN_OPEN) goto malformed;
         recognized = edds_source_capability_of_resource_class(resource.text);
         if (recognized != NULL && strcmp(platform.text, "PC") == 0) {
             edds_status status;
@@ -474,7 +321,7 @@ static edds_status parse_configurations(
             } else if (status != EDDS_OK) {
                 return status;
             }
-        } else if (!skip_open_block(scan)) {
+        } else if (!meta_skip_open_block(scan)) {
             goto malformed;
         }
     }
@@ -482,18 +329,6 @@ static edds_status parse_configurations(
 malformed:
     fail(error, "malformed-metadata", "The Configurations block is malformed.");
     return EDDS_INVALID_INPUT;
-}
-
-static int parse_name(const char *value, edds_metadata *metadata) {
-    const char *close;
-    if (value[0] != '{' || (close = strchr(value, '}')) == NULL || close - value != 17) return 0;
-    for (const char *at = value + 1; at < close; ++at) {
-        if (!isxdigit((unsigned char)*at)) return 0;
-    }
-    if (close[1] == '\0') return 0;
-    memcpy(metadata->guid, value + 1, 16);
-    metadata->guid[16] = '\0';
-    return copy_text(metadata->name, sizeof metadata->name, close + 1);
 }
 
 static int extension_is(const char *path, const char *extension) {
@@ -510,8 +345,8 @@ static int extension_is(const char *path, const char *extension) {
 edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error) {
     char *source = NULL;
     size_t size = 0;
-    scanner scan;
-    token value;
+    meta_scanner scan;
+    meta_token value;
     int found_name = 0;
     int found_configurations = 0;
     int found_pc = 0;
@@ -524,34 +359,35 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
     }
     memset(metadata, 0, sizeof *metadata);
     edds_default_profile(&metadata->profile);
-    if (!read_text(input, &source, &size, error)) return EDDS_INVALID_INPUT;
+    if (!meta_read_text(input, &source, &size, error)) return EDDS_INVALID_INPUT;
     scan.source = source;
     scan.size = size;
     scan.at = 0;
-    value = next_token(&scan);
-    if (value.kind != TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 ||
-        next_token(&scan).kind != TOKEN_OPEN) {
+    value = meta_next_token(&scan);
+    if (value.kind != META_TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 ||
+        meta_next_token(&scan).kind != META_TOKEN_OPEN) {
         fail(error, "malformed-metadata", "Metadata must contain one MetaFileClass block.");
         goto done;
     }
     for (;;) {
-        token key = next_token(&scan);
-        token field;
-        if (key.kind == TOKEN_CLOSE) break;
-        if (key.kind != TOKEN_WORD) {
+        meta_token key = meta_next_token(&scan);
+        meta_token field;
+        if (key.kind == META_TOKEN_CLOSE) break;
+        if (key.kind != META_TOKEN_WORD) {
             fail(error, "malformed-metadata", "The MetaFileClass block is malformed.");
             goto done;
         }
-        field = next_token(&scan);
+        field = meta_next_token(&scan);
         if (strcmp(key.text, "Name") == 0) {
-            if (found_name || field.kind != TOKEN_STRING || !parse_name(field.text, metadata)) {
+            if (found_name || field.kind != META_TOKEN_STRING ||
+                !meta_parse_name(field.text, metadata->guid, metadata->name, sizeof metadata->name)) {
                 fail(error, "malformed-guid", "Metadata Name must begin with one 64-bit hexadecimal GUID.");
                 goto done;
             }
             found_name = 1;
         } else if (strcmp(key.text, "Configurations") == 0) {
             edds_status configuration_status;
-            if (found_configurations || field.kind != TOKEN_OPEN) {
+            if (found_configurations || field.kind != META_TOKEN_OPEN) {
                 fail(error, "malformed-metadata", "Metadata must contain one Configurations block.");
                 goto done;
             }
@@ -564,12 +400,12 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
                 status = configuration_status;
                 goto done;
             }
-        } else if (field.kind == TOKEN_OPEN && !skip_open_block(&scan)) {
+        } else if (field.kind == META_TOKEN_OPEN && !meta_skip_open_block(&scan)) {
             fail(error, "malformed-metadata", "An unknown metadata block is not closed.");
             goto done;
         }
     }
-    if (next_token(&scan).kind != TOKEN_END || !found_name || !found_configurations || !found_pc) {
+    if (meta_next_token(&scan).kind != META_TOKEN_END || !found_name || !found_configurations || !found_pc) {
         fail(error, "incomplete-metadata", "Metadata requires Name and one source-image PC recipe.");
         goto done;
     }

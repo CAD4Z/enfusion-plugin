@@ -285,6 +285,23 @@ edds_status edds_convert(
     edds_error *error
 );
 
+/**
+ * Encodes one top-to-bottom RGBA8 image that already exists in memory — a generated atlas — through
+ * the same profile contract, runtime formats and container writer as a converted source file.
+ * `has_alpha` is what the image declares, exactly as a decoder would report it for a file.
+ */
+edds_status edds_encode_rgba(
+    const uint8_t *rgba,
+    uint32_t width,
+    uint32_t height,
+    int has_alpha,
+    FILE *output,
+    const edds_profile *profile,
+    edds_cancelled_fn cancelled,
+    void *cancel_context,
+    edds_error *error
+);
+
 edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error);
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error);
 

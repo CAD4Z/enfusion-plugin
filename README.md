@@ -130,7 +130,8 @@ The platform-specific VSIX carries its own C17 `enfusion.exe`: one executable wh
 names an area, so textures are `enfusion edds ...`. The extension only starts that binary from its
 installation directory, passes arguments without a shell and checks protocol compatibility before
 asking it to inspect a file. The executable has no DayZ Tools, language runtime or dynamically
-loaded codec dependency.
+loaded codec dependency. Its `font` area makes SDF fonts the engine draws from static TrueType
+fonts, with the recipe kept in `.fnt.meta`; see [the native README](native/README.md#fonts-sdf-fonts-from-truetype).
 
 The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists
 saying what the next launch is — which **target**, and whether it is a **Debug** or a **Release**

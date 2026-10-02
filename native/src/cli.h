@@ -36,14 +36,57 @@ typedef char cli_char;
 
 /** Whether a platform argument is exactly this ASCII text. */
 int equals(const cli_char *left, const char *right);
+int unsigned_argument(const cli_char *text, uint32_t *value);
 
 /**
  * The one machine error envelope on stdout, plus a line for a human on stderr. Returns the exit
  * code, which is the status's stable category.
  */
 int report_failure(edds_status status, const edds_error *error);
+void json_string(const char *text);
+
+/** SIGINT, or the cancel file a caller named, asks a command to stop at its next safe point. */
+void cli_catch_interrupts(void);
+void cli_watch_cancel_file(const cli_char *path);
+int was_cancelled(void *context);
+
+FILE *open_input(const cli_char *path);
+FILE *open_output(const cli_char *path);
+int path_exists(const cli_char *path);
+int same_path(const cli_char *left, const cli_char *right);
+cli_char *append_suffix(const cli_char *path, const char *suffix);
+char *utf8_of(const cli_char *value);
+cli_char *cli_of_utf8(const char *value);
+
+/** `EDDS_CONVERT_FAIL` names the one transaction stage a black-box test makes fail. */
+int injected(const char *stage);
+int sync_output(FILE *file, const char *stage);
+
+/**
+ * `<target>.enfusion-<kind>-<pid>-<attempt>.tmp`: the sibling a process writes or moves a target
+ * aside to. The extension removes the ones a dead process left by that name.
+ */
+cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt);
+
+/** One destination of an atomic publish: built in a sibling temporary, the old file moved aside. */
+typedef struct cli_artifact {
+    const cli_char *target;
+    cli_char *temporary;
+    cli_char *backup;
+    int had_previous;
+    int committed;
+} cli_artifact;
+
+FILE *create_temporary(cli_artifact *artifact, const char *kind);
+int backup_artifact(cli_artifact *artifact, const char *kind, const char *stage);
+int commit_artifact(cli_artifact *artifact, const char *stage);
+void rollback_artifact(cli_artifact *artifact);
+void cleanup_artifact(cli_artifact *artifact, int success);
 
 /** `enfusion edds ...`; `argv[0]` is the area itself. */
 int edds_command(int argc, cli_char **argv);
+
+/** `enfusion font ...`; `argv[0]` is the area itself. */
+int font_command(int argc, cli_char **argv);
 
 #endif

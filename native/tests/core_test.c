@@ -2707,6 +2707,52 @@ static int a_dxt5_colour_block_is_never_read_as_punch_through(void) {
     return 1;
 }
 
+/** A generated atlas never exists as a file, so it enters the same writer straight from memory. */
+static int an_in_memory_atlas_encodes_losslessly_without_mips(void) {
+    enum { SIDE = 64 };
+    static uint8_t pixels[SIDE * SIDE * 4];
+    FILE *output = temporary();
+    edds_profile profile;
+    edds_info info;
+    edds_error error;
+    uint8_t *rgba = NULL;
+    size_t size = 0;
+
+    for (size_t at = 0; at < sizeof pixels; at += 4u) {
+        /* Mostly zero like the gaps of an atlas, with a band of distinct values to keep. */
+        const uint8_t value = at / 4u % SIDE < 8u ? (uint8_t)(at / 4u * 7u) : 0u;
+        pixels[at] = value;
+        pixels[at + 1u] = (uint8_t)(255u - value);
+        pixels[at + 2u] = (uint8_t)(value / 2u);
+        pixels[at + 3u] = 255u;
+    }
+    edds_default_profile(&profile);
+    profile.format_compress = EDDS_COMPRESS_BEST;
+    profile.compress_threshold = 100;
+    profile.generate_mips = 0;
+
+    CHECK(output != NULL);
+    CHECK(edds_encode_rgba(pixels, SIDE, SIDE, 1, output, &profile, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(fseek(output, 0, SEEK_SET) == 0);
+    CHECK(edds_inspect(output, &info, never_cancelled, NULL, &error) == EDDS_OK);
+    CHECK(info.width == SIDE && info.height == SIDE && info.mip_count == 1);
+    CHECK(info.pixel_format == EDDS_PIXEL_BGRA8);
+    CHECK(info.mips[0].container == EDDS_CONTAINER_LZ4);
+    CHECK(edds_preview(output, &info, 0, never_cancelled, NULL, &rgba, &size, &error) == EDDS_OK);
+    CHECK(size == sizeof pixels && memcmp(rgba, pixels, size) == 0);
+    edds_free(rgba);
+    fclose(output);
+
+    output = temporary();
+    CHECK(output != NULL);
+    CHECK(edds_encode_rgba(pixels, 0, SIDE, 1, output, &profile, never_cancelled, NULL, &error) ==
+        EDDS_INVALID_INPUT);
+    CHECK(edds_encode_rgba(pixels, SIDE, SIDE, 1, output, &profile, always_cancelled, NULL, &error) ==
+        EDDS_CANCELLED);
+    fclose(output);
+    return 1;
+}
+
 int main(void) {
     const int passed =
         copy_inspection_and_preview() &&
@@ -2772,7 +2818,8 @@ int main(void) {
         every_conversion_round_trips_through_metadata() &&
         metadata_quality_text_is_exact_or_refused() &&
         a_stored_dxt1_block_decodes_to_its_pixels() &&
-        a_dxt5_colour_block_is_never_read_as_punch_through();
+        a_dxt5_colour_block_is_never_read_as_punch_through() &&
+        an_in_memory_atlas_encodes_losslessly_without_mips();
 
     return passed ? 0 : 1;
 }

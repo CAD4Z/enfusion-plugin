@@ -43,15 +43,36 @@ add_library(edds_core STATIC
   src/decode_dds.c
   src/convert.c
   src/metadata.c
+  src/meta_text.c
   src/batch.c
   src/pool.c)
 target_include_directories(edds_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(edds_core PUBLIC Threads::Threads)
 enfusion_configure_target(edds_core)
 
+# SDF fonts from static TrueType: the reader, the field, the atlas layout and FNT5. The atlas
+# itself is written through edds_core.
+add_library(font_core STATIC
+  src/font/recipe.c
+  src/font/characters.c
+  src/font/sfnt.c
+  src/font/kerning.c
+  src/font/shape.c
+  src/font/msdf.c
+  src/font/fnt.c
+  src/font/generate.c)
+target_include_directories(font_core
+  PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(font_core PUBLIC edds_core)
+if(UNIX)
+  target_link_libraries(font_core PUBLIC m)
+endif()
+enfusion_configure_target(font_core)
+
 # One executable, one first-level subcommand per area: `enfusion edds ...`.
-add_executable(enfusion src/main.c src/cli.c)
-target_link_libraries(enfusion PRIVATE edds_core)
+add_executable(enfusion src/main.c src/cli.c src/font_cli.c)
+target_link_libraries(enfusion PRIVATE edds_core font_core)
 enfusion_configure_target(enfusion)
 
 install(TARGETS enfusion RUNTIME DESTINATION .)
@@ -70,6 +91,32 @@ if(BUILD_TESTING AND ENFUSION_BUILD_TESTS)
   add_executable(edds-fixture tests/fixture_generator.c)
   target_link_libraries(edds-fixture PRIVATE edds_test_fixture)
   enfusion_configure_target(edds-fixture)
+
+  # Synthetic TrueType fonts and the outlines they were written from; no font_core inside.
+  add_library(font_test_fixture STATIC tests/font_fixture.c)
+  target_link_libraries(font_test_fixture PUBLIC edds_test_fixture)
+  enfusion_configure_target(font_test_fixture)
+
+  add_executable(enfusion-font-fixture tests/font_fixture_generator.c)
+  target_link_libraries(enfusion-font-fixture PRIVATE font_test_fixture)
+  enfusion_configure_target(enfusion-font-fixture)
+
+  # Like the EDDS reader, it links no production code: the generator is not its own oracle.
+  add_executable(enfusion-font-reference tests/font_reference.c)
+  target_link_libraries(enfusion-font-reference PRIVATE font_test_fixture)
+  enfusion_configure_target(enfusion-font-reference)
+
+  add_executable(font-core-test tests/font_core_test.c)
+  target_link_libraries(font-core-test PRIVATE font_core font_test_fixture)
+  enfusion_configure_target(font-core-test)
+  add_test(NAME font_core COMMAND font-core-test)
+  add_test(NAME font_cli_black_box
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCLI=$<TARGET_FILE:enfusion>"
+      "-DFONT_FIXTURE=$<TARGET_FILE:enfusion-font-fixture>"
+      "-DFONT_REFERENCE=$<TARGET_FILE:enfusion-font-reference>"
+      "-DKERNING_GOLDEN=${CMAKE_CURRENT_SOURCE_DIR}/tests/workbench/font-kerning-golden.json"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/font_test.cmake")
 
   # Deliberately does not link edds_core: production code must not be its own test oracle.
   add_executable(edds-reference-reader tests/reference_reader.c)
@@ -118,4 +165,9 @@ if(ENFUSION_BUILD_FUZZER)
   enfusion_configure_target(edds-fuzz)
   target_compile_options(edds-fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
   target_link_options(edds-fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
+  add_executable(font-fuzz fuzz/fuzz_font.c)
+  target_link_libraries(font-fuzz PRIVATE font_core)
+  enfusion_configure_target(font-fuzz)
+  target_compile_options(font-fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
+  target_link_options(font-fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()

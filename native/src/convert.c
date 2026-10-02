@@ -1018,9 +1018,9 @@ static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
     return EDDS_ALPHA_OPAQUE;
 }
 
-edds_status edds_convert(
-    FILE *source,
-    edds_source_format source_format,
+/** Everything after decoding: one source image, whatever produced it, becomes one EDDS. */
+static edds_status encode_image(
+    const edds_decoded_source *image,
     FILE *output,
     const edds_profile *profile,
     edds_cancelled_fn cancelled,
@@ -1029,48 +1029,12 @@ edds_status edds_convert(
     void *progress_context,
     edds_error *error
 ) {
-    edds_decoded_source image = { 0 };
     generated_mip mips[EDDS_MAX_MIPS];
-    edds_pixel_format format;
+    const edds_pixel_format format = edds_profile_pixel_format(profile, source_alpha_of(image));
     uint32_t count = 0;
     edds_status status;
-    if (source == NULL || output == NULL || profile == NULL) {
-        edds_fail(error, "invalid-api-argument", "The source, output, and profile are required.");
-        return EDDS_INTERNAL_FAILURE;
-    }
-    status = edds_profile_check(profile, error);
-    if (status != EDDS_OK) {
-        return status;
-    }
-    if (edds_source_capability_of_format(source_format) == NULL) {
-        edds_fail(error, "unsupported-source-format",
-            "The source format is outside the supported Workbench resource classes.");
-        return EDDS_UNSUPPORTED_FORMAT;
-    }
-    if (source_format != EDDS_SOURCE_DDS && profile->contains_mips) {
-        edds_fail(error, "unsupported-combination",
-            "ContainsMips=true requires a DDS source with a controlled supplied-mip layout.");
-        return EDDS_UNSUPPORTED_FORMAT;
-    }
-    /*
-     * Deliberately without a default: the capability table above has already refused anything
-     * outside the enum, so a format added to the contract with no decoder behind it is a build
-     * error here rather than a run that refuses what the rest of the product advertises.
-     */
-    status = EDDS_UNSUPPORTED_FORMAT;
-    switch (source_format) {
-        case EDDS_SOURCE_PNG: status = edds_decode_png(source, &image, error); break;
-        case EDDS_SOURCE_TGA: status = edds_decode_tga(source, &image, error); break;
-        case EDDS_SOURCE_JPG: status = edds_decode_jpeg(source, &image, error); break;
-        case EDDS_SOURCE_TIFF: status = edds_decode_tiff(source, &image, error); break;
-        case EDDS_SOURCE_DDS: status = edds_decode_dds(source, &image, error); break;
-    }
-    if (status != EDDS_OK) {
-        return status;
-    }
-    format = edds_profile_pixel_format(profile, source_alpha_of(&image));
     report(progress, progress_context, 0.15);
-    status = generate_mips(&image, profile, mips, &count, cancelled, cancel_context, error);
+    status = generate_mips(image, profile, mips, &count, cancelled, cancel_context, error);
     if (status == EDDS_OK) {
         /* Byte-domain swizzling follows filtering/normalization, before pixel encoding. */
         for (uint32_t level = 0; level < count; ++level) {
@@ -1108,6 +1072,101 @@ edds_status edds_convert(
         status = write_edds(output, format, mips, count, error);
     }
     free_mips(mips, count);
+    return status;
+}
+
+edds_status edds_encode_rgba(
+    const uint8_t *rgba,
+    uint32_t width,
+    uint32_t height,
+    int has_alpha,
+    FILE *output,
+    const edds_profile *profile,
+    edds_cancelled_fn cancelled,
+    void *cancel_context,
+    edds_error *error
+) {
+    edds_decoded_source image = { 0 };
+    edds_status status;
+    if (rgba == NULL || output == NULL || profile == NULL) {
+        edds_fail(error, "invalid-api-argument", "The pixels, output, and profile are required.");
+        return EDDS_INTERNAL_FAILURE;
+    }
+    status = edds_profile_check(profile, error);
+    if (status != EDDS_OK) {
+        return status;
+    }
+    if (profile->contains_mips) {
+        edds_fail(error, "unsupported-combination",
+            "ContainsMips=true requires a DDS source with a controlled supplied-mip layout.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION ||
+        !edds_decoded_size_allowed(width, height)) {
+        edds_fail(error, "image-size-limit", "The image dimensions are outside the supported limits.");
+        return EDDS_INVALID_INPUT;
+    }
+    if (cancelled != NULL && cancelled(cancel_context)) {
+        edds_fail(error, "cancelled", "The conversion was cancelled.");
+        return EDDS_CANCELLED;
+    }
+    image.width = width;
+    image.height = height;
+    image.has_alpha = has_alpha != 0;
+    /* Read only: the pipeline copies the top level before it changes a sample. */
+    image.rgba = (uint8_t *)(uintptr_t)rgba;
+    return encode_image(&image, output, profile, cancelled, cancel_context, NULL, NULL, error);
+}
+
+edds_status edds_convert(
+    FILE *source,
+    edds_source_format source_format,
+    FILE *output,
+    const edds_profile *profile,
+    edds_cancelled_fn cancelled,
+    void *cancel_context,
+    edds_progress_fn progress,
+    void *progress_context,
+    edds_error *error
+) {
+    edds_decoded_source image = { 0 };
+    edds_status status;
+    if (source == NULL || output == NULL || profile == NULL) {
+        edds_fail(error, "invalid-api-argument", "The source, output, and profile are required.");
+        return EDDS_INTERNAL_FAILURE;
+    }
+    status = edds_profile_check(profile, error);
+    if (status != EDDS_OK) {
+        return status;
+    }
+    if (edds_source_capability_of_format(source_format) == NULL) {
+        edds_fail(error, "unsupported-source-format",
+            "The source format is outside the supported Workbench resource classes.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    if (source_format != EDDS_SOURCE_DDS && profile->contains_mips) {
+        edds_fail(error, "unsupported-combination",
+            "ContainsMips=true requires a DDS source with a controlled supplied-mip layout.");
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+    /*
+     * Deliberately without a default: the capability table above has already refused anything
+     * outside the enum, so a format added to the contract with no decoder behind it is a build
+     * error here rather than a run that refuses what the rest of the product advertises.
+     */
+    status = EDDS_UNSUPPORTED_FORMAT;
+    switch (source_format) {
+        case EDDS_SOURCE_PNG: status = edds_decode_png(source, &image, error); break;
+        case EDDS_SOURCE_TGA: status = edds_decode_tga(source, &image, error); break;
+        case EDDS_SOURCE_JPG: status = edds_decode_jpeg(source, &image, error); break;
+        case EDDS_SOURCE_TIFF: status = edds_decode_tiff(source, &image, error); break;
+        case EDDS_SOURCE_DDS: status = edds_decode_dds(source, &image, error); break;
+    }
+    if (status != EDDS_OK) {
+        return status;
+    }
+    status = encode_image(&image, output, profile, cancelled, cancel_context,
+        progress, progress_context, error);
     free_source(&image);
     return status;
 }

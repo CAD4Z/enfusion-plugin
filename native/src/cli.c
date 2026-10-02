@@ -18,14 +18,21 @@ enum { EDDS_PROTOCOL_VERSION = 1 };
 
 static volatile sig_atomic_t interrupted = 0;
 static const cli_char *batch_cancel_file = NULL;
-static int path_exists(const cli_char *path);
 
 static void on_interrupt(int signal_value) {
     (void)signal_value;
     interrupted = 1;
 }
 
-static int was_cancelled(void *context) {
+void cli_catch_interrupts(void) {
+    (void)signal(SIGINT, on_interrupt);
+}
+
+void cli_watch_cancel_file(const cli_char *path) {
+    batch_cancel_file = path;
+}
+
+int was_cancelled(void *context) {
     (void)context;
     return interrupted != 0 || (batch_cancel_file != NULL && path_exists(batch_cancel_file));
 }
@@ -42,7 +49,7 @@ int equals(const cli_char *left, const char *right) {
 #endif
 }
 
-static FILE *open_input(const cli_char *path) {
+FILE *open_input(const cli_char *path) {
 #ifdef _WIN32
     FILE *file = NULL;
     return _wfopen_s(&file, path, L"rb") == 0 ? file : NULL;
@@ -51,7 +58,7 @@ static FILE *open_input(const cli_char *path) {
 #endif
 }
 
-static FILE *open_output(const cli_char *path) {
+FILE *open_output(const cli_char *path) {
 #ifdef _WIN32
     FILE *file = NULL;
     return _wfopen_s(&file, path, L"w+b") == 0 ? file : NULL;
@@ -60,7 +67,7 @@ static FILE *open_output(const cli_char *path) {
 #endif
 }
 
-static int injected(const char *stage) {
+int injected(const char *stage) {
     const char *requested = getenv("EDDS_CONVERT_FAIL");
     return requested != NULL && strcmp(requested, stage) == 0;
 }
@@ -73,7 +80,7 @@ static edds_status injected_failure(edds_error *error, const char *stage) {
     return EDDS_INTERNAL_FAILURE;
 }
 
-static int sync_output(FILE *file, const char *stage) {
+int sync_output(FILE *file, const char *stage) {
     if (injected(stage)) {
         return 0;
     }
@@ -87,7 +94,7 @@ static int sync_output(FILE *file, const char *stage) {
 #endif
 }
 
-static int unsigned_argument(const cli_char *text, uint32_t *value) {
+int unsigned_argument(const cli_char *text, uint32_t *value) {
     uint64_t parsed = 0;
     if (*text == 0) {
         return 0;
@@ -152,7 +159,7 @@ static void usage(void) {
     );
 }
 
-static void json_string(const char *text) {
+void json_string(const char *text) {
     const unsigned char *at = (const unsigned char *)text;
     putchar('"');
     while (*at != 0) {
@@ -719,7 +726,7 @@ static int same_path_literally(const cli_char *left, const cli_char *right) {
     return *left == 0 && *right == 0;
 }
 
-static int same_path(const cli_char *left, const cli_char *right) {
+int same_path(const cli_char *left, const cli_char *right) {
     cli_char *canonical_left = normalized_path(left);
     cli_char *canonical_right = normalized_path(right);
     /* Out of memory, the coarser answer is the safe one: a collision missed writes two jobs to
@@ -732,7 +739,7 @@ static int same_path(const cli_char *left, const cli_char *right) {
     return same;
 }
 
-static cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
+cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
     const size_t base = cli_strlen(output);
     cli_char *path = malloc((base + 96u) * sizeof *path);
     if (path == NULL) return NULL;
@@ -749,14 +756,12 @@ static cli_char *temporary_path(const cli_char *output, const char *kind, unsign
     return path;
 }
 
-static int path_exists(const cli_char *path) {
+int path_exists(const cli_char *path) {
     FILE *file = open_input(path);
     if (file == NULL) return 0;
     (void)fclose(file);
     return 1;
 }
-
-static cli_char *append_suffix(const cli_char *path, const char *suffix);
 
 typedef struct file_revision {
     int exists;
@@ -854,7 +859,7 @@ static edds_status validate_revisions(
     return EDDS_OK;
 }
 
-static cli_char *append_suffix(const cli_char *path, const char *suffix) {
+cli_char *append_suffix(const cli_char *path, const char *suffix) {
     const size_t path_size = cli_strlen(path);
     const size_t suffix_size = strlen(suffix);
     cli_char *result = malloc((path_size + suffix_size + 1u) * sizeof *result);
@@ -867,7 +872,7 @@ static cli_char *append_suffix(const cli_char *path, const char *suffix) {
     return result;
 }
 
-static char *utf8_of(const cli_char *value) {
+char *utf8_of(const cli_char *value) {
 #ifdef _WIN32
     const int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
         NULL, 0, NULL, NULL);
@@ -896,15 +901,7 @@ static int metadata_text(char *destination, size_t capacity, const char *source)
     return 1;
 }
 
-typedef struct cli_artifact {
-    const cli_char *target;
-    cli_char *temporary;
-    cli_char *backup;
-    int had_previous;
-    int committed;
-} cli_artifact;
-
-static FILE *create_temporary(cli_artifact *artifact, const char *kind) {
+FILE *create_temporary(cli_artifact *artifact, const char *kind) {
     for (unsigned attempt = 0; attempt < 32u; ++attempt) {
         FILE *file;
         free(artifact->temporary);
@@ -916,7 +913,7 @@ static FILE *create_temporary(cli_artifact *artifact, const char *kind) {
     return NULL;
 }
 
-static int backup_artifact(cli_artifact *artifact, const char *kind, const char *stage) {
+int backup_artifact(cli_artifact *artifact, const char *kind, const char *stage) {
     artifact->had_previous = path_exists(artifact->target);
     if (!artifact->had_previous) return 1;
     if (injected(stage)) return 0;
@@ -929,14 +926,14 @@ static int backup_artifact(cli_artifact *artifact, const char *kind, const char 
     return 0;
 }
 
-static int commit_artifact(cli_artifact *artifact, const char *stage) {
+int commit_artifact(cli_artifact *artifact, const char *stage) {
     if (injected(stage)) return 0;
     if (cli_rename(artifact->temporary, artifact->target) != 0) return 0;
     artifact->committed = 1;
     return 1;
 }
 
-static void rollback_artifact(cli_artifact *artifact) {
+void rollback_artifact(cli_artifact *artifact) {
     if (artifact->committed) {
         (void)cli_remove(artifact->target);
         artifact->committed = 0;
@@ -946,7 +943,7 @@ static void rollback_artifact(cli_artifact *artifact) {
     }
 }
 
-static void cleanup_artifact(cli_artifact *artifact, int success) {
+void cleanup_artifact(cli_artifact *artifact, int success) {
     if (artifact->temporary != NULL) (void)cli_remove(artifact->temporary);
     if (success && artifact->backup != NULL) (void)cli_remove(artifact->backup);
     free(artifact->temporary);
@@ -1260,7 +1257,7 @@ typedef struct native_batch_job {
     int collision;
 } native_batch_job;
 
-static cli_char *cli_of_utf8(const char *value) {
+cli_char *cli_of_utf8(const char *value) {
 #ifdef _WIN32
     int needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, NULL, 0);
     cli_char *result;
@@ -1721,7 +1718,7 @@ int edds_command(int argc, cli_char **argv) {
     uint8_t *rgba = NULL;
     size_t rgba_size = 0;
 
-    (void)signal(SIGINT, on_interrupt);
+    cli_catch_interrupts();
     if ((argc == 5 || argc == 7) && equals(argv[1], "batch") &&
         equals(argv[2], "--machine") && equals(argv[3], "--protocol") &&
         equals(argv[4], EDDS_PROTOCOL_TEXT) &&
