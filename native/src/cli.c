@@ -2,45 +2,19 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include <edds/edds.h>
+#include "cli.h"
+
 #include <edds/batch.h>
 #include <edds/pool.h>
 
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <io.h>
-#include <process.h>
-#include <wchar.h>
-typedef wchar_t cli_char;
-#define CLI_ENTRY wmain
-#define cli_remove _wremove
-#define cli_rename _wrename
-#define cli_strlen wcslen
-#define cli_strcmp wcscmp
-#define cli_getpid _getpid
-#else
-#include <sys/stat.h>
-#include <unistd.h>
-typedef char cli_char;
-#define CLI_ENTRY main
-#define cli_remove remove
-#define cli_rename rename
-#define cli_strlen strlen
-#define cli_strcmp strcmp
-#define cli_getpid getpid
-#endif
-
 enum { EDDS_PROTOCOL_VERSION = 1 };
 #define EDDS_PROTOCOL_TEXT "1"
-#define EDDS_TOOL_VERSION "0.1.0"
 
 static volatile sig_atomic_t interrupted = 0;
 static const cli_char *batch_cancel_file = NULL;
@@ -56,7 +30,7 @@ static int was_cancelled(void *context) {
     return interrupted != 0 || (batch_cancel_file != NULL && path_exists(batch_cancel_file));
 }
 
-static int equals(const cli_char *left, const char *right) {
+int equals(const cli_char *left, const char *right) {
 #ifdef _WIN32
     while (*left != L'\0' && *right != '\0' && *left == (wchar_t)(unsigned char)*right) {
         ++left;
@@ -170,11 +144,10 @@ static int quality_argument(const cli_char *text, uint32_t *value) {
 static void usage(void) {
     fputs(
         "usage:\n"
-        "  edds-convert protocol --machine\n"
-        "  edds-convert inspect --machine --protocol 1 --input PATH\n"
-        "  edds-convert preview --machine --protocol 1 --mip N --input PATH\n"
-        "  edds-convert batch --machine --protocol 1 < jobs.ndjson\n"
-        "  edds-convert convert --machine --protocol 1 --input PATH --output PATH [PROFILE FLAGS]\n",
+        "  enfusion edds inspect --machine --protocol 1 --input PATH\n"
+        "  enfusion edds preview --machine --protocol 1 --mip N --input PATH\n"
+        "  enfusion edds batch --machine --protocol 1 < jobs.ndjson\n"
+        "  enfusion edds convert --machine --protocol 1 --input PATH --output PATH [PROFILE FLAGS]\n",
         stderr
     );
 }
@@ -204,12 +177,12 @@ static void json_string(const char *text) {
     putchar('"');
 }
 
-static int report_failure(edds_status status, const edds_error *error) {
+int report_failure(edds_status status, const edds_error *error) {
     const char *category = edds_status_category(status);
     const char *code = error != NULL && error->code[0] != '\0' ? error->code : "unspecified";
     const char *message = error != NULL && error->message[0] != '\0'
         ? error->message : "The EDDS operation failed.";
-    (void)fprintf(stderr, "edds-convert: %s: %s\n", category, message);
+    (void)fprintf(stderr, "enfusion: %s: %s\n", category, message);
     fputs("{\"protocolVersion\":1,\"kind\":\"error\",\"error\":{\"category\":", stdout);
     json_string(category);
     fputs(",\"code\":", stdout);
@@ -764,10 +737,10 @@ static cli_char *temporary_path(const cli_char *output, const char *kind, unsign
     cli_char *path = malloc((base + 96u) * sizeof *path);
     if (path == NULL) return NULL;
 #ifdef _WIN32
-    if (swprintf(path, base + 96u, L"%ls.edds-convert-%hs-%d-%u.tmp",
+    if (swprintf(path, base + 96u, L"%ls.enfusion-%hs-%d-%u.tmp",
             output, kind, cli_getpid(), attempt) < 0) {
 #else
-    if (snprintf(path, base + 96u, "%s.edds-convert-%s-%d-%u.tmp",
+    if (snprintf(path, base + 96u, "%s.enfusion-%s-%d-%u.tmp",
             output, kind, cli_getpid(), attempt) < 0) {
 #endif
         free(path);
@@ -1546,7 +1519,7 @@ static void write_batch_progress(const char *id, double progress) {
 }
 
 static void write_batch_diagnostic(const char *id, edds_status status, const edds_error *error) {
-    (void)fprintf(stderr, "edds-convert: %s: %s\n", edds_status_category(status), error->message);
+    (void)fprintf(stderr, "enfusion: %s: %s\n", edds_status_category(status), error->message);
     fputs("{\"protocolVersion\":1,\"kind\":\"diagnostic\",\"id\":", stdout);
     json_string(id);
     fputs(",\"category\":", stdout);
@@ -1734,7 +1707,7 @@ static int batch_command(void) {
     return was_cancelled(NULL) ? EDDS_CANCELLED : 0;
 }
 
-int CLI_ENTRY(int argc, cli_char **argv) {
+int edds_command(int argc, cli_char **argv) {
     parsed_arguments options;
     FILE *input;
     edds_info info;
@@ -1749,11 +1722,6 @@ int CLI_ENTRY(int argc, cli_char **argv) {
     size_t rgba_size = 0;
 
     (void)signal(SIGINT, on_interrupt);
-    if (argc == 3 && equals(argv[1], "protocol") && equals(argv[2], "--machine")) {
-        puts("{\"protocolVersion\":1,\"kind\":\"protocol\",\"toolVersion\":\""
-            EDDS_TOOL_VERSION "\",\"commands\":[\"inspect\",\"preview\",\"convert\",\"batch\"]}");
-        return 0;
-    }
     if ((argc == 5 || argc == 7) && equals(argv[1], "batch") &&
         equals(argv[2], "--machine") && equals(argv[3], "--protocol") &&
         equals(argv[4], EDDS_PROTOCOL_TEXT) &&
@@ -1766,7 +1734,7 @@ int CLI_ENTRY(int argc, cli_char **argv) {
     }
     if (argc < 2 || (!equals(argv[1], "inspect") && !equals(argv[1], "preview") &&
         !equals(argv[1], "convert"))) {
-        return invalid_invocation("invalid-command", "Expected protocol, inspect, preview, convert, or batch.");
+        return invalid_invocation("invalid-command", "Expected inspect, preview, convert, or batch.");
     }
     preview_command = equals(argv[1], "preview");
     convert = equals(argv[1], "convert");

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import type { TextureBatchEvent } from '../../src/mods/textureBatchProtocol';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/textureConversion';
@@ -16,7 +19,7 @@ test('one batch request owns one process and reads fragmented events', async () 
   const requests: BatchProcessRequest[] = [];
   const seen: TextureBatchEvent[] = [];
   const running = runEddsBatch(
-    'C:\\extension\\edds-convert.exe',
+    'C:\\extension\\enfusion.exe',
     [plan('alpha', 'C:\\mod\\alpha.png'), plan('beta', 'C:\\mod\\beta.tga')],
     (request) => { requests.push(request); return child; },
     realClock,
@@ -25,8 +28,8 @@ test('one batch request owns one process and reads fragmented events', async () 
 
   assert.equal(requests.length, 1);
   assert.deepEqual(requests[0], {
-    executable: 'C:\\extension\\edds-convert.exe',
-    args: ['batch', '--machine', '--protocol', '1'],
+    executable: 'C:\\extension\\enfusion.exe',
+    args: ['edds', 'batch', '--machine', '--protocol', '1'],
     shell: false,
     windowsHide: true,
   });
@@ -71,7 +74,7 @@ test('cancellation interrupts first and force-kills only after the grace period'
   };
   const controller = new AbortController();
   const running = runEddsBatch(
-    'edds-convert.exe',
+    'enfusion.exe',
     [plan('alpha', 'C:\\mod\\alpha.png')],
     () => child,
     clock,
@@ -92,7 +95,7 @@ test('the documented hard limit refuses input before a process is spawned', asyn
   let spawned = false;
   await assert.rejects(
     runEddsBatch(
-      'edds-convert.exe',
+      'enfusion.exe',
       Array.from({ length: EDDS_BATCH_MAX_JOBS + 1 }, (_, at) => plan(String(at), `C:\\mod\\${at}.png`)),
       () => { spawned = true; return new FakeBatchProcess(); },
       realClock,
@@ -107,7 +110,7 @@ test('a crashed or force-killed batch asks the filesystem boundary to clean job 
   const child = new FakeBatchProcess();
   const cleaned: string[][] = [];
   const running = runEddsBatch(
-    'edds-convert.exe',
+    'enfusion.exe',
     [plan('alpha', 'C:\\mod\\alpha.png')],
     () => child,
     realClock,
@@ -127,6 +130,27 @@ test('a crashed or force-killed batch asks the filesystem boundary to clean job 
   ]]);
 });
 
+test('after a crash the default cleanup removes only the temps the dead process named', async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), 'enfusion-batch-'));
+  try {
+    const job = plan('alpha', path.join(folder, 'alpha.png'));
+    const owned = [
+      `${job.plan.output}.enfusion-new-4242-0.tmp`,
+      `${job.plan.metadata}.enfusion-old-4242-1.tmp`,
+    ];
+    const foreign = `${job.plan.output}.enfusion-new-9999-0.tmp`;
+    for (const file of [...owned, foreign]) await writeFile(file, '');
+    const child = new FakeBatchProcess('4242');
+    const running = runEddsBatch('enfusion.exe', [job], () => child, realClock);
+    child.close(6);
+
+    await assert.rejects(running, /code 6/);
+    assert.deepEqual(await readdir(folder), [path.basename(foreign)]);
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 test('only a death or an internal failure comes back as work worth sending again', async () => {
   // The converter's own exit categories: 2, 3 and 4 turn this exact input away every time.
   for (const [code, retryable] of [
@@ -134,7 +158,7 @@ test('only a death or an internal failure comes back as work worth sending again
   ] as const) {
     const child = new FakeBatchProcess();
     const running = runEddsBatch(
-      'edds-convert.exe',
+      'enfusion.exe',
       [plan('alpha', 'C:\\mod\\alpha.png')],
       () => child,
       realClock,
@@ -148,7 +172,7 @@ test('only a death or an internal failure comes back as work worth sending again
   }
 
   const oversized = runEddsBatch(
-    'edds-convert.exe',
+    'enfusion.exe',
     Array.from({ length: EDDS_BATCH_MAX_JOBS + 1 }, (_, at) => plan(String(at), `C:\\mod\\t${at}.png`)),
     () => new FakeBatchProcess(),
     realClock,
@@ -160,7 +184,7 @@ test('completion counters must agree with the per-item results', async () => {
   const child = new FakeBatchProcess();
   const seen: TextureBatchEvent[] = [];
   const running = runEddsBatch(
-    'edds-convert.exe',
+    'enfusion.exe',
     [plan('alpha', 'C:\\mod\\alpha.png')],
     () => child,
     realClock,
@@ -190,6 +214,8 @@ class FakeBatchProcess implements BatchProcess {
   readonly completed = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
     this.resolve = resolve;
   });
+
+  constructor(readonly tempOwner?: string) {}
 
   write(value: string): void { this.input += value; }
   end(): void { this.closedInput = true; }

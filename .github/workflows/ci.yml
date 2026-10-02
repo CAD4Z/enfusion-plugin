@@ -36,7 +36,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_C_COMPILER=clang
           -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-          -DEDDS_BUILD_FUZZER=ON
+          -DENFUSION_BUILD_FUZZER=ON
 
       - run: cmake --build native/.build-sanitize --parallel
       - run: ctest --test-dir native/.build-sanitize --output-on-failure
@@ -89,10 +89,10 @@ jobs:
 
       - run: npm ci
 
-      - name: Configure native converter
+      - name: Configure the native executable
         run: cmake -S native -B native/.build -A x64 -DCMAKE_INSTALL_PREFIX=dist/native/win32-x64
 
-      - name: Build native converter
+      - name: Build the native executable
         run: cmake --build native/.build --config Release --parallel
 
       - name: Test native core and black-box CLI
@@ -108,9 +108,9 @@ jobs:
           $installation = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $tools = Get-ChildItem -LiteralPath "$installation\VC\Tools\MSVC" -Directory | Sort-Object Name -Descending | Select-Object -First 1
           $dumpbin = Join-Path $tools.FullName 'bin\Hostx64\x64\dumpbin.exe'
-          $binary = 'dist\native\win32-x64\edds-convert.exe'
+          $binary = 'dist\native\win32-x64\enfusion.exe'
           $headers = & $dumpbin /headers $binary | Out-String
-          if ($headers -notmatch '8664 machine \(x64\)') { throw 'converter is not a Windows x64 image' }
+          if ($headers -notmatch '8664 machine \(x64\)') { throw 'enfusion.exe is not a Windows x64 image' }
           $dependencies = & $dumpbin /dependents $binary | Out-String
           if ($dependencies -match '(?i)(VCRUNTIME|MSVCP|ucrtbase)') { throw "dynamic MSVC runtime dependency found: $dependencies" }
 
@@ -131,9 +131,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: edds-converter-win32-x64
+          name: enfusion-native-win32-x64
           path: |
-            dist/native/win32-x64/edds-convert.exe
+            dist/native/win32-x64/enfusion.exe
             dist/native/win32-x64/NOTICE.txt
             dist/native/win32-x64/THIRD-PARTY.md
           if-no-files-found: error

@@ -11,19 +11,19 @@ import {
   protocolOf,
 } from '../../src/mods/edds';
 
-test('the protocol handshake accepts the converter contract this extension speaks', () => {
+test('the protocol handshake accepts the edds area of the executable this extension speaks', () => {
   assert.deepEqual(
     protocolOf(
       JSON.stringify({
         protocolVersion: 1,
         kind: 'protocol',
-        toolVersion: '0.1.0',
-        commands: ['inspect', 'preview', 'convert', 'batch'],
+        toolVersion: '0.2.0',
+        areas: { edds: ['inspect', 'preview', 'convert', 'batch'], font: ['generate', 'inspect'] },
       }),
     ),
     {
       protocolVersion: EDDS_PROTOCOL_VERSION,
-      toolVersion: '0.1.0',
+      toolVersion: '0.2.0',
       commands: ['inspect', 'preview', 'convert', 'batch'],
     },
   );
@@ -333,16 +333,29 @@ test('a GPU recipe round-trips through the machine boundary with its exact quali
 
 test('a different or malformed protocol is refused before its values are used', () => {
   assert.throws(
-    () => protocolOf('{"protocolVersion":2,"kind":"protocol","toolVersion":"0.2","commands":[]}'),
+    () => protocolOf('{"protocolVersion":2,"kind":"protocol","toolVersion":"0.2","areas":{"edds":[]}}'),
     /protocol version 2.*requires 1/i,
   );
   assert.throws(() => protocolOf('not json'), /valid JSON/i);
   assert.throws(
     () =>
       protocolOf(
-        '{"protocolVersion":1,"kind":"protocol","toolVersion":"0.1","commands":["inspect"]}',
+        '{"protocolVersion":1,"kind":"protocol","toolVersion":"0.2","areas":{"edds":["inspect"]}}',
       ),
     /preview command/i,
+  );
+  // The flat command list of the retired single-purpose executable names no area.
+  assert.throws(
+    () =>
+      protocolOf(
+        '{"protocolVersion":1,"kind":"protocol","toolVersion":"0.1.0","commands":["inspect","preview","convert","batch"]}',
+      ),
+    /areas/i,
+  );
+  assert.throws(
+    () =>
+      protocolOf('{"protocolVersion":1,"kind":"protocol","toolVersion":"0.2","areas":{"font":["generate"]}}'),
+    /edds/i,
   );
 });
 

@@ -1,8 +1,10 @@
-# EDDS converter
+# Native executable
 
-`edds-convert` is the extension's C17 codec process. It has no third-party runtime dependencies and
-is linked with the static MSVC runtime. The extension invokes only the installed Windows x64 executable at
-`dist/native/win32-x64/edds-convert.exe`, with `shell: false`.
+`enfusion` is the extension's C17 process. Its first argument names an area — `edds` converts and
+inspects textures — and each area is a static library linked into the one executable. It has no
+third-party runtime dependencies and is linked with the static MSVC runtime. The extension invokes
+only the installed Windows x64 executable at `dist/native/win32-x64/enfusion.exe`, with
+`shell: false`.
 
 ## Build and test
 
@@ -13,7 +15,7 @@ ctest --test-dir native/.build -C Release --output-on-failure
 cmake --install native/.build --config Release --prefix dist/native/win32-x64
 ```
 
-Set `EDDS_BUILD_FUZZER=ON` with Clang to build the libFuzzer/AddressSanitizer/UBSan target. The
+Set `ENFUSION_BUILD_FUZZER=ON` with Clang to build the libFuzzer/AddressSanitizer/UBSan target. The
 synthetic fixtures and their independent expected reader live under `native/tests`; production
 code is not used to create expected values. CI materializes those fixtures, including a maximum-
 integer boundary case, as an owned seed corpus and passes the corpus directory to libFuzzer.
@@ -21,17 +23,21 @@ integer boundary case, as an owned seed corpus and passes the corpus directory t
 ## Versioned CLI
 
 ```text
-edds-convert protocol --machine
-edds-convert inspect --machine --protocol 1 --input PATH
-edds-convert inspect --machine --protocol 1 --input PATH --metadata PATH.edds.meta
-edds-convert preview --machine --protocol 1 --mip N --input PATH
-edds-convert batch --machine --protocol 1 < jobs.ndjson
-edds-convert convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
+enfusion protocol --machine
+enfusion edds inspect --machine --protocol 1 --input PATH
+enfusion edds inspect --machine --protocol 1 --input PATH --metadata PATH.edds.meta
+enfusion edds preview --machine --protocol 1 --mip N --input PATH
+enfusion edds batch --machine --protocol 1 < jobs.ndjson
+enfusion edds convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
   --target-format enfusion-dds --format-compress fastest --compress-threshold 80 \
   --remove-mips 0 --conversion color-hq-compression --conversion-quality 0.403 \
   --swizzling none --contains-mips false --generate-mips true --normalize false \
   --mipmap-function filter --mipmap-filter box --tiled-texture true
 ```
+
+`protocol` answers for the whole executable: the protocol version and, per area, its commands.
+An area owns its commands, flags and JSON; a new area is a new first-level subcommand and changes
+nothing the others accept or print.
 
 Machine output is protocol-versioned JSON on stdout. Batch stdin and stdout are NDJSON: one header,
 1–256 complete job values, and one end record are validated before encoding starts; stdout carries
@@ -57,7 +63,7 @@ any matching sibling transaction temps. Diagnostics are also written for a human
 categories are stable: `0` success, `2` invalid invocation, `3` invalid input, `4` unsupported
 preview format, `5` cancellation and `6` internal failure.
 
-## Supported slice and hard limits
+## EDDS: supported slice and hard limits
 
 Inspection accepts the common DDS header, its optional DX10 extension, and the Enfusion `ENF1`
 mip table. It reports actual table order, `COPY`/`LZ4` storage, offsets, stored sizes, decoded sizes

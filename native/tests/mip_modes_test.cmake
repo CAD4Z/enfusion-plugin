@@ -54,13 +54,13 @@ foreach(index RANGE 0 ${last})
   run_checked("${FIXTURE}" --mip-source "${source}" ${width} ${height} ${alpha} "${source_bgra}")
   # Each removal boundary must preserve exactly the remaining captured levels.
   foreach(removed RANGE 0 ${last_level})
-    run_checked("${CLI}" convert --machine --protocol 1 --input "${source}" --output "${output}"
+    run_checked("${CLI}" edds convert --machine --protocol 1 --input "${source}" --output "${output}"
       --format-compress copy --mipmap-function ${mip_function} --mipmap-filter ${mip_filter}
       --tiled-texture ${tiled} --remove-mips ${removed} --metadata "${metadata}"
       --resource-name "goldens/${index}.edds" --source-file "${index}.tga" --guid 0123456789ABCDEF)
     run_checked("${REFERENCE_READER}" --golden "${output}" ${width} ${height} ${levels} "${expected}" ${removed})
   endforeach()
-  execute_process(COMMAND "${CLI}" inspect --machine --protocol 1 --input "${output}"
+  execute_process(COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${output}"
     --metadata "${metadata}" RESULT_VARIABLE inspected OUTPUT_VARIABLE inspection)
   string(JSON actual_function GET "${inspection}" metadata recipe MipMapFunction)
   string(JSON actual_tiled GET "${inspection}" metadata recipe TiledTexture)
@@ -76,7 +76,7 @@ foreach(index RANGE 0 ${last})
     "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}\n"
     "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"golden\",\"input\":\"${source}\",\"output\":\"${batch_output}\",\"metadata\":null,\"identity\":null,\"profile\":${profile},\"expected\":null}\n"
     "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
-  execute_process(COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${batch_input}"
+  execute_process(COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${batch_input}"
     RESULT_VARIABLE batch_result OUTPUT_VARIABLE batch_stdout ERROR_VARIABLE batch_error)
   if(NOT batch_result EQUAL 0 OR NOT batch_stdout MATCHES "\"converted\":1")
     message(FATAL_ERROR "Golden batch failed: ${batch_stdout}\n${batch_error}")
@@ -84,7 +84,7 @@ foreach(index RANGE 0 ${last})
   run_checked("${REFERENCE_READER}" --golden "${batch_output}" ${width} ${height} ${levels} "${expected}" 0)
   # An inactive ColorNoise must refuse without replacing an existing destination.
   file(SHA256 "${batch_output}" before_refusal)
-  execute_process(COMMAND "${CLI}" convert --machine --protocol 1 --input "${source}"
+  execute_process(COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${source}"
     --output "${batch_output}" --generate-mips false --mipmap-function color-noise
     --tiled-texture ${tiled} RESULT_VARIABLE refused OUTPUT_VARIABLE refusal ERROR_QUIET)
   string(JSON code GET "${refusal}" error code)

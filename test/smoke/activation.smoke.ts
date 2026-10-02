@@ -65,7 +65,7 @@ export async function run(): Promise<void> {
     'dist',
     'native',
     'win32-x64',
-    'edds-convert.exe',
+    'enfusion.exe',
   );
   const result = await executeFile(executable, ['protocol', '--machine'], {
     encoding: 'utf8',
@@ -76,8 +76,8 @@ export async function run(): Promise<void> {
   assert.deepEqual(protocol, {
     protocolVersion: 1,
     kind: 'protocol',
-    toolVersion: '0.1.0',
-    commands: ['inspect', 'preview', 'convert', 'batch'],
+    toolVersion: '0.2.0',
+    areas: { edds: ['inspect', 'preview', 'convert', 'batch'] },
   });
 
   const secondSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.tga');

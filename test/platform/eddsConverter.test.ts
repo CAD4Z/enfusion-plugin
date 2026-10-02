@@ -32,8 +32,8 @@ import {
 const PROTOCOL = JSON.stringify({
   protocolVersion: 1,
   kind: 'protocol',
-  toolVersion: '0.1.0',
-  commands: ['inspect', 'preview', 'convert', 'batch'],
+  toolVersion: '0.2.0',
+  areas: { edds: ['inspect', 'preview', 'convert', 'batch'] },
 });
 
 test('the adapter handshakes once and invokes only its installed executable without a shell', async () => {
@@ -53,9 +53,10 @@ test('the adapter handshakes once and invokes only its installed executable with
   assert.equal(calls.length, 3);
   assert.equal(
     calls[0]?.executable,
-    path.join('C:\\extension', 'dist', 'native', 'win32-x64', 'edds-convert.exe'),
+    path.join('C:\\extension', 'dist', 'native', 'win32-x64', 'enfusion.exe'),
   );
   assert.deepEqual(calls[1]?.args, [
+    'edds',
     'inspect',
     '--machine',
     '--protocol',
@@ -76,7 +77,7 @@ test('machine failures retain the stable native category and useful diagnostics'
         code: 4,
         stdout:
           '{"protocolVersion":1,"kind":"error","error":{"category":"unsupported-format","code":"unsupported-pixel-format","message":"DXT1 pixels cannot be previewed."}}',
-        stderr: 'edds-convert: unsupported-format: DXT1 pixels cannot be previewed.',
+        stderr: 'enfusion: unsupported-format: DXT1 pixels cannot be previewed.',
       }),
     );
   });
@@ -134,7 +135,7 @@ test('conversion spells out the immutable plan through stable native flags', asy
 
   assert.equal(result.registered, true);
   assert.deepEqual(calls[1]?.args, [
-    'convert', '--machine', '--protocol', '1',
+    'edds', 'convert', '--machine', '--protocol', '1',
     '--input', 'C:\\mod\\Mod\\icon.png',
     '--output', 'C:\\mod\\Mod\\icon.edds',
     '--target-format', 'enfusion-dds',
@@ -204,7 +205,7 @@ test('ColorNoise and clamp borders cross the process boundary with canonical fla
 
   assert.equal(result.registered, true);
   assert.deepEqual(calls[1]?.args, [
-    'convert', '--machine', '--protocol', '1',
+    'edds', 'convert', '--machine', '--protocol', '1',
     '--input', 'C:\\mod\\Mod\\icon.png',
     '--output', 'C:\\mod\\Mod\\icon.edds',
     '--target-format', 'enfusion-dds',

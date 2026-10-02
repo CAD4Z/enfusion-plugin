@@ -115,7 +115,7 @@ used is the primary source image and supplies the one complete profile; selectio
 The editor lists create/reconvert/replace or refusal per item, renders one active viewport, and
 reports per-file and overall progress. Sources sharing a Windows-normalized destination are all
 refused without a winner. A selection above that ceiling is refused before the editor offers to run
-it. One bundled `edds-convert batch` process owns up to 256 jobs (including selections of 100) and
+it. One bundled `enfusion edds batch` process owns up to 256 jobs (including selections of 100) and
 spreads them over one bounded worker pool with one shared memory budget, so a large selection keeps
 the cores busy without a codec pool or a memory peak per image. It keeps completed outputs on
 cancellation, and lets retryable failures be retried without rerunning successes; an input the
@@ -126,10 +126,11 @@ project gate; an unregistered extension is refused there too, with a stable `uns
 It accepts the same stable recipe flags used by the editor; `inspect --metadata PATH` returns the
 metadata identity and recipe as versioned structured JSON through the same native codec.
 
-The platform-specific VSIX carries its own C17 `edds-convert.exe`. The extension only starts that
-binary from its installation directory, passes arguments without a shell and checks protocol
-compatibility before asking it to inspect a file. The executable has no DayZ Tools, language
-runtime or dynamically loaded codec dependency.
+The platform-specific VSIX carries its own C17 `enfusion.exe`: one executable whose first argument
+names an area, so textures are `enfusion edds ...`. The extension only starts that binary from its
+installation directory, passes arguments without a shell and checks protocol compatibility before
+asking it to inspect a file. The executable has no DayZ Tools, language runtime or dynamically
+loaded codec dependency.
 
 The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists
 saying what the next launch is — which **target**, and whether it is a **Debug** or a **Release**

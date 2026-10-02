@@ -4,6 +4,7 @@ import { unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { EDDS_AREA } from '../mods/edds';
 import type { TextureBatchEvent } from '../mods/textureBatchProtocol';
 import {
   BATCH_MAX_JOBS,
@@ -95,7 +96,7 @@ export async function runEddsBatch(
 
   const child = spawnProcess({
     executable,
-    args: ['batch', '--machine', '--protocol', String(BATCH_PROTOCOL_VERSION)],
+    args: [EDDS_AREA, 'batch', '--machine', '--protocol', String(BATCH_PROTOCOL_VERSION)],
     shell: false,
     windowsHide: true,
   });
@@ -237,7 +238,7 @@ function revisionText(revision: { readonly size: number; readonly modified: numb
 }
 
 function spawnNativeBatch(request: BatchProcessRequest): BatchProcess {
-  const cancelFile = path.join(tmpdir(), `edds-convert-cancel-${randomUUID()}`);
+  const cancelFile = path.join(tmpdir(), `enfusion-cancel-${randomUUID()}`);
   const child = spawn(request.executable, [...request.args, '--cancel-file', cancelFile], {
     shell: request.shell,
     windowsHide: request.windowsHide,
@@ -284,7 +285,7 @@ async function cleanupBatchTemps(
   ]));
   await Promise.all([...targets].map(async (target) => {
     const folder = path.dirname(target);
-    const prefix = `${path.basename(target)}.edds-convert-`;
+    const prefix = `${path.basename(target)}.enfusion-`;
     const ownedPrefixes = [`${prefix}new-${tempOwner}-`, `${prefix}old-${tempOwner}-`];
     let entries;
     try {

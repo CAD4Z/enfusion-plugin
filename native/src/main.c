@@ -1,0 +1,35 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include "cli.h"
+
+#include <string.h>
+
+#define ENFUSION_TOOL_VERSION "0.2.0"
+
+/*
+ * One executable for every native area of the extension. The first argument names the area; what
+ * follows is that area's own versioned CLI, unchanged by the others living next to it.
+ */
+int CLI_ENTRY(int argc, cli_char **argv) {
+    edds_error error;
+    if (argc == 3 && equals(argv[1], "protocol") && equals(argv[2], "--machine")) {
+        puts("{\"protocolVersion\":1,\"kind\":\"protocol\",\"toolVersion\":\"" ENFUSION_TOOL_VERSION "\","
+            "\"areas\":{\"edds\":[\"inspect\",\"preview\",\"convert\",\"batch\"]}}");
+        return ferror(stdout) ? EDDS_INTERNAL_FAILURE : 0;
+    }
+    if (argc >= 2 && equals(argv[1], "edds")) {
+        return edds_command(argc - 1, argv + 1);
+    }
+    fputs(
+        "usage:\n"
+        "  enfusion protocol --machine\n"
+        "  enfusion edds inspect|preview|convert|batch --machine --protocol 1 ...\n",
+        stderr
+    );
+    memset(&error, 0, sizeof error);
+    (void)snprintf(error.code, sizeof error.code, "invalid-command");
+    (void)snprintf(error.message, sizeof error.message, "Expected protocol or an area: edds.");
+    return report_failure(EDDS_INVALID_INVOCATION, &error);
+}

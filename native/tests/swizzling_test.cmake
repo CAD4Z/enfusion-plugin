@@ -93,14 +93,14 @@ foreach(index RANGE 0 ${last})
   run_checked("${FIXTURE}" --mip-source "${source}" ${width} ${height} ${alpha} "${source_bgra}")
   file(SHA256 "${source}" source_before)
   if(incompatible)
-    execute_process(COMMAND "${CLI}" convert --machine --protocol 1 --input "${source}" --output "${output}"
+    execute_process(COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${source}" --output "${output}"
       --swizzling "${wire}" --generate-mips false RESULT_VARIABLE refused OUTPUT_VARIABLE refusal ERROR_QUIET)
     if(NOT refused EQUAL 4 OR NOT refusal MATCHES "unsupported-combination")
       message(FATAL_ERROR "Inactive terrain mips must refuse: ${refusal}")
     endif()
     continue()
   endif()
-  run_checked("${CLI}" convert --machine --protocol 1 --input "${source}" --output "${output}"
+  run_checked("${CLI}" edds convert --machine --protocol 1 --input "${source}" --output "${output}"
     --format-compress copy --swizzling "${wire}" --generate-mips ${generate}
     --normalize ${normalize} --mipmap-function ${mip_function} --mipmap-filter ${mip_filter}
     --tiled-texture ${tiled} --remove-mips ${remove} --conversion ${conversion_wire}
@@ -109,7 +109,7 @@ foreach(index RANGE 0 ${last})
   string(JSON width GET "${row}" levels 0 width)
   string(JSON height GET "${row}" levels 0 height)
   run_checked("${REFERENCE_READER}" --swizzle "${output}" ${width} ${height} ${levels} "${expected}" ${pixel_format})
-  execute_process(COMMAND "${CLI}" inspect --machine --protocol 1 --input "${output}" --metadata "${metadata}"
+  execute_process(COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${output}" --metadata "${metadata}"
     RESULT_VARIABLE inspected OUTPUT_VARIABLE inspection)
   string(JSON actual GET "${inspection}" metadata recipe Swizzling)
   if(NOT inspected EQUAL 0 OR NOT actual STREQUAL swizzling)
@@ -117,7 +117,7 @@ foreach(index RANGE 0 ${last})
   endif()
   # Result preview reads the actual output at every mip; source pixels stay in the source file.
   foreach(level RANGE 0 ${last_level})
-    run_checked("${CLI}" preview --machine --protocol 1 --input "${output}" --mip ${level})
+    run_checked("${CLI}" edds preview --machine --protocol 1 --input "${output}" --mip ${level})
   endforeach()
   set(batch_output "${output_dir}/${index}-batch.edds")
   set(batch_input "${output_dir}/${index}.ndjson")
@@ -126,7 +126,7 @@ foreach(index RANGE 0 ${last})
     "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":1}\n"
     "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"swizzle\",\"input\":\"${source}\",\"output\":\"${batch_output}\",\"metadata\":null,\"identity\":null,\"profile\":${profile},\"expected\":null}\n"
     "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
-  execute_process(COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${batch_input}"
+  execute_process(COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${batch_input}"
     RESULT_VARIABLE batch_result OUTPUT_VARIABLE batch_stdout ERROR_VARIABLE batch_error)
   if(NOT batch_result EQUAL 0 OR NOT batch_stdout MATCHES "\"converted\":1")
     message(FATAL_ERROR "Swizzle batch failed: ${batch_stdout}\n${batch_error}")
@@ -145,7 +145,7 @@ set(guard_metadata "${guard_output}.meta")
 file(SHA256 "${guard_output}" before_output)
 file(SHA256 "${guard_metadata}" before_metadata)
 function(refuse_preserving_pair expected_code)
-  execute_process(COMMAND "${CLI}" convert --machine --protocol 1 --input "${guard_source}"
+  execute_process(COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${guard_source}"
     --output "${guard_output}" --metadata "${guard_metadata}" --resource-name swizzling/0.edds
     --source-file 0.tga --guid 0123456789ABCDEF ${ARGN}
     RESULT_VARIABLE result OUTPUT_VARIABLE response ERROR_QUIET)
@@ -177,7 +177,7 @@ foreach(item IN ITEMS 5 8)
   file(APPEND "${mixed}" "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"${item}\",\"input\":\"${output_dir}/${item}.tga\",\"output\":\"${output_dir}/mixed-${item}.edds\",\"metadata\":null,\"identity\":null,\"profile\":${profile},\"expected\":null}\n")
 endforeach()
 file(APPEND "${mixed}" "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
-execute_process(COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${mixed}"
+execute_process(COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${mixed}"
   RESULT_VARIABLE mixed_result OUTPUT_VARIABLE mixed_output ERROR_VARIABLE mixed_error)
 if(NOT mixed_result EQUAL 0 OR NOT mixed_output MATCHES "\"converted\":1" OR
     NOT mixed_output MATCHES "\"failed\":1" OR NOT mixed_output MATCHES "unsupported-combination")

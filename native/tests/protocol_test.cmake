@@ -40,7 +40,7 @@ file(WRITE "${batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"tga\",\"input\":\"${tga}\",\"output\":\"${batch_tga}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1
+  COMMAND "${CLI}" edds batch --machine --protocol 1
   INPUT_FILE "${batch_input}"
   RESULT_VARIABLE batch_result OUTPUT_VARIABLE batch_output ERROR_VARIABLE batch_error
 )
@@ -87,7 +87,7 @@ file(WRITE "${collision_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"independent\",\"input\":\"${png}\",\"output\":\"${collision_independent}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${collision_input}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${collision_input}"
   RESULT_VARIABLE collision_result OUTPUT_VARIABLE collision_stdout ERROR_QUIET
 )
 if(NOT collision_result EQUAL 0 OR EXISTS "${collision_output}" OR
@@ -118,7 +118,7 @@ file(WRITE "${walked_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"independent\",\"input\":\"${png}\",\"output\":\"${walked_independent}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${walked_input}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${walked_input}"
   RESULT_VARIABLE walked_result OUTPUT_VARIABLE walked_stdout ERROR_QUIET
 )
 if(NOT walked_result EQUAL 0 OR EXISTS "${walked_output}" OR
@@ -143,7 +143,7 @@ foreach(at RANGE 0 99)
 endforeach()
 file(APPEND "${hundred_input}" "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${hundred_input}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${hundred_input}"
   RESULT_VARIABLE hundred_result OUTPUT_VARIABLE hundred_output ERROR_VARIABLE hundred_error
 )
 if(NOT hundred_result EQUAL 0 OR NOT hundred_output MATCHES "\"converted\":100")
@@ -159,7 +159,7 @@ endforeach()
 set(too_many_input "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch-too-many.ndjson")
 file(WRITE "${too_many_input}" "{\"protocolVersion\":1,\"kind\":\"batch\",\"jobCount\":257}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${too_many_input}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${too_many_input}"
   RESULT_VARIABLE too_many_result OUTPUT_VARIABLE too_many_output ERROR_QUIET
 )
 if(NOT too_many_result EQUAL 2 OR EXISTS "${CMAKE_CURRENT_BINARY_DIR}/batch-257-0.edds")
@@ -170,7 +170,7 @@ set(cancel_marker "${CMAKE_CURRENT_BINARY_DIR}/black-box-batch.cancel")
 file(WRITE "${cancel_marker}" "cancel")
 file(REMOVE "${batch_png}" "${batch_tga}")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 --cancel-file "${cancel_marker}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 --cancel-file "${cancel_marker}"
   INPUT_FILE "${batch_input}"
   RESULT_VARIABLE cancelled_result OUTPUT_VARIABLE cancelled_output ERROR_QUIET
 )
@@ -200,7 +200,7 @@ file(WRITE "${mid_cancel_input}"
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env "EDDS_CONVERT_FAIL=batch-cancel-after-first-commit"
     "EDDS_CONVERT_WORKERS=1"
-    "${CLI}" batch --machine --protocol 1 --cancel-file "${mid_cancel_marker}"
+    "${CLI}" edds batch --machine --protocol 1 --cancel-file "${mid_cancel_marker}"
   INPUT_FILE "${mid_cancel_input}"
   RESULT_VARIABLE mid_cancel_result OUTPUT_VARIABLE mid_cancel_output ERROR_QUIET
 )
@@ -224,7 +224,7 @@ foreach(bad_case IN ITEMS malformed incompatible unknown)
     file(WRITE "${bad_input}" "{\"protocolVersion\":1,\"kind\":\"surprise\"}\n")
   endif()
   execute_process(
-    COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${bad_input}"
+    COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${bad_input}"
     RESULT_VARIABLE bad_batch_result OUTPUT_QUIET ERROR_QUIET
   )
   if(NOT bad_batch_result EQUAL 2)
@@ -234,7 +234,7 @@ endforeach()
 
 set(stale_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-stale.edds")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}" --output "${stale_result}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${png}" --output "${stale_result}"
     --expect-source-revision 0:0 --expect-output-revision missing
     --expect-metadata-revision missing
   RESULT_VARIABLE stale_exit OUTPUT_VARIABLE stale_output ERROR_QUIET
@@ -249,7 +249,7 @@ endif()
 
 set(unsupported_profile_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-unsupported-profile.edds")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${png}"
     --output "${unsupported_profile_result}" --mipmap-filter triangle
   RESULT_VARIABLE unsupported_profile_exit OUTPUT_VARIABLE unsupported_profile_output ERROR_QUIET
 )
@@ -268,7 +268,7 @@ foreach(refused_mip IN ITEMS
   set(refused_mip_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-${refused_mip_value}.edds")
   file(REMOVE "${refused_mip_result}")
   execute_process(
-    COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
+    COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${png}"
       --output "${refused_mip_result}" "${refused_mip_flag}" "${refused_mip_value}"
     RESULT_VARIABLE refused_mip_exit OUTPUT_VARIABLE refused_mip_output ERROR_QUIET
   )
@@ -283,7 +283,7 @@ endforeach()
 set(inactive_mip_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-inactive-mip.edds")
 file(REMOVE "${inactive_mip_result}")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${png}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${png}"
     --output "${inactive_mip_result}" --generate-mips false --mipmap-filter kaiser
   RESULT_VARIABLE inactive_mip_exit OUTPUT_VARIABLE inactive_mip_output ERROR_QUIET
 )
@@ -303,7 +303,7 @@ file(WRITE "${inactive_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"inactive\",\"input\":\"${png}\",\"output\":\"${inactive_batch_output}\",\"metadata\":null,\"identity\":null,\"profile\":${inactive_batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1 INPUT_FILE "${inactive_batch_input}"
+  COMMAND "${CLI}" edds batch --machine --protocol 1 INPUT_FILE "${inactive_batch_input}"
   RESULT_VARIABLE inactive_batch_exit OUTPUT_VARIABLE inactive_batch_stdout ERROR_QUIET
 )
 string(JSON inactive_batch_code GET "${inactive_batch_stdout}" error code)
@@ -322,7 +322,7 @@ if(NOT reference_result EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${png}" --output "${png_result}"
     --metadata "${png_metadata}" --resource-name Probe/black-box-png-result.edds
     --source-file black-box-source.png --guid 0123456789ABCDEF
@@ -347,7 +347,7 @@ foreach(stage IN ITEMS
     output-backup-rename metadata-backup-rename output-commit-rename metadata-commit-rename)
   execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env "EDDS_CONVERT_FAIL=${stage}"
-      "${CLI}" convert --machine --protocol 1
+      "${CLI}" edds convert --machine --protocol 1
       --input "${png}" --output "${png_result}"
       --metadata "${png_metadata}" --resource-name Probe/black-box-png-result.edds
       --source-file black-box-source.png --guid 0123456789ABCDEF
@@ -365,7 +365,7 @@ foreach(stage IN ITEMS
 endforeach()
 
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${png_result}" --metadata "${png_metadata}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${png_result}" --metadata "${png_metadata}"
   RESULT_VARIABLE metadata_inspect_result
   OUTPUT_VARIABLE metadata_inspect_output
   ERROR_VARIABLE metadata_inspect_error
@@ -388,7 +388,7 @@ string(REPLACE "Conversion None" "Conversion HDRCompression"
   unsupported_metadata_text "${unsupported_metadata_text}")
 file(WRITE "${unsupported_metadata}" "${unsupported_metadata_text}")
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${png_result}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${png_result}"
     --metadata "${unsupported_metadata}" --identity-only
   RESULT_VARIABLE identity_result OUTPUT_VARIABLE identity_output ERROR_VARIABLE identity_error
   OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -409,7 +409,7 @@ if(NOT png_convert_kind STREQUAL "convert" OR
 endif()
 
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${tga}" --output "${tga_result}"
     --target-format enfusion-dds --format-compress fastest --compress-threshold 80
     --conversion none --conversion-quality 1 --swizzling none
@@ -431,7 +431,7 @@ endif()
 file(SHA256 "${tga_result}" detached_hash)
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env "EDDS_CONVERT_FAIL=output-commit-rename"
-    "${CLI}" convert --machine --protocol 1 --input "${tga}" --output "${tga_result}"
+    "${CLI}" edds convert --machine --protocol 1 --input "${tga}" --output "${tga_result}"
     --format-compress copy --generate-mips true
   RESULT_VARIABLE detached_fault_exit OUTPUT_QUIET ERROR_QUIET
 )
@@ -443,7 +443,7 @@ endif()
 
 # JPG and TIFF reach conversion, metadata and preview through the same contract as PNG and TGA.
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${jpg_source}" --output "${jpg_result}"
     --metadata "${jpg_metadata}" --resource-name Probe/black-box-jpg-result.edds
     --source-file black-box-source.jpg --guid 00112233445566AA
@@ -468,7 +468,7 @@ if(NOT jpg_metadata_text MATCHES "JPGResourceClass PC")
   message(FATAL_ERROR "JPG metadata did not name its Workbench resource class: ${jpg_metadata_text}")
 endif()
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${jpg_result}" --metadata "${jpg_metadata}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${jpg_result}" --metadata "${jpg_metadata}"
   RESULT_VARIABLE jpg_inspect_result OUTPUT_VARIABLE jpg_inspect_output ERROR_QUIET
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -478,7 +478,7 @@ if(NOT jpg_inspect_result EQUAL 0 OR NOT jpg_inspect_format STREQUAL "jpg")
 endif()
 
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${tiff_source}" --output "${tiff_result}"
     --target-format enfusion-dds --format-compress fastest --compress-threshold 80
     --conversion none --conversion-quality 1 --swizzling none
@@ -508,7 +508,7 @@ foreach(alias IN ITEMS jpeg tif)
     execute_process(COMMAND "${CMAKE_COMMAND}" -E copy "${tiff_source}" "${alias_source}")
   endif()
   execute_process(
-    COMMAND "${CLI}" convert --machine --protocol 1 --input "${alias_source}" --output "${alias_result}"
+    COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${alias_source}" --output "${alias_result}"
     RESULT_VARIABLE alias_exit OUTPUT_VARIABLE alias_output ERROR_QUIET
   )
   if(NOT alias_exit EQUAL 4 OR EXISTS "${alias_result}")
@@ -526,7 +526,7 @@ file(WRITE "${damaged}" "not a JPEG at all, only bytes that end in .jpg")
 file(SHA256 "${jpg_result}" intact_jpg_hash)
 file(SHA256 "${jpg_metadata}" intact_jpg_metadata_hash)
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${damaged}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${damaged}"
     --output "${jpg_result}" --metadata "${jpg_metadata}"
     --resource-name Probe/black-box-jpg-result.edds --source-file black-box-damaged.jpg
     --guid 00112233445566AA
@@ -552,7 +552,7 @@ file(WRITE "${source_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"job\",\"id\":\"tiff\",\"input\":\"${tiff_source}\",\"output\":\"${source_batch_tiff}\",\"metadata\":null,\"identity\":null,\"profile\":${batch_profile},\"expected\":null}\n"
   "{\"protocolVersion\":1,\"kind\":\"end\"}\n")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1
+  COMMAND "${CLI}" edds batch --machine --protocol 1
   INPUT_FILE "${source_batch_input}"
   RESULT_VARIABLE source_batch_result OUTPUT_VARIABLE source_batch_output ERROR_QUIET
 )
@@ -564,7 +564,7 @@ if(NOT source_batch_result EQUAL 0 OR NOT EXISTS "${source_batch_jpg}" OR
 endif()
 
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${dds_source}" --output "${dds_result}"
     --target-format enfusion-dds --format-compress copy --compress-threshold 80
     --remove-mips 1 --conversion none --conversion-quality 1 --swizzling none
@@ -586,7 +586,7 @@ endif()
 set(dds_conflict "${CMAKE_CURRENT_BINARY_DIR}/black-box-dds-conflict.edds")
 file(REMOVE "${dds_conflict}")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${dds_source}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${dds_source}"
     --output "${dds_conflict}" --contains-mips true --generate-mips true
   RESULT_VARIABLE dds_conflict_result OUTPUT_VARIABLE dds_conflict_output ERROR_QUIET
 )
@@ -601,19 +601,19 @@ set(pre_normalize_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-mip-pre-normaliz
 set(post_normalize_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-mip-post-normalize.edds")
 file(REMOVE "${kaiser_result}" "${pre_normalize_result}" "${post_normalize_result}")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}" --output "${kaiser_result}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${tga}" --output "${kaiser_result}"
     --format-compress copy --conversion none --generate-mips true
     --mipmap-function filter --mipmap-filter kaiser
   RESULT_VARIABLE kaiser_result_code OUTPUT_QUIET ERROR_QUIET
 )
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${tga}"
     --output "${pre_normalize_result}" --format-compress copy --conversion none
     --generate-mips false --normalize true --mipmap-function filter --mipmap-filter box
   RESULT_VARIABLE pre_normalize_result_code OUTPUT_QUIET ERROR_QUIET
 )
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1 --input "${tga}"
+  COMMAND "${CLI}" edds convert --machine --protocol 1 --input "${tga}"
     --output "${post_normalize_result}" --format-compress copy --conversion none
     --generate-mips true --normalize false --mipmap-function normalize --mipmap-filter box
   RESULT_VARIABLE post_normalize_result_code OUTPUT_QUIET ERROR_QUIET
@@ -655,7 +655,7 @@ if(NOT result EQUAL 0)
 endif()
 
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${copy}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${copy}"
   RESULT_VARIABLE inspect_result
   OUTPUT_VARIABLE inspect_output
   ERROR_VARIABLE inspect_error
@@ -676,7 +676,7 @@ if(NOT inspect_kind STREQUAL "inspect" OR NOT inspect_width EQUAL 3 OR
 endif()
 
 execute_process(
-  COMMAND "${CLI}" preview --machine --protocol 1 --mip 1 --input "${copy}"
+  COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 1 --input "${copy}"
   RESULT_VARIABLE preview_result
   OUTPUT_VARIABLE preview_output
   ERROR_VARIABLE preview_error
@@ -691,7 +691,7 @@ if(NOT preview_pixels STREQUAL "ChQeKA==")
 endif()
 
 execute_process(
-  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${lz4}"
+  COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 0 --input "${lz4}"
   RESULT_VARIABLE lz4_result
   OUTPUT_VARIABLE lz4_output
   ERROR_VARIABLE lz4_error
@@ -706,7 +706,7 @@ if(NOT lz4_pixels STREQUAL "AQID/wQFBv8=")
 endif()
 
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${dxt1}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${dxt1}"
   RESULT_VARIABLE dxt1_inspect_result
   OUTPUT_VARIABLE dxt1_inspect_output
   OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -721,7 +721,7 @@ if(NOT dxt1_preview_supported OR NOT dxt1_channels STREQUAL "RGB")
 endif()
 
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${odd_fourcc}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${odd_fourcc}"
   RESULT_VARIABLE odd_fourcc_result
   OUTPUT_VARIABLE odd_fourcc_output
   ERROR_VARIABLE odd_fourcc_error
@@ -740,7 +740,7 @@ if(NOT odd_fourcc_value STREQUAL [=[Q"\?]=])
 endif()
 
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${overflow}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${overflow}"
   RESULT_VARIABLE overflow_result
   OUTPUT_VARIABLE overflow_output
   ERROR_QUIET
@@ -750,7 +750,7 @@ if(NOT overflow_result EQUAL 3)
 endif()
 
 execute_process(
-  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${odd_fourcc}"
+  COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 0 --input "${odd_fourcc}"
   RESULT_VARIABLE unsupported_preview_result
   OUTPUT_VARIABLE unsupported_preview_output
   ERROR_VARIABLE unsupported_preview_error
@@ -761,7 +761,7 @@ endif()
 
 # The same block, decoded: a DXT1 texture is sixteen opaque black pixels, not a refusal.
 execute_process(
-  COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${dxt1}"
+  COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 0 --input "${dxt1}"
   RESULT_VARIABLE dxt1_preview_result
   OUTPUT_VARIABLE dxt1_preview_output
   ERROR_VARIABLE dxt1_preview_error
@@ -777,9 +777,9 @@ if(NOT dxt1_preview_length EQUAL 64 OR
   message(FATAL_ERROR "DXT1 pixels were not independently expected: ${dxt1_preview_output}")
 endif()
 
-execute_process(COMMAND "${CLI}" inspect --machine --protocol 2 --input "${copy}"
+execute_process(COMMAND "${CLI}" edds inspect --machine --protocol 2 --input "${copy}"
   RESULT_VARIABLE bad_protocol_result OUTPUT_VARIABLE bad_protocol_output ERROR_QUIET)
-execute_process(COMMAND "${CLI}" inspect --machine --protocol 1
+execute_process(COMMAND "${CLI}" edds inspect --machine --protocol 1
   RESULT_VARIABLE bad_invocation_result OUTPUT_QUIET ERROR_QUIET)
 if(NOT bad_protocol_result EQUAL 2 OR NOT bad_invocation_result EQUAL 2)
   message(FATAL_ERROR "invalid invocations do not have stable exit 2")
@@ -799,11 +799,30 @@ if(NOT kind STREQUAL "protocol")
   message(FATAL_ERROR "bad protocol kind: ${output}")
 endif()
 
-string(JSON first_command GET "${output}" commands 0)
-string(JSON second_command GET "${output}" commands 1)
-if(NOT first_command STREQUAL "inspect" OR NOT second_command STREQUAL "preview")
-  message(FATAL_ERROR "bad command list: ${output}")
+string(JSON edds_commands ERROR_VARIABLE json_error GET "${output}" areas edds)
+string(JSON edds_command_count ERROR_VARIABLE count_error LENGTH "${output}" areas edds)
+if(json_error OR count_error OR NOT edds_command_count EQUAL 4)
+  message(FATAL_ERROR "the protocol does not name the edds area: ${output}")
 endif()
+set(listed_commands "")
+foreach(at RANGE 3)
+  string(JSON listed GET "${output}" areas edds ${at})
+  list(APPEND listed_commands "${listed}")
+endforeach()
+if(NOT listed_commands STREQUAL "inspect;preview;convert;batch")
+  message(FATAL_ERROR "bad edds command list: ${output}")
+endif()
+
+# A command reaches the codec only through its area; the bare form of the old executable is gone.
+foreach(invocation IN ITEMS "inspect" "textures")
+  execute_process(COMMAND "${CLI}" ${invocation} --machine --protocol 1 --input "${copy}"
+    RESULT_VARIABLE arealess_result OUTPUT_VARIABLE arealess_output ERROR_QUIET)
+  string(JSON arealess_category ERROR_VARIABLE arealess_error GET "${arealess_output}" error category)
+  if(NOT arealess_result EQUAL 2 OR arealess_error OR
+      NOT arealess_category STREQUAL "invalid-invocation")
+    message(FATAL_ERROR "'${invocation}' was not refused as an unknown area: ${arealess_output}")
+  endif()
+endforeach()
 
 # ---------------------------------------------------------------------------------------------
 # Every GPU conversion, end to end through the CLI, then read back by the independent reader: the
@@ -827,7 +846,7 @@ foreach(row IN ITEMS
   set(gpu_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-${wire}.edds")
   file(REMOVE "${gpu_result}")
   execute_process(
-    COMMAND "${CLI}" convert --machine --protocol 1
+    COMMAND "${CLI}" edds convert --machine --protocol 1
       --input "${gpu_source}" --output "${gpu_result}"
       --target-format enfusion-dds --format-compress fastest --compress-threshold 80
       --conversion "${wire}" --swizzling none
@@ -846,7 +865,7 @@ foreach(row IN ITEMS
   endif()
 
   execute_process(
-    COMMAND "${CLI}" inspect --machine --protocol 1 --input "${gpu_result}"
+    COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${gpu_result}"
     RESULT_VARIABLE gpu_inspect_result
     OUTPUT_VARIABLE gpu_inspect_output
     ERROR_VARIABLE gpu_inspect_error
@@ -867,7 +886,7 @@ foreach(row IN ITEMS
 
   # The smallest mip of the chain is one pixel inside one block, and it still previews.
   execute_process(
-    COMMAND "${CLI}" preview --machine --protocol 1 --mip 3 --input "${gpu_result}"
+    COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 3 --input "${gpu_result}"
     RESULT_VARIABLE gpu_preview_result
     OUTPUT_VARIABLE gpu_preview_output
     ERROR_VARIABLE gpu_preview_error
@@ -904,7 +923,7 @@ file(WRITE "${gpu_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"end\"}
 ")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1
+  COMMAND "${CLI}" edds batch --machine --protocol 1
   INPUT_FILE "${gpu_batch_input}"
   RESULT_VARIABLE gpu_batch_result OUTPUT_VARIABLE gpu_batch_stdout ERROR_VARIABLE gpu_batch_error
 )
@@ -931,7 +950,7 @@ file(WRITE "${dead_batch_input}"
   "{\"protocolVersion\":1,\"kind\":\"end\"}
 ")
 execute_process(
-  COMMAND "${CLI}" batch --machine --protocol 1
+  COMMAND "${CLI}" edds batch --machine --protocol 1
   INPUT_FILE "${dead_batch_input}"
   RESULT_VARIABLE dead_batch_result OUTPUT_VARIABLE dead_batch_stdout ERROR_QUIET
 )
@@ -943,7 +962,7 @@ endif()
 set(dxt1_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-dxt1-branch.edds")
 file(REMOVE "${dxt1_result}")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${tga}" --output "${dxt1_result}" --conversion dxt-compression
   RESULT_VARIABLE dxt1_branch_result
   OUTPUT_VARIABLE dxt1_branch_output
@@ -967,7 +986,7 @@ endif()
 
 # HDRCompression is recognized and refused, never replaced with the nearest LDR format.
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${gpu_source}" --output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-hdr.edds"
     --conversion hdr-compression
   RESULT_VARIABLE hdr_result OUTPUT_VARIABLE hdr_output ERROR_QUIET
@@ -985,7 +1004,7 @@ set(quality_result "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-quality.edds")
 set(quality_metadata "${quality_result}.meta")
 file(REMOVE "${quality_result}" "${quality_metadata}")
 execute_process(
-  COMMAND "${CLI}" convert --machine --protocol 1
+  COMMAND "${CLI}" edds convert --machine --protocol 1
     --input "${gpu_source}" --output "${quality_result}"
     --conversion color-hq-compression --conversion-quality 0.403
     --metadata "${quality_metadata}" --resource-name "Probe/gpu.edds"
@@ -1002,7 +1021,7 @@ if(NOT quality_metadata_text MATCHES "Conversion ColorHQCompression" OR
   message(FATAL_ERROR "the recipe did not record its own conversion: ${quality_metadata_text}")
 endif()
 execute_process(
-  COMMAND "${CLI}" inspect --machine --protocol 1 --input "${quality_result}"
+  COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${quality_result}"
     --metadata "${quality_metadata}"
   RESULT_VARIABLE quality_inspect_result OUTPUT_VARIABLE quality_inspect_output
   OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -1019,7 +1038,7 @@ foreach(refused IN ITEMS "none;0.5" "red;0.5" "red-green;0.5" "color-hq-compress
   list(GET refused 0 refused_conversion)
   list(GET refused 1 refused_quality)
   execute_process(
-    COMMAND "${CLI}" convert --machine --protocol 1
+    COMMAND "${CLI}" edds convert --machine --protocol 1
       --input "${gpu_source}" --output "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-refused.edds"
       --conversion "${refused_conversion}" --conversion-quality "${refused_quality}"
     RESULT_VARIABLE refused_result OUTPUT_VARIABLE refused_output ERROR_QUIET
@@ -1039,7 +1058,7 @@ foreach(pair IN ITEMS "copy;80;${copy_result}" "best;100;${lz4_result}")
   list(GET pair 1 threshold)
   list(GET pair 2 destination)
   execute_process(
-    COMMAND "${CLI}" convert --machine --protocol 1
+    COMMAND "${CLI}" edds convert --machine --protocol 1
       --input "${gpu_flat}" --output "${destination}"
       --format-compress "${compress}" --compress-threshold "${threshold}"
       --conversion color-hq-compression
@@ -1049,13 +1068,13 @@ foreach(pair IN ITEMS "copy;80;${copy_result}" "best;100;${lz4_result}")
     message(FATAL_ERROR "${compress} conversion failed: ${container_error}")
   endif()
 endforeach()
-execute_process(COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${copy_result}"
+execute_process(COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 0 --input "${copy_result}"
   OUTPUT_VARIABLE copy_pixels OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "${CLI}" preview --machine --protocol 1 --mip 0 --input "${lz4_result}"
+execute_process(COMMAND "${CLI}" edds preview --machine --protocol 1 --mip 0 --input "${lz4_result}"
   OUTPUT_VARIABLE lz4_pixels_output OUTPUT_STRIP_TRAILING_WHITESPACE)
 string(JSON copy_pixel_data GET "${copy_pixels}" pixelsBase64)
 string(JSON lz4_pixel_data GET "${lz4_pixels_output}" pixelsBase64)
-execute_process(COMMAND "${CLI}" inspect --machine --protocol 1 --input "${lz4_result}"
+execute_process(COMMAND "${CLI}" edds inspect --machine --protocol 1 --input "${lz4_result}"
   OUTPUT_VARIABLE lz4_inspect OUTPUT_STRIP_TRAILING_WHITESPACE)
 string(JSON lz4_container GET "${lz4_inspect}" mips 0 container)
 if(NOT copy_pixel_data STREQUAL "${lz4_pixel_data}" OR NOT lz4_container STREQUAL "LZ4")

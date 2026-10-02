@@ -22,6 +22,8 @@ import {
 } from './textureConversions';
 
 export const EDDS_PROTOCOL_VERSION = 1;
+/** The first-level subcommand of the bundled executable that owns textures. */
+export const EDDS_AREA = 'edds';
 export const EDDS_MAX_DIMENSION = 32_768;
 export const EDDS_MAX_MIPS = 32;
 export const EDDS_MAX_PREVIEW_BYTES = 64 * 1024 * 1024;
@@ -105,6 +107,7 @@ export interface EddsConversion {
 export interface EddsProtocol {
   readonly protocolVersion: typeof EDDS_PROTOCOL_VERSION;
   readonly toolVersion: string;
+  /** The commands of the executable's `edds` area, the only one this adapter speaks. */
   readonly commands: readonly string[];
 }
 
@@ -121,12 +124,19 @@ export interface EddsMachineFailure {
   readonly message: string;
 }
 
-/** The cached handshake, checked before an input path is handed to the converter. */
+/**
+ * The cached handshake, checked before an input path is handed to the converter. The executable
+ * lists its commands per area; this adapter needs the four of `edds`.
+ */
 export function protocolOf(source: string): EddsProtocol {
   const value = envelopeOf(source, 'protocol');
   const toolVersion = stringOf(value, 'toolVersion');
-  const commands = arrayOf(value, 'commands').map((command, at) =>
-    stringValue(command, `commands[${at}]`),
+  const areas = objectValue(value.areas, 'areas');
+  if (!Array.isArray(areas[EDDS_AREA])) {
+    throw new Error(`The native executable has no ${EDDS_AREA} area.`);
+  }
+  const commands = arrayOf(areas, EDDS_AREA).map((command, at) =>
+    stringValue(command, `areas.${EDDS_AREA}[${at}]`),
   );
 
   if (!commands.includes('inspect')) {

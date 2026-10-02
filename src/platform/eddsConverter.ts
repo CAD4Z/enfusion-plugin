@@ -10,6 +10,7 @@ import { textureSwizzleWireOf } from '../mods/textureSwizzles';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import {
+  EDDS_AREA,
   type EddsFailureCategory,
   type EddsConversion,
   type EddsInspection,
@@ -78,7 +79,7 @@ export class EddsConverter {
       'dist',
       'native',
       'win32-x64',
-      'edds-convert.exe',
+      'enfusion.exe',
     );
   }
 
@@ -93,7 +94,7 @@ export class EddsConverter {
       return inspectionOf(
         await this.invoke(
           [
-            'inspect', '--machine', '--protocol', '1', '--input', input,
+            EDDS_AREA, 'inspect', '--machine', '--protocol', '1', '--input', input,
             ...(metadata === undefined ? [] : ['--metadata', metadata]),
             ...(identityOnly ? ['--identity-only'] : []),
           ],
@@ -108,7 +109,7 @@ export class EddsConverter {
       await this.compatible(scheduledSignal);
       return previewOf(
         await this.invoke(
-          ['preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input],
+          [EDDS_AREA, 'preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input],
           scheduledSignal,
         ),
       );
@@ -137,7 +138,7 @@ export class EddsConverter {
       return conversionOf(
         await this.invoke(
           [
-            'convert', '--machine', '--protocol', '1',
+            EDDS_AREA, 'convert', '--machine', '--protocol', '1',
             '--input', plan.source,
             '--output', plan.output,
             '--target-format', 'enfusion-dds',

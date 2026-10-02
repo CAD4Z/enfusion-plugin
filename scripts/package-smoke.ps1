@@ -26,7 +26,7 @@ $expected = @(
   'dist/extension.js',
   'dist/native/win32-x64/THIRD-PARTY.md',
   'dist/native/win32-x64/NOTICE.txt',
-  'dist/native/win32-x64/edds-convert.exe'
+  'dist/native/win32-x64/enfusion.exe'
 ) | Sort-Object
 
 $listed = @(npx vsce ls | Where-Object { $_ -ne '' } | Sort-Object)
@@ -47,9 +47,9 @@ if ($LASTEXITCODE -ne 0) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Vsix))
 try {
-  $entry = $archive.GetEntry('extension/dist/native/win32-x64/edds-convert.exe')
+  $entry = $archive.GetEntry('extension/dist/native/win32-x64/enfusion.exe')
   if ($null -eq $entry) {
-    throw 'the packaged VSIX has no native converter'
+    throw 'the packaged VSIX has no native executable'
   }
 
   $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -64,9 +64,9 @@ try {
     $sha.Dispose()
   }
 
-  $stagedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/native/win32-x64/edds-convert.exe').Hash
+  $stagedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath 'dist/native/win32-x64/enfusion.exe').Hash
   if ($packagedHash -ne $stagedHash) {
-    throw 'the VSIX converter is not the staged and tested converter'
+    throw 'the VSIX executable is not the staged and tested executable'
   }
 
   $swizzles = @('TerrainLayerTexture', 'TerrainSuperTexture', 'TerrainNormalSpecular_SYxX',
