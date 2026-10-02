@@ -134,7 +134,7 @@ export async function run(): Promise<void> {
   const conversion = await executeFile(
     executable,
     [
-      'convert', '--machine', '--protocol', '1',
+      'edds', 'convert', '--machine', '--protocol', '1',
       '--input', source.fsPath, '--output', converted.fsPath,
       '--target-format', 'enfusion-dds', '--format-compress', 'fastest',
       '--compress-threshold', '80', '--remove-mips', '0',
@@ -169,7 +169,7 @@ export async function run(): Promise<void> {
     const result = await executeFile(
       executable,
       [
-        'convert', '--machine', '--protocol', '1',
+        'edds', 'convert', '--machine', '--protocol', '1',
         '--input', source.fsPath, '--output', output.fsPath,
         '--target-format', 'enfusion-dds', '--format-compress', 'fastest',
         '--compress-threshold', '80', '--conversion', conversion,
@@ -183,7 +183,7 @@ export async function run(): Promise<void> {
 
     const inspected = await executeFile(
       executable,
-      ['inspect', '--machine', '--protocol', '1', '--input', output.fsPath],
+      ['edds', 'inspect', '--machine', '--protocol', '1', '--input', output.fsPath],
       { encoding: 'utf8', shell: false, windowsHide: true },
     );
     const facts = machineValue(inspected.stdout);
@@ -193,7 +193,7 @@ export async function run(): Promise<void> {
 
     const previewed = await executeFile(
       executable,
-      ['preview', '--machine', '--protocol', '1', '--mip', '0', '--input', output.fsPath],
+      ['edds', 'preview', '--machine', '--protocol', '1', '--mip', '0', '--input', output.fsPath],
       { encoding: 'utf8', shell: false, windowsHide: true },
     );
     assert.equal(machineValue(previewed.stdout).byteLength, 2 * 1 * 4);
@@ -204,7 +204,7 @@ export async function run(): Promise<void> {
     executeFile(
       executable,
       [
-        'convert', '--machine', '--protocol', '1',
+        'edds', 'convert', '--machine', '--protocol', '1',
         '--input', source.fsPath,
         '--output', vscode.Uri.joinPath(workspace.uri, 'packaged-hdr.edds').fsPath,
         '--conversion', 'hdr-compression',
@@ -249,7 +249,7 @@ function batchInput(jobs: readonly SmokeBatchJob[]): string {
 
 function executeBatchProcess(executable: string, input: string): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['batch', '--machine', '--protocol', '1'], {
+    const child = spawn(executable, ['edds', 'batch', '--machine', '--protocol', '1'], {
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
