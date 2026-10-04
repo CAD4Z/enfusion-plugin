@@ -1,19 +1,24 @@
-#include "memory.h"
 /*
  * The readers and refusals shared by every source-image codec. Nothing here knows which format it
  * is serving: PNG and TIFF meet in the inflate, JPEG and TIFF in the byte order, all four in the
  * refusal shape and the decoded-size ceiling.
  */
+#include "memory.h"
 #include "image.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
+/** The longest code, in bits, that the Huffman codes of the inflate may have. */
 enum {
     DEFLATE_MAX_BITS = 15
 };
 
+/**
+ * Reads a stream bit by bit, the lowest bit of each byte first: the bytes, where the next byte
+ * is, and the bits loaded from them but not yet taken.
+ */
 typedef struct bit_reader {
     const uint8_t *bytes;
     size_t         size;
@@ -22,16 +27,23 @@ typedef struct bit_reader {
     unsigned       bit_count;
 } bit_reader;
 
+/**
+ * A Huffman code: how many codes there are of each length, and the symbols sorted by the length
+ * of their code, then by value.
+ */
 typedef struct huffman {
     uint16_t count[DEFLATE_MAX_BITS + 1];
     uint16_t symbol[288];
 } huffman;
 
+/** Fills `error` with a code and a printf-style message; does nothing when `error` is NULL. */
 void edds_fail(edds_error *error, const char *code, const char *format, ...) {
     va_list arguments;
+
     if (error == NULL) {
         return;
     }
+
     memset(error, 0, sizeof *error);
     (void)snprintf(error->code, sizeof error->code, "%s", code);
     va_start(arguments, format);
@@ -39,14 +51,17 @@ void edds_fail(edds_error *error, const char *code, const char *format, ...) {
     va_end(arguments);
 }
 
+/** Reads a 16-bit number stored low byte first. */
 uint16_t edds_u16le(const uint8_t *at) {
     return (uint16_t)((uint16_t)at[0] | ((uint16_t)at[1] << 8));
 }
 
+/** Reads a 16-bit number stored high byte first. */
 uint16_t edds_u16be(const uint8_t *at) {
     return (uint16_t)(((uint16_t)at[0] << 8) | (uint16_t)at[1]);
 }
 
+/** Reads a 32-bit number stored low byte first. */
 uint32_t edds_u32le(const uint8_t *at) {
     return (uint32_t)at[0] |
         ((uint32_t)at[1] << 8) |
@@ -54,6 +69,7 @@ uint32_t edds_u32le(const uint8_t *at) {
         ((uint32_t)at[3] << 24);
 }
 
+/** Reads a 32-bit number stored high byte first. */
 uint32_t edds_u32be(const uint8_t *at) {
     return ((uint32_t)at[0] << 24) |
         ((uint32_t)at[1] << 16) |
@@ -61,6 +77,7 @@ uint32_t edds_u32be(const uint8_t *at) {
         at[3];
 }
 
+/** Writes a 32-bit number low byte first. */
 void edds_put_u32le(uint8_t *at, uint32_t value) {
     at[0] = (uint8_t)value;
     at[1] = (uint8_t)(value >> 8);
@@ -68,215 +85,326 @@ void edds_put_u32le(uint8_t *at, uint32_t value) {
     at[3] = (uint8_t)(value >> 24);
 }
 
+/**
+ * Reads the whole file into one allocation the caller releases with `edds_free`. Returns 0, with
+ * `error` filled, when the file is too large or cannot be read.
+ */
 int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error) {
     long     length;
     uint8_t *allocation;
+
     *bytes = NULL;
     *size  = 0;
-    if (fseek(input, 0, SEEK_END) != 0 || (length = ftell(input)) < 0 ||
-        fseek(input, 0, SEEK_SET) != 0 || (uint64_t)length > EDDS_MAX_FILE_BYTES) {
-        edds_fail(error, "source-size-limit", "The source image could not be measured within the supported limit.");
+
+    /* The size, from a seek to the end and back to the start. */
+    if (fseek(input, 0, SEEK_END) != 0 ||
+        (length = ftell(input)) < 0 ||
+        fseek(input, 0, SEEK_SET) != 0 ||
+        (uint64_t)length > EDDS_MAX_FILE_BYTES) {
+        edds_fail(error, "source-size-limit",
+            "The source image could not be measured within the supported limit.");
         return 0;
     }
+
+    /* An empty file still gets a one-byte allocation. */
     allocation = edds_alloc(length == 0 ? 1u : (size_t)length);
+
     if (allocation == NULL) {
-        edds_fail(error, "allocation-failed", "Memory for the source image could not be allocated.");
+        edds_fail(error, "allocation-failed",
+            "Memory for the source image could not be allocated.");
         return 0;
     }
+
     if (fread(allocation, 1, (size_t)length, input) != (size_t)length) {
         edds_free(allocation);
         edds_fail(error, "source-read-failed", "The source image could not be read completely.");
         return 0;
     }
+
     *bytes = allocation;
     *size  = (size_t)length;
+
     return 1;
 }
 
+/** The Adler-32 checksum: two running sums, each modulo 65521, the second in the high half. */
 static uint32_t adler32(const uint8_t *bytes, size_t size) {
     uint32_t first  = 1;
     uint32_t second = 0;
+
     for (size_t at = 0; at < size; ++at) {
         first  = (first + bytes[at]) % 65521u;
         second = (second + first) % 65521u;
     }
+
     return (second << 16) | first;
 }
 
+/**
+ * Takes the next `count` bits into `value`, loading whole bytes as it needs them. Returns 0 when
+ * the input runs out first.
+ */
 static int take_bits(bit_reader *reader, unsigned count, uint32_t *value) {
     while (reader->bit_count < count) {
         if (reader->at >= reader->size) {
             return 0;
         }
+
         reader->bits      |= (uint64_t)reader->bytes[reader->at++] << reader->bit_count;
         reader->bit_count += 8;
     }
-    *value              = (uint32_t)(reader->bits & (((uint64_t)1u << count) - 1u));
+
+    *value = (uint32_t)(reader->bits & (((uint64_t)1u << count) - 1u));
+
     reader->bits      >>= count;
     reader->bit_count  -= count;
+
     return 1;
 }
 
+/** Drops what is left of a partly taken byte, so the next bits taken start a whole byte. */
 static void align_bits(bit_reader *reader) {
-    const unsigned discard   = reader->bit_count & 7u;
-    reader->bits           >>= discard;
-    reader->bit_count       -= discard;
+    const unsigned discard = reader->bit_count & 7u;
+
+    reader->bits      >>= discard;
+    reader->bit_count  -= discard;
 }
 
+/**
+ * Builds a Huffman code from the code length of each symbol, 0 for a symbol that is not used.
+ * Returns 0 for a length over the limit, no symbol used at all, or more codes of some length than
+ * the shorter lengths leave room for.
+ */
 static int build_huffman(huffman *tree, const uint8_t *lengths, uint32_t symbols) {
     uint16_t offsets[DEFLATE_MAX_BITS + 1];
     int      left = 1;
+
     memset(tree, 0, sizeof *tree);
+
+    /* How many symbols have each code length. */
     for (uint32_t symbol = 0; symbol < symbols; ++symbol) {
         if (lengths[symbol] > DEFLATE_MAX_BITS) {
             return 0;
         }
+
         ++tree->count[lengths[symbol]];
     }
+
     if (tree->count[0] == symbols) {
         return 0;
     }
+
+    /* `left` counts the codes still free at each length; it must never go below zero. */
     for (unsigned bits = 1; bits <= DEFLATE_MAX_BITS; ++bits) {
         left = (left << 1) - tree->count[bits];
+
         if (left < 0) {
             return 0;
         }
     }
+
+    /* Where the symbols of each length start in the sorted list, then the list itself. */
     offsets[1] = 0;
+
     for (unsigned bits = 1; bits < DEFLATE_MAX_BITS; ++bits) {
         offsets[bits + 1] = (uint16_t)(offsets[bits] + tree->count[bits]);
     }
+
     for (uint32_t symbol = 0; symbol < symbols; ++symbol) {
         if (lengths[symbol] != 0) {
             tree->symbol[offsets[lengths[symbol]]++] = (uint16_t)symbol;
         }
     }
+
     return 1;
 }
 
+/**
+ * Reads one symbol of a Huffman code, a bit at a time, trying the shortest code length first.
+ * Returns 0 when the bits run out or match no code.
+ */
 static int decode_symbol(bit_reader *reader, const huffman *tree, uint32_t *symbol) {
     uint32_t code  = 0;
     uint32_t first = 0;
     uint32_t index = 0;
+
     for (unsigned length = 1; length <= DEFLATE_MAX_BITS; ++length) {
         uint32_t       bit;
         const uint32_t count = tree->count[length];
+
         if (!take_bits(reader, 1, &bit)) {
             return 0;
         }
+
         code |= bit;
+
+        /* The codes of this length run from `first`, and their symbols from `index`. */
         if (code < first + count) {
             *symbol = tree->symbol[index + code - first];
             return 1;
         }
+
         index  += count;
         first   = (first + count) << 1;
         code  <<= 1;
     }
+
     return 0;
 }
 
+/**
+ * Builds the fixed codes a block of type 1 uses: code lengths of 7 to 9 bits for the literal and
+ * length symbols, by range, and 5 bits for every distance symbol.
+ */
 static int fixed_trees(huffman *literal, huffman *distance) {
     uint8_t literal_lengths[288];
     uint8_t distance_lengths[32];
+
     for (uint32_t at = 0; at <= 143; ++at) {
         literal_lengths[at] = 8;
     }
+
     for (uint32_t at = 144; at <= 255; ++at) {
         literal_lengths[at] = 9;
     }
+
     for (uint32_t at = 256; at <= 279; ++at) {
         literal_lengths[at] = 7;
     }
+
     for (uint32_t at = 280; at < 288; ++at) {
         literal_lengths[at] = 8;
     }
+
     memset(distance_lengths, 5, sizeof distance_lengths);
+
     return build_huffman(literal, literal_lengths, 288) &&
         build_huffman(distance, distance_lengths, 32);
 }
 
+/**
+ * Reads the codes a block of type 2 carries at its start: the code lengths of its literal, length
+ * and distance symbols, themselves written with a small code of their own. Returns 0 when that
+ * start is malformed or the bits run out.
+ */
 static int dynamic_trees(bit_reader *reader, huffman *literal, huffman *distance) {
+    /* The order in which the lengths of the small code are written. */
     static const uint8_t order[19] = {
         16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
     };
-    uint8_t  code_lengths[19]  = { 0 };
-    uint8_t  lengths[288 + 32] = { 0 };
-    huffman  codes;
+
+    /* The small code and its lengths, and the lengths it gives every other symbol. */
+    uint8_t code_lengths[19]  = { 0 };
+    uint8_t lengths[288 + 32] = { 0 };
+    huffman codes;
+
+    /* The counts the block declares, and how many symbol lengths have been read so far. */
     uint32_t value;
     uint32_t literal_count;
     uint32_t distance_count;
     uint32_t code_count;
     uint32_t at = 0;
+
+    /* How many literal and length symbols, distance symbols and small-code lengths follow. */
     if (!take_bits(reader, 5, &value)) {
         return 0;
     }
+
     literal_count = value + 257u;
+
     if (!take_bits(reader, 5, &value)) {
         return 0;
     }
+
     distance_count = value + 1u;
+
     if (!take_bits(reader, 4, &value)) {
         return 0;
     }
+
     code_count = value + 4u;
+
     if (literal_count > 286u || distance_count > 32u) {
         return 0;
     }
+
+    /* The small code: three bits for each of its lengths, in `order`; the rest stay 0. */
     for (uint32_t index = 0; index < code_count; ++index) {
         if (!take_bits(reader, 3, &value)) {
             return 0;
         }
+
         code_lengths[order[index]] = (uint8_t)value;
     }
+
     if (!build_huffman(&codes, code_lengths, 19)) {
         return 0;
     }
+
+    /*
+     * The symbol lengths, read with the small code: 0 to 15 is a length, 16 repeats the one before
+     * 3 to 6 times, 17 repeats a 0 3 to 10 times and 18 repeats a 0 11 to 138 times.
+     */
     while (at < literal_count + distance_count) {
         uint32_t symbol;
         uint32_t repeat = 1;
         uint8_t  length;
+
         if (!decode_symbol(reader, &codes, &symbol)) {
             return 0;
         }
+
         if (symbol <= 15u) {
             length = (uint8_t)symbol;
         } else if (symbol == 16u) {
             if (at == 0 || !take_bits(reader, 2, &value)) {
                 return 0;
             }
+
             repeat = value + 3u;
             length = lengths[at - 1u];
         } else if (symbol == 17u) {
             if (!take_bits(reader, 3, &value)) {
                 return 0;
             }
+
             repeat = value + 3u;
             length = 0;
         } else if (symbol == 18u) {
             if (!take_bits(reader, 7, &value)) {
                 return 0;
             }
+
             repeat = value + 11u;
             length = 0;
         } else {
             return 0;
         }
+
         if (repeat > literal_count + distance_count - at) {
             return 0;
         }
+
         while (repeat-- != 0) {
             lengths[at++] = length;
         }
     }
+
+    /* Symbol 256, the one that ends a block, must have a code. */
     if (lengths[256] == 0 ||
         !build_huffman(literal, lengths, literal_count) ||
         !build_huffman(distance, lengths + literal_count, distance_count)) {
         return 0;
     }
+
     return 1;
 }
 
+/**
+ * Decodes the symbols of one compressed block into `output` up to the symbol that ends it: a
+ * literal is one byte, and a length with a distance copies that many bytes from that far back.
+ * Returns 0 when the data is malformed or would not fit `output`.
+ */
 static int inflate_codes(
     bit_reader    *reader,
     const huffman *literal,
@@ -284,6 +412,10 @@ static int inflate_codes(
     uint8_t       *output,
     size_t         output_size,
     size_t        *output_at) {
+    /*
+     * For length symbols 257 to 285 and distance symbols 0 to 29: the smallest value each stands
+     * for, and how many extra bits follow it, read as a number added to that value.
+     */
     static const uint16_t length_base[29] = {
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27,
         31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258
@@ -301,40 +433,57 @@ static int inflate_codes(
         0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6,
         6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13
     };
+
     for (;;) {
         uint32_t symbol;
         uint32_t extra;
         size_t   length;
         size_t   offset;
+
         if (!decode_symbol(reader, literal, &symbol)) {
             return 0;
         }
+
+        /* A literal byte. */
         if (symbol < 256u) {
             if (*output_at >= output_size) {
                 return 0;
             }
+
             output[(*output_at)++] = (uint8_t)symbol;
             continue;
         }
+
+        /* The end of the block. */
         if (symbol == 256u) {
             return 1;
         }
+
         if (symbol < 257u || symbol > 285u) {
             return 0;
         }
+
+        /* A length, then a distance: that many bytes copied from that far back in the output. */
         symbol -= 257u;
+
         if (!take_bits(reader, length_extra[symbol], &extra)) {
             return 0;
         }
+
         length = length_base[symbol] + extra;
-        if (!decode_symbol(reader, distance, &symbol) || symbol >= 30u ||
+
+        if (!decode_symbol(reader, distance, &symbol) ||
+            symbol >= 30u ||
             !take_bits(reader, distance_extra[symbol], &extra)) {
             return 0;
         }
+
         offset = distance_base[symbol] + extra;
+
         if (offset > *output_at || length > output_size - *output_at) {
             return 0;
         }
+
         for (size_t copied = 0; copied < length; ++copied) {
             output[*output_at] = output[*output_at - offset];
             ++*output_at;
@@ -342,62 +491,107 @@ static int inflate_codes(
     }
 }
 
-int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
+/**
+ * Inflates one zlib stream into exactly `output_size` bytes: a two-byte header, blocks up to the
+ * one marked last, and the Adler-32 checksum of the output in the last four bytes. Returns 1 only
+ * when all of it holds.
+ */
+int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output,
+    size_t output_size) {
     bit_reader reader;
     size_t     output_at = 0;
     int        final     = 0;
-    if (input_size < 6u || (input[0] & 0x0fu) != 8u || (input[0] >> 4) > 7u ||
-        (((uint32_t)input[0] << 8) | input[1]) % 31u != 0 || (input[1] & 0x20u) != 0) {
+
+    /*
+     * The header: the low four bits of the first byte are 8 and the high four at most 7, the two
+     * bytes read as one number are a multiple of 31, and bit 5 of the second byte is clear.
+     */
+    if (input_size < 6u ||
+        (input[0] & 0x0fu) != 8u ||
+        (input[0] >> 4) > 7u ||
+        (((uint32_t)input[0] << 8) | input[1]) % 31u != 0 ||
+        (input[1] & 0x20u) != 0) {
         return 0;
     }
+
+    /* The blocks lie between the header and the four-byte checksum. */
     reader.bytes     = input + 2;
     reader.size      = input_size - 6u;
     reader.at        = 0;
     reader.bits      = 0;
     reader.bit_count = 0;
+
+    /* The blocks, one by one. Each starts with a bit that marks the last one, then two of type. */
     while (!final) {
         uint32_t value;
         uint32_t type;
         huffman  literal;
         huffman  distance;
+
         if (!take_bits(&reader, 1, &value)) {
             return 0;
         }
+
         final = (int)value;
+
         if (!take_bits(&reader, 2, &type)) {
             return 0;
         }
+
         if (type == 0) {
+            /*
+             * Type 0 holds its bytes as they are: from the next whole byte, a 16-bit length, the
+             * same length with every bit flipped, then that many bytes.
+             */
             uint32_t length;
             uint32_t complement;
+
             align_bits(&reader);
-            if (!take_bits(&reader, 16, &length) || !take_bits(&reader, 16, &complement) ||
-                (length ^ 0xffffu) != complement || length > output_size - output_at) {
+
+            if (!take_bits(&reader, 16, &length) ||
+                !take_bits(&reader, 16, &complement) ||
+                (length ^ 0xffffu) != complement ||
+                length > output_size - output_at) {
                 return 0;
             }
+
             for (uint32_t at = 0; at < length; ++at) {
                 if (!take_bits(&reader, 8, &value)) {
                     return 0;
                 }
+
                 output[output_at++] = (uint8_t)value;
             }
         } else if (type == 1 || type == 2) {
+            /* Types 1 and 2 are compressed: with the fixed codes, or with codes of their own. */
             const int built = type == 1
                 ? fixed_trees(&literal, &distance)
                 : dynamic_trees(&reader, &literal, &distance);
-            if (!built || !inflate_codes(&reader, &literal, &distance, output, output_size, &output_at)) {
+
+            if (!built ||
+                !inflate_codes(&reader, &literal, &distance, output, output_size, &output_at)) {
                 return 0;
             }
         } else {
             return 0;
         }
     }
-    return output_at == output_size && reader.at == reader.size && reader.bit_count < 8u &&
+
+    /* The output exactly full, the input used up to the checksum, and the checksum matching. */
+    return output_at == output_size &&
+        reader.at == reader.size &&
+        reader.bit_count < 8u &&
         adler32(output, output_size) == edds_u32be(input + input_size - 4u);
 }
 
+/**
+ * Whether a decoded image of this size is allowed: both sides from 1 up to the dimension limit,
+ * and its RGBA bytes within the decoded-image limit.
+ */
 int edds_decoded_size_allowed(uint32_t width, uint32_t height) {
-    return width != 0 && height != 0 && width <= EDDS_MAX_DIMENSION &&
+    return width != 0 &&
+        height != 0 &&
+        width <= EDDS_MAX_DIMENSION &&
         height <= EDDS_MAX_DIMENSION &&
         (uint64_t)width * height * 4u <= EDDS_MAX_PREVIEW_BYTES;
 }
