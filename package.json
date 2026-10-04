@@ -146,6 +146,16 @@
         "title": "Convert Texture to EDDS",
         "category": "Enfusion",
         "icon": "$(file-media)"
+      },
+      {
+        "command": "enfusion.font.generate",
+        "title": "Generate Enfusion Font…",
+        "category": "Enfusion"
+      },
+      {
+        "command": "enfusion.font.regenerate",
+        "title": "Regenerate Enfusion Font",
+        "category": "Enfusion"
       }
     ],
     "menus": {
@@ -176,6 +186,16 @@
           "command": "enfusion.texture.convert",
           "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff|dds)$/i",
           "group": "navigation@20"
+        },
+        {
+          "command": "enfusion.font.generate",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && !explorerResourceIsFolder && resourceExtname =~ /\\.ttf$/i",
+          "group": "navigation@21"
+        },
+        {
+          "command": "enfusion.font.regenerate",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && !explorerResourceIsFolder && resourceExtname =~ /\\.fnt$/i",
+          "group": "navigation@21"
         }
       ]
     },

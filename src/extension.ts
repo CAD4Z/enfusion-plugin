@@ -7,6 +7,7 @@ import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
 import { EddsConverter } from './platform/texture/eddsConverter';
 import { registerBuildCommands } from './view/build';
+import { registerFontCommands } from './view/fontCommands';
 import { EnfEditor } from './view/enfEditor';
 import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
@@ -77,6 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     registerTextureEditor(context, log, converter),
     registerTextureConversionEditor(context, log, converter),
+    registerFontCommands(context, log),
   );
 }
 

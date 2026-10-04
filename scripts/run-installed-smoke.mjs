@@ -20,6 +20,9 @@ async function main() {
   fs.mkdirSync(extensions, { recursive: true });
   fs.mkdirSync(userData, { recursive: true });
   fs.mkdirSync(workspace, { recursive: true });
+  // Owned synthetic TrueType, produced by the native black-box suite before packaging in CI.
+  fs.copyFileSync(path.resolve('native/.build/font-black-box/fixture-gpos.ttf'), path.join(workspace, 'Font smoke.ttf'));
+  fs.copyFileSync(path.resolve('native/.build/font-black-box/fixture.charset.txt'), path.join(workspace, 'Font smoke.txt'));
 
   await runVSCodeCommand(
     [

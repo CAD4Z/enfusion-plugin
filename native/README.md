@@ -229,6 +229,11 @@ written. A new font gets `--guid` or a random GUID no `.meta` beside it uses; a 
 has a recipe keeps its GUID, and a different `--guid` is refused. The atlas is not registered: no
 `.edds.meta` is written for it.
 
+An interactive caller can bind generation to its confirmed files with `--expect-output-revision`,
+`--expect-atlas-revision` and `--expect-metadata-revision`. Supply all three as `size:mtime` (bytes
+and Unix milliseconds), or `missing`. They are checked before generation and again immediately
+before publication; a changed file refuses the operation without replacing any destination.
+
 A character file is UTF-8 text, and every character in it is in the font; line breaks, other
 control characters and spaces only separate them. The space and U+25A1 □ are always in the font.
 A font without □ gets a square frame drawn by the generator. Characters the font has no glyph for

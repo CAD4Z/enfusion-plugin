@@ -151,6 +151,25 @@ asking it to inspect a file. The executable has no DayZ Tools, language runtime 
 loaded codec dependency. Its `font` area makes SDF fonts the engine draws from static TrueType
 fonts, with the recipe kept in `.fnt.meta`; see [the native README](native/README.md#fonts-sdf-fonts-from-truetype).
 
+## Font generation
+
+On Windows x64, right-click a local static `.ttf` inside a discovered mod or workspace and choose
+**Generate Enfusion Font…**. The command checks the selected file's root even in a window that also
+holds unrelated folders. Choose the atlas size (8–40 px, default 32), a `.txt` character file beside
+the source or the built-in Basic Latin, Latin-1 and Cyrillic set, then the output name. Its default
+is `SDF_<Family><Style><Size>`; enter the stem without an extension.
+
+The font `.fnt`, atlas `.edds` and recipe `.fnt.meta` are written beside the source. Existing files
+require **Replace** confirmation, including a lone atlas or recipe. A readable existing GUID is
+preserved; an unreadable GUID refuses the operation. Changed outputs require starting the command
+again. The result lists missing characters, also recorded in the Enfusion output channel.
+
+**Regenerate Enfusion Font** on a `.fnt` uses its sibling recipe, preserving the GUID and rewriting
+the recipe in canonical form. Missing or malformed recipes report their reason without replacing
+the font. Both commands offer progress and cancellation; the native generator rolls back failed
+publication of the three files. The atlas gets no `.edds.meta`. Even outside a mod's prefix root,
+a font receives its recipe; its resource name is relative to the discovered root's parent.
+
 ## The Mods panel
 
 The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists

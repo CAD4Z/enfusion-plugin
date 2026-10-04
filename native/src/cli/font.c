@@ -48,6 +48,11 @@ typedef struct font_options {
     const cli_char *characters;
     const cli_char *guid;
     const cli_char *cancel_file;
+
+    /** Optional output revisions captured before the caller confirmed this command. */
+    const cli_char *expected_output;
+    const cli_char *expected_atlas;
+    const cli_char *expected_metadata;
 } font_options;
 
 /** Prints the usage of the font area to stderr. */
@@ -138,6 +143,12 @@ static int parse_options(int argc, cli_char **argv, font_options *options) {
             path = &options->guid;
         } else if (equals(argv[at], "--cancel-file")) {
             path = &options->cancel_file;
+        } else if (equals(argv[at], "--expect-output-revision")) {
+            path = &options->expected_output;
+        } else if (equals(argv[at], "--expect-atlas-revision")) {
+            path = &options->expected_atlas;
+        } else if (equals(argv[at], "--expect-metadata-revision")) {
+            path = &options->expected_metadata;
         }
 
         /* An unknown flag, or one given twice. */
@@ -943,10 +954,37 @@ static edds_status write_atlas(FILE *output, const font_output *font, edds_error
 }
 
 /**
- * Builds the three files in sibling temporaries, then swaps them in together or not at all.
- * Returns EDDS_OK once all three are in place, or the refusal.
+ * Refuses when any destination is no longer the one the caller confirmed. All three expectations
+ * are required together; without them, the public CLI retains its explicit replacement behavior.
  */
-static edds_status publish(const font_paths *paths, const font_recipe *recipe, const font_output *font, edds_error *error) {
+static edds_status validate_revisions(const font_options *options, const font_paths *paths, edds_error *error) {
+    const cli_char *targets[3] = { paths->fnt, paths->atlas, paths->meta };
+    const cli_char *values[3]  = { options->expected_output, options->expected_atlas, options->expected_metadata };
+
+    if (values[0] == NULL && values[1] == NULL && values[2] == NULL) {
+        return EDDS_OK;
+    }
+
+    for (size_t at = 0; at < 3u; ++at) {
+        file_revision expected, actual;
+
+        if (values[at] == NULL || !parse_revision(values[at], &expected)) {
+            return refuse(error, EDDS_INVALID_INVOCATION, "invalid-revisions",
+                "Supply all three font output revisions as size:mtime or missing.");
+        }
+
+        if (!revision_of(targets[at], &actual) || !same_revision(&expected, &actual)) {
+            return refuse(error, EDDS_INVALID_INPUT, "stale-font-output",
+                "The font files changed after this command was planned; run the font command again before replacing them.");
+        }
+    }
+
+    return EDDS_OK;
+}
+
+/** Builds temporaries, then checks the confirmed revisions immediately before replacing any output. */
+static edds_status publish(
+    const font_options *options, const font_paths *paths, const font_recipe *recipe, const font_output *font, edds_error *error) {
     /* The atlas, the FNT and the recipe, in that order. */
     cli_artifact artifacts[3] = {
         { paths->atlas, NULL, NULL, 0, 0 },
@@ -1001,6 +1039,10 @@ static edds_status publish(const font_paths *paths, const font_recipe *recipe, c
 
     if (status == EDDS_OK && was_cancelled(NULL)) {
         status = refuse(error, EDDS_CANCELLED, "cancelled", "The font generation was cancelled before it was published.");
+    }
+
+    if (status == EDDS_OK) {
+        status = validate_revisions(options, paths, error);
     }
 
     /* The old files moved aside, one by one. */
@@ -1101,6 +1143,12 @@ static int generate_command(const font_options *options) {
         goto done;
     }
 
+    status = validate_revisions(options, &paths, &error);
+
+    if (status != EDDS_OK) {
+        goto done;
+    }
+
     /* The source font, up to the size a font file may have. */
     read = read_file(paths.source, FONT_MAX_FILE_BYTES, &source, &source_size);
 
@@ -1153,7 +1201,7 @@ static int generate_command(const font_options *options) {
         goto done;
     }
 
-    status = publish(&paths, &recipe, &font, &error);
+    status = publish(options, &paths, &recipe, &font, &error);
 
     if (status != EDDS_OK) {
         goto done;
@@ -1293,7 +1341,10 @@ int font_command(int argc, cli_char **argv) {
             options.size_seen ||
             options.characters != NULL ||
             options.guid != NULL ||
-            options.cancel_file != NULL) {
+            options.cancel_file != NULL ||
+            options.expected_output != NULL ||
+            options.expected_atlas != NULL ||
+            options.expected_metadata != NULL) {
             return invalid("invalid-options", "inspect takes --input and nothing else.");
         }
 

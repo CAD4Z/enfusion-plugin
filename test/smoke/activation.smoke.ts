@@ -7,6 +7,8 @@ import * as vscode from 'vscode';
 import { inspectionOf, previewOf } from '../../src/mods/texture/edds';
 import { analysisOf, pixelAt } from '../../src/mods/texture/textureAnalysis';
 import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/texture/textureConversion';
+import { assertFontCommandCurrent, loadFontCommand } from '../../src/platform/font/fontCommands';
+import { FontGenerator } from '../../src/platform/font/fontGenerator';
 
 const executeFile = promisify(execFile);
 
@@ -24,6 +26,8 @@ export async function run(): Promise<void> {
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes('enfusion.edds.openPreview'), 'the EDDS preview command is not registered');
   assert.ok(commands.includes('enfusion.texture.convert'), 'the texture conversion command is not registered');
+  assert.ok(commands.includes('enfusion.font.generate'), 'the font generation command is not registered');
+  assert.ok(commands.includes('enfusion.font.regenerate'), 'the font regeneration command is not registered');
 
   const workspace = vscode.workspace.workspaceFolders?.[0];
   assert.ok(workspace, 'the smoke has no local workspace for its owned fixture');
@@ -82,6 +86,7 @@ export async function run(): Promise<void> {
     toolVersion: '0.2.0',
     areas: { edds: ['inspect', 'preview', 'convert', 'batch'], font: ['generate', 'inspect'] },
   });
+  await fontSmoke(extension.extensionPath, workspace.uri, executable);
 
   const secondSource = vscode.Uri.joinPath(workspace.uri, 'activation-smoke.tga');
   await vscode.workspace.fs.writeFile(secondSource, tgaFixture());
@@ -237,6 +242,56 @@ export async function run(): Promise<void> {
       { encoding: 'utf8', shell: false, windowsHide: true },
     ),
   );
+}
+
+async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executable: string): Promise<void> {
+  const generator = new FontGenerator(extensionPath);
+  const source = vscode.Uri.joinPath(workspace, 'Font smoke.ttf');
+  const characters = vscode.Uri.joinPath(workspace, 'Font smoke.txt');
+  assert.deepEqual(await generator.inspect(source.fsPath), { family: 'Fixture Sans', style: 'Regular' });
+  const session = await loadFontCommand(source, {
+    kind: 'generate', name: 'SDF_Проверка32', size: 32, characters: characters.fsPath,
+  });
+  await assertFontCommandCurrent(session);
+  const made = await generator.generate(session, new AbortController().signal);
+  assert.deepEqual(made.missing, [0x78, 0x416]);
+  const output = vscode.Uri.file(session.plan.output);
+  const metadata = vscode.Uri.file(session.plan.metadata);
+  const atlas = vscode.Uri.file(session.plan.atlas);
+  const recipe = new TextDecoder().decode(await vscode.workspace.fs.readFile(metadata));
+  assert.match(recipe, /SourceFile "Font smoke.ttf"/);
+  assert.match(recipe, /Characters "Font smoke.txt"/);
+  assert.ok(recipe.includes(`{${made.guid}}`));
+  const inspected = machineValue((await executeFile(executable,
+    ['font', 'inspect', '--machine', '--protocol', '1', '--input', output.fsPath],
+    { encoding: 'utf8', shell: false, windowsHide: true })).stdout);
+  assert.equal(inspected.size, 32);
+  assert.equal(inspected.type, 2);
+  const texture = inspectionOf((await executeFile(executable,
+    ['edds', 'inspect', '--machine', '--protocol', '1', '--input', atlas.fsPath],
+    { encoding: 'utf8', shell: false, windowsHide: true })).stdout);
+  assert.equal(texture.pixelFormat, 'BGRA8');
+  assert.equal(texture.mips.length, 1);
+
+  // A real installed command, with no prompts: the noncanonical comment disappears on regeneration.
+  await vscode.workspace.fs.writeFile(metadata, new TextEncoder().encode(recipe + '\n// regenerate smoke\n'));
+  await vscode.commands.executeCommand('enfusion.font.regenerate', output);
+  assert.equal(new TextDecoder().decode(await vscode.workspace.fs.readFile(metadata)), recipe);
+  const replacement = await loadFontCommand(source, { kind: 'generate', name: 'SDF_Проверка32', size: 24 });
+  assert.equal(replacement.plan.action, 'replace');
+  assert.equal((await generator.generate(replacement, new AbortController().signal)).guid, made.guid);
+  // Native publication must reject the old confirmation even if the caller skips its early check.
+  await assert.rejects(generator.generate(session, new AbortController().signal), /changed/);
+
+  // Unreadable native recipes refuse without changing either runtime artifact.
+  const before = await Promise.all([output, atlas].map((uri) => vscode.workspace.fs.readFile(uri)));
+  await vscode.workspace.fs.writeFile(metadata, new TextEncoder().encode('not a recipe'));
+  const broken = await loadFontCommand(output, { kind: 'regenerate' });
+  await assert.rejects(generator.generate(broken, new AbortController().signal), /recipe|metadata/i);
+  assert.deepEqual(await Promise.all([output, atlas].map((uri) => vscode.workspace.fs.readFile(uri))), before);
+  await assert.rejects(assertFontCommandCurrent(replacement), /changed/);
+  await vscode.workspace.fs.delete(metadata);
+  await assert.rejects(loadFontCommand(output, { kind: 'regenerate' }), /no .fnt.meta recipe/);
 }
 
 /** One machine-protocol result as a plain record, so a smoke assertion never indexes `any`. */
