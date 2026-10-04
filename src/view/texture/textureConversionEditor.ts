@@ -79,7 +79,9 @@ export class TextureConversionEditor
 
     const send = (): void => {
       if (!disposed) {
-        const message: TextureAuthoringStateMessage = { type: 'state', state: current };
+        const message: TextureAuthoringStateMessage = {
+          type: 'state', state: current.kind === 'authoring' ? { ...current, cachedMips: undefined } : current,
+        };
         void panel.webview.postMessage(message);
       }
     };

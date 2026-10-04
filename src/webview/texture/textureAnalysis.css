@@ -1,0 +1,9 @@
+.texture-analysis { margin: 14px 0; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border); }
+.texture-analysis h2 { padding: 0; margin: 0 0 10px; }
+.texture-analysis h3 { font-size: 12px; font-weight: 600; margin: 14px 0 6px; }
+.texture-analysis p { color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.5; margin: 5px 0; overflow-wrap: anywhere; }
+.analysis-sides { display: flex; gap: 4px; }
+.analysis-sides button[aria-pressed='true'] { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.histogram-series { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 6px; margin: 4px 0; font-size: 11px; }
+.histogram-series canvas { width: 100%; height: 40px; box-shadow: none; background: var(--vscode-editor-background); border-bottom: 1px solid var(--vscode-panel-border); }
+.pixel-inspector { display: block; min-height: 34px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 var(--vscode-editor-font-family); }

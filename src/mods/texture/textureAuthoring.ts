@@ -1,5 +1,6 @@
 import { textureSwizzleRefusalOf, type TextureSwizzleSource } from './textureSwizzles';
 import type { EddsConversion, EddsInspection, EddsPreview } from './edds';
+import { cachePreview } from './textureAnalysis';
 import {
   withActiveMipSettings,
   type TextureConversionPlan,
@@ -115,6 +116,8 @@ export type TextureAuthoringState =
       readonly draft: TextureProfile;
       readonly revision: number;
       readonly selectedMip: number;
+      /** Transient host cache, omitted from webview messages. */
+      readonly cachedMips?: readonly TextureRendering[];
       readonly sourceFacts?: TextureSwizzleSource;
       readonly preview:
         | { readonly kind: 'loading' }
@@ -309,7 +312,7 @@ function changedProfile(
   const revision = state.revision + 1;
   const plan: ReadyPlan = { ...state.plan, profile: draft };
   return {
-    state: { ...state, plan, draft, revision, selectedMip: 0, preview: { kind: 'loading' } },
+    state: { ...state, plan, draft, revision, selectedMip: 0, cachedMips: [], preview: { kind: 'loading' } },
     effects: [{ kind: 'render-draft', revision, mip: 0, plan, profile: draft }],
   };
 }
@@ -324,6 +327,10 @@ function selectedMip(state: TextureAuthoringState, mip: number): TextureAuthorin
     return unchanged(state);
   }
   const revision = state.revision + 1;
+  const cached = state.cachedMips?.find((item) => item.result.level === mip);
+  if (cached !== undefined) {
+    return { state: { ...state, revision, selectedMip: mip, preview: { kind: 'ready', rendered: cached } }, effects: [] };
+  }
   return {
     state: { ...state, revision, selectedMip: mip, preview: { kind: 'loading' } },
     effects: [
@@ -338,7 +345,7 @@ function drafted(
   rendered: TextureRendering,
 ): TextureAuthoringUpdate {
   return state.kind === 'authoring' && state.revision === revision
-    ? { state: { ...state, sourceFacts: rendered.sourceFacts, preview: { kind: 'ready', rendered } }, effects: [] }
+    ? { state: { ...state, sourceFacts: rendered.sourceFacts, cachedMips: cachePreview(state.cachedMips ?? [], rendered), preview: { kind: 'ready', rendered } }, effects: [] }
     : unchanged(state);
 }
 

@@ -8,6 +8,7 @@
  */
 
 import type { EddsInspection, EddsPreview } from './edds';
+import { cachePreview } from './textureAnalysis';
 
 export type TextureChannel = 'rgba' | 'red' | 'green' | 'blue' | 'alpha';
 
@@ -41,6 +42,7 @@ export interface InspectedTexture extends ReadOnlyTexture {
   readonly preview: TexturePreview;
   /** The id the next decode receives, so a late response can be recognized without a clock. */
   readonly nextRequest: number;
+  readonly cachedMips?: readonly { readonly result: EddsPreview }[];
 }
 
 export interface FailedTexture extends ReadOnlyTexture {
@@ -189,6 +191,10 @@ function selectedMip(state: TextureEditorState, mip: number): TextureEditorUpdat
   }
 
   const request = state.nextRequest;
+  const cached = state.cachedMips?.find((item) => item.result.level === mip);
+  if (cached !== undefined) {
+    return { state: { ...state, selectedMip: mip, preview: { kind: 'ready', preview: cached.result } }, effects: [] };
+  }
   return {
     state: {
       ...state,
@@ -209,7 +215,7 @@ function previewed(
     return unchanged(state);
   }
 
-  return { state: { ...state, preview: { kind: 'ready', preview } }, effects: [] };
+  return { state: { ...state, cachedMips: cachePreview(state.cachedMips ?? [], { result: preview }), preview: { kind: 'ready', preview } }, effects: [] };
 }
 
 function previewFailed(

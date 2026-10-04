@@ -11,6 +11,8 @@ import type {
   TextureAuthoringStateMessage,
 } from './textureConversionProtocol';
 import './textureConversion.css';
+import { textureAnalysisView, type TextureAnalysisView } from './textureAnalysisView';
+import type { TextureChannels } from '../../mods/texture/textureConversions';
 
 declare function acquireVsCodeApi(): { postMessage(message: TextureAuthoringRequest): void };
 
@@ -19,6 +21,7 @@ const root = document.body.appendChild(element('main', 'conversion-editor'));
 let state: TextureAuthoringState | undefined;
 let channel: 'rgba' | 'red' | 'green' | 'blue' | 'alpha' = 'rgba';
 let zoom = 1;
+let analysisSide: 'source' | 'result' = 'result';
 
 window.addEventListener('message', (event: MessageEvent<TextureAuthoringStateMessage>) => {
   if (event.data.type === 'state') {
@@ -49,6 +52,12 @@ function render(next: TextureAuthoringState): void {
   const locked = next.kind === 'running' || next.kind === 'result';
   const body = element('section', 'workbench');
   body.append(toolbar(next, rendered?.inspection.mips ?? []));
+  const analysis = rendered === undefined ? undefined : textureAnalysisView(
+    { ...rendered, profile }, { side: analysisSide, channel }, (side) => {
+      analysisSide = side;
+      if (state !== undefined) render(state);
+    },
+  );
 
   if (rendered === undefined) {
     body.append(
@@ -62,13 +71,14 @@ function render(next: TextureAuthoringState): void {
   } else {
     const comparisons = element('div', 'comparisons');
     comparisons.append(
-      previewPane('Source', rendered.source),
-      previewPane(`Result · mip ${rendered.result.level}`, rendered.result),
+      previewPane(`Source · mip ${rendered.source.level}`, rendered.source, rendered.sourceFacts?.hasAlpha === false ? 'RGB' : 'RGBA', analysis),
+      previewPane(`Result · mip ${rendered.result.level}`, rendered.result, rendered.inspection.channels, analysis),
     );
     body.append(comparisons);
   }
 
   const properties = element('aside', 'properties');
+  if (analysis !== undefined) properties.append(analysis.element);
   properties.append(heading('Texture profile'), profileForm(profile, plan.sourceFormat, locked,
     next.kind === 'authoring' ? next.sourceFacts : rendered?.sourceFacts));
   const action = document.createElement('button');
@@ -171,7 +181,7 @@ function profileForm(
   return form;
 }
 
-function previewPane(title: string, preview: EddsPreview): HTMLElement {
+function previewPane(title: string, preview: EddsPreview, channels: TextureChannels | 'UNKNOWN', analysis?: TextureAnalysisView): HTMLElement {
   const pane = element('section', 'preview-pane');
   pane.append(heading(title));
   const viewport = element('div', 'viewport checkerboard');
@@ -183,6 +193,7 @@ function previewPane(title: string, preview: EddsPreview): HTMLElement {
   canvas.style.height = `${preview.height * zoom}px`;
   draw(canvas, preview);
   viewport.append(canvas);
+  analysis?.bind(viewport, canvas, { ...preview, channels }, title.startsWith('Source') ? 'Source' : 'Result');
   pane.append(viewport);
   return pane;
 }

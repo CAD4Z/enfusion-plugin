@@ -4,6 +4,9 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { deflateSync } from 'node:zlib';
 import * as vscode from 'vscode';
+import { inspectionOf, previewOf } from '../../src/mods/texture/edds';
+import { analysisOf, pixelAt } from '../../src/mods/texture/textureAnalysis';
+import { DEFAULT_TEXTURE_PROFILE } from '../../src/mods/texture/textureConversion';
 
 const executeFile = promisify(execFile);
 
@@ -155,6 +158,28 @@ export async function run(): Promise<void> {
     registered: false,
   });
   assert.equal((await vscode.workspace.fs.stat(converted)).type, vscode.FileType.File);
+
+  // The installed executable's actual pixels feed the same read-only analysis as the webviews.
+  const analysisInspection = inspectionOf((await executeFile(executable,
+    ['edds', 'inspect', '--machine', '--protocol', '1', '--input', converted.fsPath],
+    { encoding: 'utf8', shell: false, windowsHide: true })).stdout);
+  const analysisResult = previewOf((await executeFile(executable,
+    ['edds', 'preview', '--machine', '--protocol', '1', '--mip', '0', '--input', converted.fsPath],
+    { encoding: 'utf8', shell: false, windowsHide: true })).stdout);
+  const analysis = analysisOf({ inspection: analysisInspection, result: analysisResult,
+    source: { level: 0, width: 2, height: 1, rgba: Uint8Array.from([10, 20, 30, 40, 50, 60, 70, 80]) },
+    profile: DEFAULT_TEXTURE_PROFILE }, { side: 'result', channel: 'alpha' });
+  assert.equal(analysis.histogram.kind === 'available' && analysis.histogram.value.series[0]?.bins[40], 1);
+  assert.equal(analysis.error.kind === 'available' && analysis.error.value.rmse, 0);
+  assert.deepEqual(analysis.memory, { kind: 'available', value: { mipBytes: 8, chainBytes: 12 } });
+  const sample = pixelAt({ ...analysisResult, channels: 'RGBA' }, { x: 3, y: 1 },
+    { left: 0, top: 0, width: 4, height: 2 });
+  assert.equal(sample.kind === 'available' && sample.value.values[3], 80);
+  for (const bundle of ['texture.js', 'texture-conversion.js']) {
+    const script = new TextDecoder().decode(await vscode.workspace.fs.readFile(
+      vscode.Uri.joinPath(extension.extensionUri, 'dist', bundle)));
+    assert.ok(script.includes('Pixel inspector') && script.includes('Result runtime memory'), `${bundle} lacks analysis controls`);
+  }
 
   // Every runtime format, out of the executable that actually ships, not the one CI just built.
   for (const [conversion, runtime, channels] of [

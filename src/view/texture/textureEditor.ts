@@ -65,7 +65,9 @@ export class TextureEditor implements vscode.CustomReadonlyEditorProvider<EddsDo
 
     const send = (): void => {
       if (!disposed) {
-        const message: TextureStateMessage = { type: 'state', state: current };
+        const message: TextureStateMessage = {
+          type: 'state', state: current.kind === 'inspect-only' ? { ...current, cachedMips: undefined } : current,
+        };
         void panel.webview.postMessage(message);
       }
     };

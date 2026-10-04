@@ -51,6 +51,18 @@ const INSPECTION: EddsInspection = {
   pixels: { kind: 'supported' },
 };
 
+test('standalone mip navigation reuses previously decoded pixels', () => {
+  const inspected = updateTexture(openedTexture().state, { kind: 'inspected', inspection: INSPECTION });
+  const first = updateTexture(inspected.state, { kind: 'previewed', request: 1,
+    preview: { level: 0, width: 4, height: 2, rgba: new Uint8Array(32) } });
+  const selected = updateTexture(first.state, { kind: 'select-mip', mip: 1 });
+  const decoded = updateTexture(selected.state, { kind: 'previewed', request: 2,
+    preview: { level: 1, width: 2, height: 1, rgba: new Uint8Array(8) } });
+  const back = updateTexture(decoded.state, { kind: 'select-mip', mip: 0 });
+  assert.deepEqual(back.effects, []);
+  assert.equal(back.state.kind === 'inspect-only' && back.state.preview.kind, 'ready');
+});
+
 test('a directly opened EDDS becomes an inspect-only editor and decodes its largest mip', () => {
   const opened = openedTexture();
   assert.deepEqual(opened.effects, [{ kind: 'inspect' }]);

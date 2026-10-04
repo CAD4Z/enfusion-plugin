@@ -5,6 +5,7 @@ import type { TextureChannel, TextureEditorState } from '../../mods/texture/text
 import { textureChannelViewsOf } from '../../mods/texture/textureConversions';
 import type { TextureRequest, TextureStateMessage } from './textureProtocol';
 import './texture.css';
+import { textureAnalysisView, type TextureAnalysisView } from './textureAnalysisView';
 
 declare function acquireVsCodeApi(): { postMessage(message: TextureRequest): void };
 
@@ -33,9 +34,14 @@ function render(next: TextureEditorState): void {
   }
 
   const preview = next.preview.kind === 'ready' ? next.preview.preview : undefined;
+  const analysis = textureAnalysisView({
+    inspection: next.inspection, result: preview, selectedMip: next.selectedMip,
+    reason: next.preview.kind === 'failed' || next.preview.kind === 'unsupported-format'
+      ? next.preview.reason : 'The selected mip is still decoding.',
+  }, { side: 'result', channel: next.channel });
   const content = element('section', 'content');
   content.append(toolbar(next.channel, next.selectedMip, next.inspection, preview !== undefined));
-  content.append(viewer(next, preview));
+  content.append(viewer(next, preview, analysis));
 
   const details = element('aside', 'details');
   details.append(
@@ -47,6 +53,7 @@ function render(next: TextureEditorState): void {
       ['Mip levels', String(next.inspection.mips.length)],
       ['Access', 'Read-only'],
     ]),
+    analysis.element,
     heading('DDS header'),
     facts(ddsFacts(next.inspection)),
     heading('ENF1 mip table'),
@@ -115,7 +122,7 @@ function toolbar(
   return bar;
 }
 
-function viewer(current: Extract<TextureEditorState, { kind: 'inspect-only' }>, decoded?: EddsPreview): HTMLElement {
+function viewer(current: Extract<TextureEditorState, { kind: 'inspect-only' }>, decoded: EddsPreview | undefined, analysis: TextureAnalysisView): HTMLElement {
   const viewport = element('div', 'viewport checkerboard');
   draggable(viewport);
   if (decoded !== undefined) {
@@ -127,6 +134,7 @@ function viewer(current: Extract<TextureEditorState, { kind: 'inspect-only' }>, 
     canvas.title = 'Drag to pan';
     draw(canvas, decoded, current.channel);
     viewport.append(canvas);
+    analysis.bind(viewport, canvas, { ...decoded, channels: current.inspection.channels }, 'Result');
     return viewport;
   }
 

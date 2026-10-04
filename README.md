@@ -95,6 +95,19 @@ signed in for you, once.
   swizzling modes and batches of up to 256 files.
 - An interrupted conversion leaves the old texture pair or the new one, never half of each.
 
+The preview and single-source editor include read-only histograms, a pixel inspector and Result
+runtime memory for the selected mip and complete chain. Histograms use the selected channels;
+pixel coordinates follow the displayed mip through zoom and pan. Memory counts the GPU payload
+after container decompression, excluding driver alignment, rather than the EDDS file size.
+
+Source/Result error is RMSE in decoded sample units, without gamma correction or alpha weighting.
+The current Source preview contains the original mip 0: it is comparable when swizzling,
+normalization and mip removal are off. Other mips or transformed profiles explain why matching
+Source pipeline samples are unavailable; standalone EDDS has no Source comparison. Analysis
+never starts a codec or writes a recipe. Analysis is limited to 1,048,576 pixels per mip; select a
+smaller mip for larger textures. A transient 16 MiB cache reuses previously viewed mips and is
+discarded when the profile changes.
+
 ### Fonts
 
 The bundled `enfusion.exe` also makes the SDF fonts the engine draws from TrueType fonts, with the

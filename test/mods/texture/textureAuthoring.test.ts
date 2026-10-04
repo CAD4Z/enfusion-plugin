@@ -76,6 +76,23 @@ test('mip selection re-renders that level without changing the draft profile', (
   assert.equal(selected.effects[0]?.kind === 'render-draft' && selected.effects[0].mip, 1);
 });
 
+test('returning to a cached mip reuses pixels without conversion and a profile edit discards the cache', () => {
+  const initial = readyAuthoring();
+  const selected = updateTextureAuthoring(initial, { kind: 'select-mip', mip: 1 });
+  assert.equal(selected.state.kind, 'authoring');
+  if (selected.state.kind !== 'authoring') return;
+  const loaded = updateTextureAuthoring(selected.state, { kind: 'draft-rendered', revision: selected.state.revision,
+    rendered: { ...rendering(), result: { ...rendering().result, level: 1 } } });
+  const back = updateTextureAuthoring(loaded.state, { kind: 'select-mip', mip: 0 });
+  assert.deepEqual(back.effects, []);
+  assert.equal(back.state.kind === 'authoring' && back.state.preview.kind, 'ready');
+  assert.strictEqual(back.state.kind === 'authoring' && back.state.draft, DEFAULT_TEXTURE_PROFILE);
+  const changed = updateTextureAuthoring(back.state, { kind: 'change-profile', field: 'Normalize', value: true });
+  if (changed.state.kind !== 'authoring') return;
+  const fresh = updateTextureAuthoring(changed.state, { kind: 'draft-rendered', revision: changed.state.revision, rendered: rendering() });
+  assert.equal(updateTextureAuthoring(fresh.state, { kind: 'select-mip', mip: 1 }).effects[0]?.kind, 'render-draft');
+});
+
 test('profile changes invalidate the old preview and late native results cannot win', () => {
   const loaded = updateTextureAuthoring(openedTextureAuthoring().state, {
     kind: 'loaded',
