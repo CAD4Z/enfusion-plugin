@@ -1,5 +1,5 @@
 <div align="center">
-    <a href="https://github.com/CAD4Z/enfusion-plugin"><img src="https://github.com/user-attachments/assets/f554aa83-bc3e-4c86-a489-24caff9b2c9c"></a>
+    <a href="https://github.com/CAD4Z/enfusion-plugin"><img src="https://github.com/user-attachments/assets/8fc337cd-14ef-4bf7-902f-4ea54641f030"></a>
 
 </div>
 
