@@ -5,9 +5,11 @@
 
 /**
  * BC7 is eight block modes, and a texture written by anything other than this converter may use
- * any of them, so the decoder implements all eight. The encoder writes mode 6 — one subset, four
- * bit indices, full alpha — which is the mode that carries an RGBA block with no subset guess, and
- * spends `refits` least-squares passes on its endpoints.
+ * any of them, so the decoder implements all eight. The encoder writes mode 6 (one subset, four
+ * bit indices, full alpha), which is the mode that carries an RGBA block with no subset guess, and
+ * spends `refits` least-squares passes on its endpoints. With `refits` above 0 it also tries a
+ * two-subset mode (1 for an opaque block, 7 for one with alpha) and writes that instead when it
+ * fits better.
  */
 void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t block[16]);
 

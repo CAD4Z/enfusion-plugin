@@ -8,10 +8,12 @@
 
 #include <string.h>
 
+/** Pixels in one 4x4 block. */
 enum {
     BLOCK_PIXELS = 16
 };
 
+/** Bytes one 4x4 block occupies, or 0 when the format stores separate pixels. */
 uint32_t edds_gpu_block_bytes(edds_pixel_format format) {
     switch (format) {
         case EDDS_PIXEL_DXT1: return 8;
@@ -19,27 +21,37 @@ uint32_t edds_gpu_block_bytes(edds_pixel_format format) {
         case EDDS_PIXEL_DXT5: return 16;
         case EDDS_PIXEL_BC5:  return 16;
         case EDDS_PIXEL_BC7:  return 16;
-        default:              return 0;
+
+        default: return 0;
     }
 }
 
+/** Bytes one pixel occupies, or 0 when the format stores 4x4 blocks. */
 uint32_t edds_gpu_pixel_bytes(edds_pixel_format format) {
     switch (format) {
         case EDDS_PIXEL_BGRA8: return 4;
         case EDDS_PIXEL_BGRX8: return 4;
         case EDDS_PIXEL_R8:    return 1;
         case EDDS_PIXEL_RG8:   return 2;
-        default:               return 0;
+
+        default: return 0;
     }
 }
 
+/**
+ * Stored bytes of one mip, or 0 when the size is outside the supported limits or the format is
+ * neither a block nor a pixel format.
+ */
 uint32_t edds_gpu_mip_bytes(edds_pixel_format format, uint32_t width, uint32_t height) {
     const uint32_t block = edds_gpu_block_bytes(format);
     const uint32_t pixel = edds_gpu_pixel_bytes(format);
     uint64_t       bytes;
+
     if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
         return 0;
     }
+
+    /* A block format stores whole blocks, so the width and height are rounded up to fours. */
     if (block != 0) {
         bytes = (uint64_t)((width + 3u) / 4u) * ((height + 3u) / 4u) * block;
     } else if (pixel != 0) {
@@ -47,9 +59,11 @@ uint32_t edds_gpu_mip_bytes(edds_pixel_format format, uint32_t width, uint32_t h
     } else {
         return 0;
     }
+
     return bytes == 0 || bytes > UINT32_MAX ? 0u : (uint32_t)bytes;
 }
 
+/** The format's name as text, such as "BGRA8" or "BC7". */
 const char *edds_pixel_format_name(edds_pixel_format format) {
     switch (format) {
         case EDDS_PIXEL_BGRA8: return "BGRA8";
@@ -61,7 +75,8 @@ const char *edds_pixel_format_name(edds_pixel_format format) {
         case EDDS_PIXEL_BC4:   return "BC4";
         case EDDS_PIXEL_BC5:   return "BC5";
         case EDDS_PIXEL_BC7:   return "BC7";
-        default:               return "UNKNOWN";
+
+        default: return "UNKNOWN";
     }
 }
 
@@ -80,18 +95,22 @@ const char *edds_pixel_format_channels(edds_pixel_format format) {
         case EDDS_PIXEL_BC4:   return "R";
         case EDDS_PIXEL_BC5:   return "RG";
         case EDDS_PIXEL_BC7:   return "RGBA";
-        default:               return "UNKNOWN";
+
+        default: return "UNKNOWN";
     }
 }
 
+/** `value` held to 0..255. */
 static uint8_t clamp_byte(int value) {
     return value < 0 ? 0u : (value > 255 ? 255u : (uint8_t)value);
 }
 
+/** The little-endian 16-bit value at `at`. */
 static uint16_t u16le(const uint8_t *at) {
     return (uint16_t)((uint16_t)at[0] | ((uint16_t)at[1] << 8));
 }
 
+/** Writes `value` at `at` as a little-endian 16-bit value. */
 static void put_u16le(uint8_t *at, uint16_t value) {
     at[0] = (uint8_t)(value & 0xffu);
     at[1] = (uint8_t)(value >> 8);
@@ -99,22 +118,30 @@ static void put_u16le(uint8_t *at, uint16_t value) {
 
 /* ------------------------------- BC1 colour blocks ------------------------------- */
 
+/** An RGB colour rounded to 5, 6 and 5 bits and packed into 16: red highest, blue lowest. */
 static uint16_t to_565(const int rgb[3]) {
     const uint32_t red   = (uint32_t)((rgb[0] * 31 + 127) / 255);
     const uint32_t green = (uint32_t)((rgb[1] * 63 + 127) / 255);
     const uint32_t blue  = (uint32_t)((rgb[2] * 31 + 127) / 255);
+
     return (uint16_t)((red << 11) | (green << 5) | blue);
 }
 
+/**
+ * A packed 5:6:5 colour widened back to 8 bits a channel. Each channel's top bits are repeated
+ * below it, so its largest value becomes 255.
+ */
 static void from_565(uint16_t value, uint8_t rgb[3]) {
     const uint8_t red   = (uint8_t)((value >> 11) & 31u);
     const uint8_t green = (uint8_t)((value >> 5) & 63u);
     const uint8_t blue  = (uint8_t)(value & 31u);
-    rgb[0]              = (uint8_t)((red << 3) | (red >> 2));
-    rgb[1]              = (uint8_t)((green << 2) | (green >> 4));
-    rgb[2]              = (uint8_t)((blue << 3) | (blue >> 2));
+
+    rgb[0] = (uint8_t)((red << 3) | (red >> 2));
+    rgb[1] = (uint8_t)((green << 2) | (green >> 4));
+    rgb[2] = (uint8_t)((blue << 3) | (blue >> 2));
 }
 
+/** `low` and `high` mixed in the given parts out of `total`, rounded to the nearest. */
 static uint8_t mix(int low, int high, int low_parts, int high_parts, int total) {
     return (uint8_t)((low * low_parts + high * high_parts + total / 2) / total);
 }
@@ -123,8 +150,8 @@ static uint8_t mix(int low, int high, int low_parts, int high_parts, int total) 
  * The four colours of a block. Standing alone as BC1, the order of the endpoints chooses the
  * layout: `c0 > c1` is four colours, and otherwise the fourth entry is a transparent black rather
  * than a colour. Inside BC3 the same eight bytes are always four colours, because the alpha block
- * beside them already carries the alpha and the endpoint order means nothing — so a DXT5 written
- * with `c0 <= c1` decodes to colours, not to holes.
+ * beside them already carries the alpha and the endpoint order means nothing, so a DXT5 written
+ * with `c0 <= c1` decodes to colours, not to holes. The colours go to `palette` as RGBA.
  */
 static void bc1_palette(
     uint16_t first,
@@ -134,11 +161,18 @@ static void bc1_palette(
     const int four_colours = always_four_colours || first > second;
     uint8_t   low[3];
     uint8_t   high[3];
+
     from_565(first, low);
     from_565(second, high);
+
+    /*
+     * The two endpoints, then either the colours a third and two thirds of the way between them,
+     * or their midpoint and black.
+     */
     for (unsigned channel = 0; channel < 3; ++channel) {
         palette[0][channel] = low[channel];
         palette[1][channel] = high[channel];
+
         if (four_colours) {
             palette[2][channel] = mix(low[channel], high[channel], 2, 1, 3);
             palette[3][channel] = mix(low[channel], high[channel], 1, 2, 3);
@@ -147,109 +181,161 @@ static void bc1_palette(
             palette[3][channel] = 0;
         }
     }
+
+    /* Every entry is opaque, except the fourth of the three-colour layout. */
     palette[0][3] = 255u;
     palette[1][3] = 255u;
     palette[2][3] = 255u;
     palette[3][3] = four_colours ? 255u : 0u;
 }
 
+/** Each pixel's nearest palette entry in RGB, into `indices`; returns the total squared error. */
 static uint32_t bc1_indices(
     const uint8_t pixels[BLOCK_PIXELS][4],
     const uint8_t palette[4][4],
     uint8_t       indices[BLOCK_PIXELS]) {
     uint32_t total = 0;
+
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         uint32_t best   = 0xffffffffu;
         uint8_t  chosen = 0;
+
         for (unsigned entry = 0; entry < 4; ++entry) {
             uint32_t error = 0;
+
             for (unsigned channel = 0; channel < 3; ++channel) {
-                const int difference  = (int)pixels[pixel][channel] - (int)palette[entry][channel];
-                error                += (uint32_t)(difference * difference);
+                const int difference = (int)pixels[pixel][channel] - (int)palette[entry][channel];
+
+                error += (uint32_t)(difference * difference);
             }
+
             if (error < best) {
                 best   = error;
                 chosen = (uint8_t)entry;
             }
         }
+
         indices[pixel]  = chosen;
         total          += best;
     }
+
     return total;
 }
 
-/** Least squares over the indices a fit produced; the whole of what quality buys a colour block. */
+/**
+ * Least squares over the indices a fit produced; the whole of what quality buys a colour block.
+ * `low` and `high` become the endpoints that, for those indices, come closest to the pixels; when
+ * the indices do not pin down both, they stay as they are.
+ */
 static void bc1_refit(
     const uint8_t pixels[BLOCK_PIXELS][4],
     const uint8_t indices[BLOCK_PIXELS],
     int           low[3],
     int           high[3]) {
+    /* How far each index puts its pixel along the way from `low` to `high`. */
     static const double share[4] = { 0.0, 1.0, 1.0 / 3.0, 2.0 / 3.0 };
-    double              a        = 0;
-    double              b        = 0;
-    double              c        = 0;
-    double              determinant;
+
+    double a = 0;
+    double b = 0;
+    double c = 0;
+    double determinant;
+
+    /*
+     * The system least squares solves, with w each pixel's share: a sums (1 - w)^2, b sums
+     * (1 - w) * w and c sums w^2. When its determinant is about zero there is no single answer,
+     * and the endpoints stay as they are.
+     */
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
-        const double weight  = share[indices[pixel]];
-        a                   += (1.0 - weight) * (1.0 - weight);
-        b                   += (1.0 - weight) * weight;
-        c                   += weight * weight;
+        const double weight = share[indices[pixel]];
+
+        a += (1.0 - weight) * (1.0 - weight);
+        b += (1.0 - weight) * weight;
+        c += weight * weight;
     }
+
     determinant = a * c - b * b;
+
     if (determinant > -1e-9 && determinant < 1e-9) {
         return;
     }
+
+    /* Each channel solved on its own, rounded and held to a byte. */
     for (unsigned channel = 0; channel < 3; ++channel) {
         double low_sum  = 0;
         double high_sum = 0;
+
         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
-            const double weight  = share[indices[pixel]];
-            const double sample  = (double)pixels[pixel][channel];
-            low_sum             += (1.0 - weight) * sample;
-            high_sum            += weight * sample;
+            const double weight = share[indices[pixel]];
+            const double sample = (double)pixels[pixel][channel];
+
+            low_sum  += (1.0 - weight) * sample;
+            high_sum += weight * sample;
         }
+
         low[channel]  = clamp_byte((int)((low_sum * c - high_sum * b) / determinant + 0.5));
         high[channel] = clamp_byte((int)((high_sum * a - low_sum * b) / determinant + 0.5));
     }
 }
 
+/**
+ * Encodes one block of RGBA pixels as BC1: two 5:6:5 endpoints and a 2-bit palette index for each
+ * pixel. The first fit spans the lowest and highest value of each channel; every refit moves the
+ * endpoints by least squares, and the pass with the smallest error is written.
+ */
 static void bc1_encode_block(
     const uint8_t pixels[BLOCK_PIXELS][4],
     unsigned      refits,
     uint8_t       block[8]) {
-    int      low[3];
-    int      high[3];
+    /* The endpoints the next pass starts from, one value per channel. */
+    int low[3];
+    int high[3];
+
+    /* The best pass so far: its endpoints, its indices and its error. */
     uint16_t best_first                 = 0;
     uint16_t best_second                = 0;
     uint8_t  best_indices[BLOCK_PIXELS] = { 0 };
     uint32_t best_error                 = 0xffffffffu;
 
+    /* The first fit: the lowest and the highest value of each channel. */
     for (unsigned channel = 0; channel < 3; ++channel) {
         low[channel]  = 255;
         high[channel] = 0;
+
         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
             const int sample = pixels[pixel][channel];
+
             if (sample < low[channel]) {
                 low[channel] = sample;
             }
+
             if (sample > high[channel]) {
                 high[channel] = sample;
             }
         }
     }
 
+    /*
+     * One pass for the first fit and one for each refit. A pass packs the endpoints, picks the
+     * indices and keeps the result when its error is the smallest yet; then the endpoints are
+     * refitted to the best indices for the next pass.
+     */
     for (unsigned pass = 0; pass <= refits; ++pass) {
         uint16_t first  = to_565(high);
         uint16_t second = to_565(low);
         uint8_t  palette[4][4];
         uint8_t  indices[BLOCK_PIXELS];
         uint32_t error;
+
+        /* The larger endpoint goes first, which is the four-colour layout when they differ. */
         if (first < second) {
             const uint16_t kept = first;
-            first               = second;
-            second              = kept;
+
+            first  = second;
+            second = kept;
         }
+
         bc1_palette(first, second, 0, palette);
+
         if (first == second) {
             /*
              * Equal endpoints are the three-colour layout, and its fourth entry is a transparent
@@ -258,28 +344,34 @@ static void bc1_encode_block(
              */
             memset(indices, 0, sizeof indices);
             error = 0;
+
             for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                 for (unsigned channel = 0; channel < 3; ++channel) {
-                    const int difference  = (int)pixels[pixel][channel] - (int)palette[0][channel];
-                    error                += (uint32_t)(difference * difference);
+                    const int difference = (int)pixels[pixel][channel] - (int)palette[0][channel];
+
+                    error += (uint32_t)(difference * difference);
                 }
             }
         } else {
             error = bc1_indices(pixels, palette, indices);
         }
+
         if (error < best_error) {
             best_error  = error;
             best_first  = first;
             best_second = second;
             memcpy(best_indices, indices, sizeof best_indices);
         }
+
         if (pass < refits) {
             bc1_refit(pixels, best_indices, low, high);
         }
     }
 
+    /* The block: the endpoints, then a byte per row of four 2-bit indices, the left one lowest. */
     put_u16le(block, best_first);
     put_u16le(block + 2, best_second);
+
     for (unsigned row = 0; row < 4; ++row) {
         block[4 + row] = (uint8_t)(best_indices[row * 4u] |
             (best_indices[row * 4u + 1u] << 2) |
@@ -288,23 +380,36 @@ static void bc1_encode_block(
     }
 }
 
+/**
+ * Decodes one BC1 block into 16 RGBA pixels. `always_four_colours` is set for the colour half of a
+ * DXT5 block (see bc1_palette).
+ */
 static void bc1_decode_block(
     const uint8_t block[8],
     int           always_four_colours,
     uint8_t       rgba[BLOCK_PIXELS * 4]) {
     uint8_t palette[4][4];
+
     bc1_palette(u16le(block), u16le(block + 2), always_four_colours, palette);
+
+    /* Each pixel's 2-bit index, four to a byte from byte 4 on, picks its palette entry. */
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         const unsigned index = (block[4 + pixel / 4u] >> ((pixel % 4u) * 2u)) & 3u;
+
         memcpy(rgba + pixel * 4u, palette[index], 4);
     }
 }
 
 /* ------------------------------- BC4 single channel ------------------------------- */
 
+/**
+ * The eight values of a BC4 block. When the first endpoint is the larger, the other six are spread
+ * evenly between the two; otherwise four are, and the last two are 0 and 255.
+ */
 static void bc4_palette(uint8_t first, uint8_t second, uint8_t palette[8]) {
     palette[0] = first;
     palette[1] = second;
+
     if (first > second) {
         for (unsigned entry = 2; entry < 8; ++entry) {
             palette[entry] = mix(first, second, (int)(8u - entry), (int)(entry - 1u), 7);
@@ -313,94 +418,128 @@ static void bc4_palette(uint8_t first, uint8_t second, uint8_t palette[8]) {
         for (unsigned entry = 2; entry < 6; ++entry) {
             palette[entry] = mix(first, second, (int)(6u - entry), (int)(entry - 1u), 5);
         }
+
         palette[6] = 0;
         palette[7] = 255;
     }
 }
 
+/** Each value's nearest palette entry, into `indices`; returns the total squared error. */
 static uint32_t bc4_indices(
     const uint8_t values[BLOCK_PIXELS],
     const uint8_t palette[8],
     uint8_t       indices[BLOCK_PIXELS]) {
     uint32_t total = 0;
+
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         uint32_t best   = 0xffffffffu;
         uint8_t  chosen = 0;
+
         for (unsigned entry = 0; entry < 8; ++entry) {
             const int      difference = (int)values[pixel] - (int)palette[entry];
             const uint32_t error      = (uint32_t)(difference * difference);
+
             if (error < best) {
                 best   = error;
                 chosen = (uint8_t)entry;
             }
         }
+
         indices[pixel]  = chosen;
         total          += best;
     }
+
     return total;
 }
 
-static void bc4_write(uint8_t first, uint8_t second, const uint8_t indices[BLOCK_PIXELS], uint8_t block[8]) {
+/**
+ * Writes one BC4 block: the two endpoint bytes, then the sixteen 3-bit indices packed into six
+ * bytes, the first pixel in the lowest bits.
+ */
+static void bc4_write(uint8_t first, uint8_t second, const uint8_t indices[BLOCK_PIXELS],
+    uint8_t block[8]) {
     uint64_t packed = 0;
-    block[0]        = first;
-    block[1]        = second;
+
+    block[0] = first;
+    block[1] = second;
+
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         packed |= (uint64_t)(indices[pixel] & 7u) << (pixel * 3u);
     }
+
     for (unsigned byte = 0; byte < 6; ++byte) {
         block[2 + byte] = (uint8_t)((packed >> (byte * 8u)) & 0xffu);
     }
 }
 
 /**
- * The eight-value layout is the first fit; the six-value one, which spends two of its entries on
- * an exact 0 and an exact 255, is tried only when quality pays for the second search. A block that
- * really does hold both extremes plus mid tones is where the two differ.
+ * Encodes the 16 values of one channel as a BC4 block. The eight-value layout is the first fit;
+ * the six-value one, which spends two of its entries on an exact 0 and an exact 255, is tried only
+ * when quality pays for the second search. A block that really does hold both extremes plus mid
+ * tones is where the two differ.
  */
 static void bc4_encode_block(
     const uint8_t values[BLOCK_PIXELS],
     unsigned      refits,
     uint8_t       block[8]) {
-    uint8_t  palette[8];
-    uint8_t  indices[BLOCK_PIXELS];
-    uint8_t  best_indices[BLOCK_PIXELS];
-    uint8_t  lowest  = 255;
-    uint8_t  highest = 0;
+    /* The palette, and the indices of the fit being tried and of the best one. */
+    uint8_t palette[8];
+    uint8_t indices[BLOCK_PIXELS];
+    uint8_t best_indices[BLOCK_PIXELS];
+
+    /* The smallest and the largest value. */
+    uint8_t lowest  = 255;
+    uint8_t highest = 0;
+
+    /* The best fit's endpoints and error. */
     uint8_t  best_first;
     uint8_t  best_second;
     uint32_t best_error;
 
+    /* The first fit: the eight-value layout, from the largest value down to the smallest. */
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         if (values[pixel] < lowest) {
             lowest = values[pixel];
         }
+
         if (values[pixel] > highest) {
             highest = values[pixel];
         }
     }
+
     best_first  = highest;
     best_second = lowest;
     bc4_palette(best_first, best_second, palette);
     best_error = bc4_indices(values, palette, best_indices);
 
+    /*
+     * The second search: the six-value layout, spanning the smallest and largest value other than
+     * 0 and 255, which that layout holds exactly anyway.
+     */
     if (refits > 0 && best_first != best_second) {
         uint8_t inner_low  = 255;
         uint8_t inner_high = 0;
+
         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
             if (values[pixel] == 0 || values[pixel] == 255) {
                 continue;
             }
+
             if (values[pixel] < inner_low) {
                 inner_low = values[pixel];
             }
+
             if (values[pixel] > inner_high) {
                 inner_high = values[pixel];
             }
         }
+
         if (inner_low <= inner_high) {
             uint32_t error;
+
             bc4_palette(inner_low, inner_high, palette);
             error = bc4_indices(values, palette, indices);
+
             if (error < best_error) {
                 best_error  = error;
                 best_first  = inner_low;
@@ -413,13 +552,18 @@ static void bc4_encode_block(
     bc4_write(best_first, best_second, best_indices, block);
 }
 
+/** Decodes one BC4 block into 16 values. */
 static void bc4_decode_block(const uint8_t block[8], uint8_t values[BLOCK_PIXELS]) {
     uint8_t  palette[8];
     uint64_t packed = 0;
+
     bc4_palette(block[0], block[1], palette);
+
+    /* The six bytes of 3-bit indices, gathered into one number with the first pixel lowest. */
     for (unsigned byte = 0; byte < 6; ++byte) {
         packed |= (uint64_t)block[2 + byte] << (byte * 8u);
     }
+
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
         values[pixel] = palette[(packed >> (pixel * 3u)) & 7u];
     }
@@ -431,6 +575,7 @@ static void bc4_decode_block(const uint8_t block[8], uint8_t values[BLOCK_PIXELS
  * Reads the 4x4 block at (x, y) out of a BGRA mip. A block that hangs off the right or the bottom
  * repeats the last real column and row: the padding is never seen by a sampler, and repeating the
  * edge keeps it from pulling the endpoints of the block towards a colour the image does not have.
+ * The 16 pixels go to `pixels` as RGBA, row by row.
  */
 static void gather_block(
     const uint8_t *bgra,
@@ -441,14 +586,16 @@ static void gather_block(
     uint8_t        pixels[BLOCK_PIXELS][4]) {
     for (unsigned row = 0; row < 4; ++row) {
         const uint32_t y = top + row < height ? top + row : height - 1u;
+
         for (unsigned column = 0; column < 4; ++column) {
             const uint32_t x      = left + column < width ? left + column : width - 1u;
             const size_t   at     = ((size_t)y * width + x) * 4u;
             uint8_t       *target = pixels[row * 4u + column];
-            target[0]             = bgra[at + 2u];
-            target[1]             = bgra[at + 1u];
-            target[2]             = bgra[at];
-            target[3]             = bgra[at + 3u];
+
+            target[0] = bgra[at + 2u];
+            target[1] = bgra[at + 1u];
+            target[2] = bgra[at];
+            target[3] = bgra[at + 3u];
         }
     }
 }
@@ -458,11 +605,20 @@ enum {
     MOST_REFITS = 4
 };
 
+/**
+ * The refits `quality` buys, in proportion to it and rounded down: none at 0, MOST_REFITS at
+ * EDDS_QUALITY_SCALE and above.
+ */
 static unsigned refits_of(uint32_t quality) {
     const uint32_t bounded = quality > EDDS_QUALITY_SCALE ? EDDS_QUALITY_SCALE : quality;
+
     return (unsigned)((bounded * MOST_REFITS) / EDDS_QUALITY_SCALE);
 }
 
+/**
+ * Turns one BGRA mip into `output`, which is exactly `edds_gpu_mip_bytes` long: a pixel format
+ * pixel by pixel, a block format block by block, row by row from the top.
+ */
 void edds_gpu_encode(
     edds_pixel_format format,
     uint32_t          quality,
@@ -472,6 +628,8 @@ void edds_gpu_encode(
     uint8_t          *output) {
     const unsigned refits      = refits_of(quality);
     const uint32_t block_bytes = edds_gpu_block_bytes(format);
+
+    /* A pixel format: R8 keeps the red byte, RG8 red and green, and the others all four bytes. */
     if (block_bytes == 0) {
         for (size_t pixel = 0; pixel < (size_t)width * height; ++pixel) {
             if (format == EDDS_PIXEL_R8) {
@@ -483,55 +641,77 @@ void edds_gpu_encode(
                 memcpy(output + pixel * 4u, bgra + pixel * 4u, 4);
             }
         }
+
         return;
     }
+
+    /* A block format: every 4x4 block is read out of the mip and encoded into its place. */
     {
         const uint32_t columns = (width + 3u) / 4u;
         const uint32_t rows    = (height + 3u) / 4u;
+
         for (uint32_t row = 0; row < rows; ++row) {
             for (uint32_t column = 0; column < columns; ++column) {
                 uint8_t  pixels[BLOCK_PIXELS][4];
                 uint8_t  channel[BLOCK_PIXELS];
                 uint8_t *block = output + ((size_t)row * columns + column) * block_bytes;
+
                 gather_block(bgra, width, height, column * 4u, row * 4u, pixels);
+
+                /*
+                 * DXT5 is a BC4 block of the alpha followed by a BC1 block of the colour, and BC5
+                 * a BC4 block of red followed by one of green. BC7 takes its pixels as BGRA.
+                 */
                 switch (format) {
                     case EDDS_PIXEL_DXT1:
                         bc1_encode_block(pixels, refits, block);
                         break;
+
                     case EDDS_PIXEL_DXT5:
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             channel[pixel] = pixels[pixel][3];
                         }
+
                         bc4_encode_block(channel, refits, block);
                         bc1_encode_block(pixels, refits, block + 8);
                         break;
+
                     case EDDS_PIXEL_BC4:
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             channel[pixel] = pixels[pixel][0];
                         }
+
                         bc4_encode_block(channel, refits, block);
                         break;
+
                     case EDDS_PIXEL_BC5:
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             channel[pixel] = pixels[pixel][0];
                         }
+
                         bc4_encode_block(channel, refits, block);
+
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             channel[pixel] = pixels[pixel][1];
                         }
+
                         bc4_encode_block(channel, refits, block + 8);
                         break;
+
                     case EDDS_PIXEL_BC7: {
                         uint8_t block_bgra[BLOCK_PIXELS * 4];
+
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             block_bgra[pixel * 4u]      = pixels[pixel][2];
                             block_bgra[pixel * 4u + 1u] = pixels[pixel][1];
                             block_bgra[pixel * 4u + 2u] = pixels[pixel][0];
                             block_bgra[pixel * 4u + 3u] = pixels[pixel][3];
                         }
+
                         edds_bc7_encode_block(block_bgra, refits, block);
                         break;
                     }
+
                     default:
                         break;
                 }
@@ -540,6 +720,10 @@ void edds_gpu_encode(
     }
 }
 
+/**
+ * Writes a decoded block's 16 RGBA pixels to their place in an RGBA mip, leaving out those that
+ * hang off the right or the bottom.
+ */
 static void scatter_block(
     const uint8_t decoded[BLOCK_PIXELS * 4],
     uint32_t      width,
@@ -551,16 +735,23 @@ static void scatter_block(
         if (top + row >= height) {
             break;
         }
+
         for (unsigned column = 0; column < 4; ++column) {
             if (left + column >= width) {
                 break;
             }
+
             memcpy(rgba + (((size_t)(top + row) * width) + left + column) * 4u,
                 decoded + (row * 4u + column) * 4u, 4);
         }
     }
 }
 
+/**
+ * Decodes one stored mip into top-to-bottom RGBA, showing the values the file actually holds: a
+ * single-channel format leaves green and blue at zero rather than repeating red across them.
+ * Returns 0 when `stored_bytes` is not what the format and size require.
+ */
 int edds_gpu_decode(
     edds_pixel_format format,
     const uint8_t    *stored,
@@ -569,9 +760,12 @@ int edds_gpu_decode(
     uint32_t          height,
     uint8_t          *rgba) {
     const uint32_t block_bytes = edds_gpu_block_bytes(format);
+
     if (edds_gpu_mip_bytes(format, width, height) != stored_bytes || stored_bytes == 0) {
         return 0;
     }
+
+    /* A pixel format, pixel by pixel. */
     if (block_bytes == 0) {
         for (size_t pixel = 0; pixel < (size_t)width * height; ++pixel) {
             if (format == EDDS_PIXEL_R8) {
@@ -592,57 +786,79 @@ int edds_gpu_decode(
                     format == EDDS_PIXEL_BGRX8 ? 255u : stored[pixel * 4u + 3u];
             }
         }
+
         return 1;
     }
+
+    /* A block format: every block decoded to 16 RGBA pixels, which then go to their place. */
     {
         const uint32_t columns = (width + 3u) / 4u;
         const uint32_t rows    = (height + 3u) / 4u;
+
         for (uint32_t row = 0; row < rows; ++row) {
             for (uint32_t column = 0; column < columns; ++column) {
                 const uint8_t *block = stored + ((size_t)row * columns + column) * block_bytes;
                 uint8_t        decoded[BLOCK_PIXELS * 4];
                 uint8_t        channel[BLOCK_PIXELS];
                 uint8_t        second[BLOCK_PIXELS];
+
+                /*
+                 * DXT5 is a BC1 block of the colour, always four colours, after a BC4 block of the
+                 * alpha. BC4 is red alone and BC5 red and green, both opaque.
+                 */
                 switch (format) {
                     case EDDS_PIXEL_DXT1:
                         bc1_decode_block(block, 0, decoded);
                         break;
+
                     case EDDS_PIXEL_DXT5:
                         bc1_decode_block(block + 8, 1, decoded);
                         bc4_decode_block(block, channel);
+
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             decoded[pixel * 4u + 3u] = channel[pixel];
                         }
+
                         break;
+
                     case EDDS_PIXEL_BC4:
                         bc4_decode_block(block, channel);
+
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             decoded[pixel * 4u]      = channel[pixel];
                             decoded[pixel * 4u + 1u] = 0;
                             decoded[pixel * 4u + 2u] = 0;
                             decoded[pixel * 4u + 3u] = 255u;
                         }
+
                         break;
+
                     case EDDS_PIXEL_BC5:
                         bc4_decode_block(block, channel);
                         bc4_decode_block(block + 8, second);
+
                         for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
                             decoded[pixel * 4u]      = channel[pixel];
                             decoded[pixel * 4u + 1u] = second[pixel];
                             decoded[pixel * 4u + 2u] = 0;
                             decoded[pixel * 4u + 3u] = 255u;
                         }
+
                         break;
+
                     case EDDS_PIXEL_BC7:
                         edds_bc7_decode_block(block, decoded);
                         break;
+
                     default:
                         memset(decoded, 0, sizeof decoded);
                         break;
                 }
+
                 scatter_block(decoded, width, height, column * 4u, row * 4u, rgba);
             }
         }
     }
+
     return 1;
 }
