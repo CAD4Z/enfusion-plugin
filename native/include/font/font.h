@@ -35,6 +35,13 @@ extern "C" {
  */
 #define FONT_FIELD_RANGE 8.4852813742385702
 
+/**
+ * Square atlas pixels of a glyph the shader may lose before the glyph is reported thin. The joins
+ * and tight curves of a sound glyph lose less to interpolation (Inter Regular to Black from size 24
+ * up: 0.7 at most); a stroke that breaks up loses more within a pixel or two of its length.
+ */
+#define FONT_THIN_AREA 1.0
+
 /** The widest and the tallest an atlas may be, in pixels. */
 #define FONT_MAX_ATLAS 4096u
 
@@ -158,6 +165,14 @@ typedef struct font_output {
     /** Mandatory characters the font lacks, which the generator drew itself. */
     uint32_t *drawn;
     size_t    drawn_count;
+
+    /**
+     * Characters with a stroke thinner than an atlas pixel, of which the shader loses at least
+     * FONT_THIN_AREA square pixels: where such a stroke falls between texel centres, the field
+     * says outside on both sides of it.
+     */
+    uint32_t *thin;
+    size_t    thin_count;
 
     /** What the TrueType file says about itself. */
     font_source_info source;

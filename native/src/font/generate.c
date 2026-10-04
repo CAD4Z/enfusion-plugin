@@ -41,9 +41,10 @@ typedef struct glyph_job {
     uint32_t       height;
     int32_t        advance;
     font_placement placement;
-    /** What rendering the cell's field came to. */
+    /** What rendering the cell's field came to, and the area of the glyph it lost. */
     edds_status    status;
     edds_error     error;
+    double         lost;
 } glyph_job;
 
 /** A character of the font: its code point, its glyph (0 when drawn) and the job of its cell. */
@@ -281,7 +282,8 @@ static void render_task(void *context, uint32_t index, edds_pool *pool) {
         job->status = EDDS_CANCELLED;
         font_fail(&job->error, "cancelled", "The font generation was cancelled.");
     } else {
-        job->status = font_field_render(&job->boundary, &job->shape, &job->placement, run->atlas, run->atlas_width, &job->error);
+        job->status = font_field_render(
+            &job->boundary, &job->shape, &job->placement, run->atlas, run->atlas_width, &job->lost, &job->error);
     }
 
     /* Under the pool's output lock: one more job finished, and the progress from 0.1 to 0.95. */
@@ -614,6 +616,17 @@ edds_status font_generate(
         }
     }
 
+    /* Characters whose cell lost a stroke too thin for the field, in ascending order. */
+    for (size_t at = 0; at < character_count; ++at) {
+        if (jobs[characters[at].job].lost < FONT_THIN_AREA) {
+            continue;
+        }
+
+        if (!push_code(&output->thin, &output->thin_count, characters[at].code)) {
+            goto out_of_memory;
+        }
+    }
+
     /* Each character's code point and glyph, for the kerning, and its FNT entry from its cell. */
     codes   = malloc(character_count * sizeof *codes);
     glyphs  = malloc(character_count * sizeof *glyphs);
@@ -702,6 +715,7 @@ void font_output_free(font_output *output) {
     free(output->atlas);
     free(output->missing);
     free(output->drawn);
+    free(output->thin);
     memset(output, 0, sizeof *output);
 }
 

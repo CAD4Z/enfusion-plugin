@@ -2,11 +2,14 @@
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {
-  defaultFontName, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, fontNameProblemOf, type FontRequest,
+  defaultFontName, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, fontGenerationSummaryOf, fontNameProblemOf, type FontRequest,
 } from '../mods/font/fontCommands';
 import { samePath } from '../mods/paths';
 import { assertFontCommandCurrent, assertFontScope, loadFontCommand } from '../platform/font/fontCommands';
 import { FontGenerator } from '../platform/font/fontGenerator';
+
+/** Thin glyphs a notification names before it counts the rest. */
+const THIN_GLYPHS_SHOWN = 12;
 
 export function registerFontCommands(context: vscode.ExtensionContext, log: vscode.LogOutputChannel): vscode.Disposable {
   const generator = new FontGenerator(context.extensionPath);
@@ -53,12 +56,12 @@ export function registerFontCommands(context: vscode.ExtensionContext, log: vsco
           cancellation.dispose();
         }
       });
-      const missing = result.missing.map((code) => `${String.fromCodePoint(code)} (U+${code.toString(16).toUpperCase().padStart(4, '0')})`);
-      const message = `${path.basename(session.plan.output)}: ${result.glyphCount} glyphs generated.` +
-        (missing.length === 0 ? '' : ` Skipped characters: ${missing.join(', ')}.`);
-      log.info(message);
-      if (missing.length === 0) void vscode.window.showInformationMessage(message);
-      else void vscode.window.showWarningMessage(message);
+      // The log names every thin glyph; the notification only the first few.
+      const file = path.basename(session.plan.output);
+      const summary = fontGenerationSummaryOf(file, result, THIN_GLYPHS_SHOWN);
+      log.info(fontGenerationSummaryOf(file, result).message);
+      if (summary.warning) void vscode.window.showWarningMessage(summary.message);
+      else void vscode.window.showInformationMessage(summary.message);
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         void vscode.window.showInformationMessage('Font generation cancelled.');

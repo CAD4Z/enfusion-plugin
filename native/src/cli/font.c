@@ -1224,6 +1224,7 @@ static int generate_command(const font_options *options) {
         font.atlas_height);
     write_codes("missing", font.missing, font.missing_count);
     write_codes("drawn", font.drawn, font.drawn_count);
+    write_codes("thin", font.thin, font.thin_count);
     fputs(",\"source\":{\"family\":", stdout);
     json_string(font.source.family);
     fputs(",\"style\":", stdout);

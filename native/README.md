@@ -240,6 +240,15 @@ A font without □ gets a square frame drawn by the generator. Characters the fo
 are left out and listed under `missing` in the result; the generator's own glyphs are listed under
 `drawn`.
 
+A stroke thinner than an atlas pixel is more than a field can hold: where the middle of such a
+stroke falls between two texel centres, the field is outside it at both and the shader leaves that
+part out. The glyph breaks up when it is drawn larger than its atlas size, and looks uneven at it;
+Inter Thin at size 32, with stems of 0.72 pixels, loses whole stems. The generator samples every
+glyph four by four per texel, the way the shader interpolates, and lists under `thin` the
+characters that lose at least one square pixel lying more than a tenth of a pixel inside the
+outline, or more than half of what they fill near their edge. A heavier weight or a larger size
+keeps them whole.
+
 What the engine is given:
 
 - MSDF (type 2) with `R = 8` and a field that runs from 0 to 1 over `1.5 × R / √2` atlas pixels,
@@ -285,8 +294,9 @@ kerning pairs and 4096 pair subtables in the `kern` feature (`kerning-limit`). A
 does not fit an atlas is `glyph-too-large`.
 
 A made font is reported as `font-generate` with its `guid`, `glyphCount`, `rangeCount`,
-`pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points the font lacks (`missing`)
-and those the generator drew (`drawn`), and the `source` family and style. `inspect` of an `.fnt`
+`pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points the font lacks (`missing`),
+those the generator drew (`drawn`) and those whose strokes the atlas cannot hold (`thin`), and the
+`source` family and style. `inspect` of an `.fnt`
 (`font-inspect`) reports its header — `name`, `size`, `type`, `cell`, `capHeight` (A),
 `lineHeight` (B), `c` (C), `r`, `bold`, `italic` — with `glyphCount`, `pairCount` and the code
 `ranges`; of a TrueType file (`font-source`), its `family` and `style`, typographic names first,

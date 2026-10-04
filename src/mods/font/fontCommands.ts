@@ -101,6 +101,32 @@ export function defaultFontName(family: string, style: string, size: number): st
   return `SDF_${(clean(family) + clean(style)).slice(0, 230)}${size}`;
 }
 
+/** What a generated font reports, as far as the user is told about it. */
+export interface FontGenerationOutcome {
+  readonly glyphCount: number;
+  readonly missing: readonly number[];
+  readonly thin: readonly number[];
+}
+
+/**
+ * The line a finished generation ends with, and whether it warns. Thin glyphs can run to hundreds,
+ * so at most `thinShown` of them are named.
+ */
+export function fontGenerationSummaryOf(file: string, outcome: FontGenerationOutcome, thinShown = Infinity): {
+  readonly message: string;
+  readonly warning: boolean;
+} {
+  const named = (code: number) => `${String.fromCodePoint(code)} (U+${code.toString(16).toUpperCase().padStart(4, '0')})`;
+  const shown = outcome.thin.slice(0, thinShown).map(named);
+  const more = outcome.thin.length - shown.length;
+  const message = `${file}: ${outcome.glyphCount} glyphs generated.` +
+    (outcome.missing.length === 0 ? '' : ` Skipped characters: ${outcome.missing.map(named).join(', ')}.`) +
+    (outcome.thin.length === 0 ? '' : ` ${outcome.thin.length} glyphs have strokes thinner than an atlas pixel and break up ` +
+      `when drawn larger than the atlas size: ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''}. ` +
+      'A heavier weight or a larger size keeps them whole.');
+  return { message, warning: outcome.missing.length > 0 || outcome.thin.length > 0 };
+}
+
 /** Also used before inspection or prompting, so an Explorer menu is never the authority. */
 export function fontCommandRefusalOf(input: Pick<FontCommandInput, 'kind' | 'file' | 'scheme' | 'platform' | 'roots'>): string | undefined {
   if (input.platform !== 'win32') return 'Font generation is available on Windows x64.';

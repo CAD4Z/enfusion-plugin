@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defaultFontName, fontCommandPlanOf } from '../../../src/mods/font/fontCommands';
+import { defaultFontName, fontCommandPlanOf, fontGenerationSummaryOf } from '../../../src/mods/font/fontCommands';
 
 const context = {
   platform: 'win32', scheme: 'file',
@@ -85,4 +85,16 @@ test('a command refuses non-Windows, remote and out-of-root files in a mixed win
     assert.equal(fontCommandPlanOf({ ...input, ...override }).kind, 'refused', JSON.stringify(override));
   }
   assert.equal(fontCommandPlanOf({ ...input, file: 'c:\\MODS\\EXAMPLE\\FONT.TTF' }).kind, 'ready');
+});
+
+test('a generation summary warns about skipped characters and names the first thin glyphs', () => {
+  assert.deepEqual(fontGenerationSummaryOf('SDF_Sans32.fnt', { glyphCount: 287, missing: [], thin: [] }),
+    { message: 'SDF_Sans32.fnt: 287 glyphs generated.', warning: false });
+  const thin = fontGenerationSummaryOf('SDF_Thin32.fnt', { glyphCount: 287, missing: [0xad], thin: [0x48, 0x4e, 0x54] }, 2);
+  assert.equal(thin.warning, true);
+  assert.equal(thin.message, 'SDF_Thin32.fnt: 287 glyphs generated. Skipped characters: \u00ad (U+00AD). ' +
+    '3 glyphs have strokes thinner than an atlas pixel and break up when drawn larger than the atlas size: ' +
+    'H (U+0048), N (U+004E) and 1 more. A heavier weight or a larger size keeps them whole.');
+  assert.match(fontGenerationSummaryOf('SDF_Thin32.fnt', { glyphCount: 287, missing: [], thin: [0x48, 0x4e, 0x54] }).message,
+    /: H \(U\+0048\), N \(U\+004E\), T \(U\+0054\)\. A heavier/);
 });

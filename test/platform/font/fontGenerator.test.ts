@@ -49,11 +49,11 @@ test('font commands share one handshake and run the bundled executable without a
 test('a generation names its source, size and confirmed revisions, and is only ever asked to stop', async () => {
   const calls: ExecutableRequest[] = [];
   const generator = new FontGenerator('C:\\extension', answering(() => Promise.resolve({
-    stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid: '0123456789ABCDEF', glyphCount: 3, missing: [0x78] }),
+    stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid: '0123456789ABCDEF', glyphCount: 3, missing: [0x78], thin: [0xc5] }),
     stderr: '',
   }), calls));
   const made = await generator.generate(sessionOf(INPUT), new AbortController().signal);
-  assert.deepEqual(made, { guid: '0123456789ABCDEF', glyphCount: 3, missing: [0x78] });
+  assert.deepEqual(made, { guid: '0123456789ABCDEF', glyphCount: 3, missing: [0x78], thin: [0xc5] });
   const call = calls.at(-1);
   assert.ok(call !== undefined);
   const value = (flag: string) => call.args[call.args.indexOf(flag) + 1];
@@ -69,7 +69,7 @@ test('a generation names its source, size and confirmed revisions, and is only e
 test('a regeneration hands native code the recipe alone', async () => {
   const calls: ExecutableRequest[] = [];
   const generator = new FontGenerator('C:\\extension', answering(() => Promise.resolve({
-    stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid: '0123456789ABCDEF', glyphCount: 3, missing: [] }),
+    stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid: '0123456789ABCDEF', glyphCount: 3, missing: [], thin: [] }),
     stderr: '',
   }), calls));
   await generator.generate(sessionOf({
@@ -91,4 +91,14 @@ test('a cancelled or refused generation reports the reason the CLI gave', async 
     (error: unknown) => error instanceof Error && error.name === 'AbortError' && error.message.includes('cancelled'));
   await assert.rejects(failing('invalid-input', 'The font files changed.').generate(sessionOf(INPUT), new AbortController().signal),
     (error: unknown) => error instanceof Error && error.name === 'Error' && error.message === 'The font files changed.');
+});
+
+test('a generation result without its thin glyphs is refused', async () => {
+  for (const thin of [undefined, ['H'], [-1]]) {
+    const generator = new FontGenerator('C:\\extension', answering(() => Promise.resolve({
+      stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid: '0123456789ABCDEF', glyphCount: 3, missing: [], thin }),
+      stderr: '',
+    })));
+    await assert.rejects(generator.generate(sessionOf(INPUT), new AbortController().signal), /invalid generation result/, String(thin));
+  }
 });

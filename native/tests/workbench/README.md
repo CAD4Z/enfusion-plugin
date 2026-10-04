@@ -113,6 +113,12 @@ nonzero rule; a disagreement farther than half an atlas pixel from the outline i
 default language systems of DFLT, latn and cyrl, or from a format 0 `kern` table, rounded to whole
 atlas pixels.
 
+A stroke thinner than an atlas pixel lies wholly inside that half-pixel band, so the check also
+measures what each glyph loses on its own: the outline shrunk by a quarter pixel against the ink,
+or the whole outline when the ink misses more than half of it. A glyph that loses 2 square pixels
+or more must be in the generator's `thin` list. Inter Thin at 32 loses whole stems this way; Inter
+Regular at 32 loses nothing.
+
 ```powershell
 py font_check.py ..\..\.build\Release\enfusion.exe Sans-Regular.ttf Sans.charset.txt 32 --preview sample.png "AV To Ty"
 ```

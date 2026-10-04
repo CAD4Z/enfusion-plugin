@@ -531,6 +531,58 @@ static int an_fnt_whose_header_metrics_are_not_numbers_is_refused(void) {
 }
 
 /**
+ * Generates the GPOS font from A, H, O, A with ring and U+1F600, whose solid square has no stroke,
+ * at size 24 and at size 8. The ring of A with ring is 0.025 em: 0.6 atlas pixels at 24, while
+ * every other stroke there is at least 0.1 em. At 8 the stems and bar of H are 0.8 pixels, and its
+ * stems lie half a pixel apart on the grid, so at least one of them falls between texel centres.
+ * The ring of O is 0.15 em, 1.2 pixels even at 8; the square is never thin.
+ */
+static int strokes_thinner_than_an_atlas_pixel_are_reported(void) {
+    uint32_t              codes[] = { 'A', 'H', 'O', 0x00C5u, 0x1F600u };
+    const font_characters wanted  = { codes, sizeof codes / sizeof codes[0] };
+
+    /* The GPOS font, and one generation per size. */
+    test_bytes   font = font_fixture(FONT_FIXTURE_GPOS);
+    font_request request;
+    font_output  output;
+    edds_error   error;
+    int          h = 0, o = 0, square = 0;
+
+    CHECK(font.data != NULL);
+
+    request.data       = font.data;
+    request.size       = font.size;
+    request.characters = &wanted;
+    request.name       = "SDF_Fixture";
+
+    /* At 24, the ring alone. */
+    request.font_size = 24;
+
+    CHECK(font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(output.thin_count == 1 && output.thin[0] == 0x00C5u);
+
+    font_output_free(&output);
+
+    /* At 8, H among the thin; O and the square never. */
+    request.font_size = 8;
+
+    CHECK(font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+
+    for (size_t at = 0; at < output.thin_count; ++at) {
+        h      |= output.thin[at] == 'H';
+        o      |= output.thin[at] == 'O';
+        square |= output.thin[at] == 0x1F600u;
+    }
+
+    CHECK(h && !o && !square);
+
+    font_output_free(&output);
+    fixture_free(font);
+
+    return 1;
+}
+
+/**
  * Describes the KERN font, whose name table holds a typographic family and style (Fixture,
  * Medium) beside its family and style (Fixture Medium, Regular): the typographic ones are the ones
  * given, with the units per em.
@@ -563,6 +615,7 @@ int main(void) {
         a_font_carries_what_it_has_and_names_what_it_lacks() &&
         a_font_without_a_cap_height_measures_its_h_even_when_the_set_leaves_h_out() &&
         an_fnt_whose_header_metrics_are_not_numbers_is_refused() &&
+        strokes_thinner_than_an_atlas_pixel_are_reported() &&
         a_source_says_its_typographic_names_first();
 
     return passed ? 0 : 1;

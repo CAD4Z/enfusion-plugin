@@ -3,7 +3,8 @@
  * corner the two sides feed different channels; the median of three channels then keeps the corner
  * sharp. Where the median would say inside and the outline says outside, or the other way round -
  * at a texel or anywhere the shader interpolates between texels - the texel falls back to the true
- * distance in all three channels.
+ * distance in all three channels. What even the true distance cannot hold, a stroke thinner than a
+ * texel, is measured for the generator to report.
  *
  * The edge colouring, the signed and pseudo-distances and the equation solvers are adapted from
  * msdfgen by Viktor Chlumsky, MIT licence; the notice is in THIRD-PARTY.md.
@@ -33,6 +34,12 @@
 
 /** The most passes the correction makes over the blocks of a field. */
 #define MOST_CORRECTION_PASSES 16
+
+/**
+ * A point the outline fills at least this far from its edge, and the shader leaves out, belongs
+ * to a stroke the field lost rather than to an antialiased edge.
+ */
+#define LOST_DEPTH 0.1
 
 /**
  * A signed distance to an edge, and `dot`, which decides between two edges equally far away: the
@@ -533,17 +540,45 @@ static void settle(cell_field *field, size_t texel) {
 }
 
 /**
+ * The texels of the block whose top-left texel is (u, v): top left, top right, bottom left,
+ * bottom right.
+ */
+static void block_corners(const cell_field *field, uint32_t u, uint32_t v, size_t corners[4]) {
+    corners[0] = (size_t)v * field->width + u;
+    corners[1] = (size_t)v * field->width + u + 1u;
+    corners[2] = ((size_t)v + 1u) * field->width + u;
+    corners[3] = ((size_t)v + 1u) * field->width + u + 1u;
+}
+
+/**
+ * The median of the three channels, each interpolated the way the shader does between the four
+ * texels of a block, at (fx, fy) from its top-left texel centre; 0 to 255.
+ */
+static double block_median(const cell_field *field, const size_t corners[4], double fx, double fy) {
+    double channels[3];
+
+    for (int channel = 0; channel < 3; ++channel) {
+        const double top = field->bytes[3u * corners[0] + (size_t)channel] * (1.0 - fx) +
+            field->bytes[3u * corners[1] + (size_t)channel] * fx;
+        const double bottom = field->bytes[3u * corners[2] + (size_t)channel] * (1.0 - fx) +
+            field->bytes[3u * corners[3] + (size_t)channel] * fx;
+
+        channels[channel] = top * (1.0 - fy) + bottom * fy;
+    }
+
+    return median_float(channels[0], channels[1], channels[2]);
+}
+
+/**
  * Marks the four texels of a block when, at any of the sixteen points a 4x look at the block
  * samples, the interpolated median puts the edge on the wrong side of the outline. Returns whether
  * any texel was newly marked.
  */
 static int check_block(cell_field *field, const font_shape *colored, const font_shape *shape, uint32_t u, uint32_t v) {
-    /* The block's texels: top left, top right, bottom left, bottom right. */
-    const size_t corners[4] = {
-        (size_t)v * field->width + u, (size_t)v * field->width + u + 1u,
-        ((size_t)v + 1u) * field->width + u, ((size_t)v + 1u) * field->width + u + 1u
-    };
-    int inside_any = 0, outside_any = 0;
+    size_t corners[4];
+    int    inside_any = 0, outside_any = 0;
+
+    block_corners(field, u, v, corners);
 
     /* Whether any channel of the four texels says inside, and whether any says outside. */
     for (int corner = 0; corner < 4; ++corner) {
@@ -567,22 +602,11 @@ static int check_block(cell_field *field, const font_shape *colored, const font_
     for (int sy = 0; sy < 4; ++sy) {
         for (int sx = 0; sx < 4; ++sx) {
             const double fx = 0.125 + 0.25 * sx, fy = 0.125 + 0.25 * sy;
-            double       channels[3];
             int          inside_median, inside_outline;
             font_vec     point;
 
-            /* Each channel interpolated between the four texels. */
-            for (int channel = 0; channel < 3; ++channel) {
-                const double top = field->bytes[3u * corners[0] + (size_t)channel] * (1.0 - fx) +
-                    field->bytes[3u * corners[1] + (size_t)channel] * fx;
-                const double bottom = field->bytes[3u * corners[2] + (size_t)channel] * (1.0 - fx) +
-                    field->bytes[3u * corners[3] + (size_t)channel] * fx;
-
-                channels[channel] = top * (1.0 - fy) + bottom * fy;
-            }
-
-            /* Inside or outside by the median of the channels, and by the outline. */
-            inside_median = median_float(channels[0], channels[1], channels[2]) >= 127.5;
+            /* Inside or outside by the median of the interpolated channels, and by the outline. */
+            inside_median = block_median(field, corners, fx, fy) >= 127.5;
 
             point = glyph_point(field, field->left + u + 0.5 + fx, field->top + v + 0.5 + fy);
 
@@ -691,8 +715,77 @@ static void correct(cell_field *field, const font_shape *colored, const font_sha
 }
 
 /**
+ * The area, in square texels, of the glyph that the corrected field loses, sampled four by four in
+ * every block the way check_block samples it. A field holds a stroke at least a texel wide; a
+ * thinner one whose middle falls between two texel centres is outside at both, and no
+ * interpolation between them brings it back. Such a stroke lies within a texel of a texel centre,
+ * so only blocks with a corner that close to the outline are sampled.
+ *
+ * What counts is what the outline fills deeper than LOST_DEPTH and the shader leaves out: closer
+ * to the outline, interpolation shaves any convex edge a little. A glyph whose strokes are all too
+ * thin to be that deep anywhere is caught another way: it loses more than half of what it fills,
+ * and then everything it loses counts.
+ */
+static double lost_area(const cell_field *field, const font_shape *colored, const font_shape *shape) {
+    /* Samples the outline fills; of them, those the shader leaves out, and those deep inside. */
+    uint32_t filled = 0, missed = 0, deep = 0;
+
+    /* A field less than two texels wide or high has no block of four. */
+    if (field->width < 2u || field->height < 2u) {
+        return 0;
+    }
+
+    for (uint32_t v = 0; v + 1u < field->height; ++v) {
+        for (uint32_t u = 0; u + 1u < field->width; ++u) {
+            size_t corners[4];
+            int    near = 0;
+
+            block_corners(field, u, v, corners);
+
+            /* Whether any of the block's texels lies within a texel of the outline. */
+            for (int corner = 0; corner < 4; ++corner) {
+                if (fabs(field->truth[corners[corner]]) < 1.0) {
+                    near = 1;
+                }
+            }
+
+            if (!near) {
+                continue;
+            }
+
+            /* Points the outline fills, then whether the shader leaves them out, and how deep. */
+            for (int sy = 0; sy < 4; ++sy) {
+                for (int sx = 0; sx < 4; ++sx) {
+                    const double   fx = 0.125 + 0.25 * sx, fy = 0.125 + 0.25 * sy;
+                    const font_vec point = glyph_point(field, field->left + u + 0.5 + fx, field->top + v + 0.5 + fy);
+
+                    if (font_shape_winding(shape, point) == 0) {
+                        continue;
+                    }
+
+                    ++filled;
+
+                    if (block_median(field, corners, fx, fy) >= 127.5) {
+                        continue;
+                    }
+
+                    ++missed;
+
+                    if (true_distance(colored, point) > LOST_DEPTH) {
+                        ++deep;
+                    }
+                }
+            }
+        }
+    }
+
+    return (missed * 2u > filled ? missed : deep) / 16.0;
+}
+
+/**
  * Colours the boundary, works out the field of the glyph's cell, corrects it, and writes it into
- * the red, green and blue of the cell's atlas pixels. An empty boundary leaves the cell as it is.
+ * the red, green and blue of the cell's atlas pixels. `lost` gets the area of the glyph the field
+ * could not hold (see lost_area). An empty boundary leaves the cell as it is and loses nothing.
  */
 edds_status font_field_render(
     font_shape           *boundary,
@@ -700,11 +793,14 @@ edds_status font_field_render(
     const font_placement *placement,
     uint8_t              *atlas,
     uint32_t              atlas_width,
+    double               *lost,
     edds_error           *error) {
     font_shape  colored;
     cell_field  field;
     edds_status status;
     int32_t     right, bottom;
+
+    *lost = 0;
 
     if (boundary->count == 0) {
         return EDDS_OK;
@@ -812,8 +908,10 @@ edds_status font_field_render(
         }
     }
 
-    /* Where the median errs, the true distance instead. */
+    /* Where the median errs, the true distance instead; then what even that cannot hold. */
     correct(&field, &colored, shape);
+
+    *lost = lost_area(&field, &colored, shape);
 
     /* The field into the cell's atlas pixels, three bytes each; alpha stays as it is. */
     for (uint32_t v = 0; v < field.height; ++v) {

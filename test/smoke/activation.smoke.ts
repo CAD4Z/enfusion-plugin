@@ -281,7 +281,10 @@ async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executabl
   assert.equal(new TextDecoder().decode(await vscode.workspace.fs.readFile(metadata)), recipe);
   const replacement = await loadFontCommand(source, { kind: 'generate', name, size: 24 });
   assert.equal(replacement.plan.action, 'replace');
-  assert.equal((await generator.generate(replacement, new AbortController().signal)).guid, made.guid);
+  const replaced = await generator.generate(replacement, new AbortController().signal);
+  assert.equal(replaced.guid, made.guid);
+  // The ring of A with ring is 0.025 em, 0.6 atlas pixels at size 24: the one stroke the atlas cannot hold.
+  assert.deepEqual(replaced.thin, [0xc5]);
   // Native publication must reject the old confirmation even if the caller skips its early check.
   await assert.rejects(generator.generate(session, new AbortController().signal), /changed/);
 

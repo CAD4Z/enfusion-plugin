@@ -18,6 +18,8 @@ export interface FontGeneration {
   readonly guid: string;
   readonly glyphCount: number;
   readonly missing: readonly number[];
+  /** Characters with strokes thinner than an atlas pixel, which break up when drawn above the atlas size. */
+  readonly thin: readonly number[];
 }
 
 export class FontGenerator {
@@ -61,11 +63,10 @@ export class FontGenerator {
     const value = await this.invoke(args, signal);
     if (value.kind !== 'font-generate' || typeof value.guid !== 'string' || !/^[\da-f]{16}$/i.test(value.guid) ||
       typeof value.glyphCount !== 'number' || !Number.isInteger(value.glyphCount) || value.glyphCount < 1 ||
-      !Array.isArray(value.missing) || !value.missing.every((code: unknown) =>
-        typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 0x10ffff)) {
+      !isCodeList(value.missing) || !isCodeList(value.thin)) {
       throw new Error('The font generator returned an invalid generation result.');
     }
-    return { guid: value.guid, glyphCount: value.glyphCount, missing: value.missing as number[] };
+    return { guid: value.guid, glyphCount: value.glyphCount, missing: value.missing, thin: value.thin };
   }
 
   /**
@@ -108,6 +109,11 @@ function failureOf(error: unknown): Error {
     const message = stderr || (error instanceof Error ? error.message : 'The font generator failed.');
     return Object.assign(new Error(message), { name: failed.name === 'AbortError' ? 'AbortError' : 'Error' });
   }
+}
+
+function isCodeList(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((code: unknown) =>
+    typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 0x10ffff);
 }
 
 function recordOf(value: unknown): Record<string, unknown> {

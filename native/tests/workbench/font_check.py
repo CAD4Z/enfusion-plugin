@@ -7,6 +7,13 @@ subtable per lookup), or a format 0 `kern` table when there is no GPOS. The chec
 engine's shader does — bilinear, median of three, ink from 0.5 — at four times atlas resolution,
 and compares it with the outline filled by the nonzero rule.
 
+A glyph mismatch within half a pixel of the outline is antialiasing, so a stroke thinner than a
+pixel that the field loses whole hides inside that band. The check measures those losses on its
+own: the outline shrunk by a quarter pixel against the ink, or all of the outline when the ink
+misses more than half of it. A glyph losing 2 square pixels or more must be in the generator's
+`thin` list. The generator also lists strokes shaved less deeply than a quarter pixel, which this
+resolution cannot tell from antialiasing, so a listed glyph this check sees whole is no fault.
+
 usage:
   py font_check.py ENFUSION_EXE FONT.ttf CHARACTERS.txt SIZE [--golden PAIRS.json] [--preview OUT.png TEXT]
 
@@ -28,6 +35,7 @@ from fontTools.ttLib import TTFont
 SUPERSAMPLE = 4
 BOUNDARY_NOISE = 2
 FIELD_RANGE = 1.5 * 8 / 2 ** 0.5
+CLEARLY_THIN = 2.0
 
 
 def read_fnt(path):
@@ -171,9 +179,21 @@ def rebuilt(field, u, v):
     return numpy.median(channels, axis=-1) >= 0.5
 
 
+def lost_area(truth, ink):
+    """Square atlas pixels of the outline the ink misses: shrunk by a quarter pixel, or all of it."""
+    inner = truth.copy()
+    for axis in (0, 1):
+        for step in (-1, 1):
+            inner &= numpy.roll(truth, step, axis=axis)
+    missed = truth & ~ink
+    lost = missed if 2 * missed.sum() > truth.sum() else inner & ~ink
+    return lost.sum() / SUPERSAMPLE ** 2
+
+
 def check_glyphs(font, fnt, field, cmap, scale):
+    """Glyphs whose ink is wrong away from the outline, by sample count; and what each one loses."""
     glyf = font['glyf']
-    faults = {}
+    faults, losses = {}, {}
     for code, (x, y, w, h, bx, by, _) in sorted(fnt['boxes'].items()):
         name = cmap.get(code)
         if name is None or w == 0 or h == 0:
@@ -196,7 +216,8 @@ def check_glyphs(font, fnt, field, cmap, scale):
         count = int((wrong & ~near).sum())
         if count:
             faults[code] = count
-    return faults
+        losses[code] = lost_area(truth, ink)
+    return faults, losses
 
 
 def gpos_pairs(font, codes, cmap):
@@ -341,17 +362,23 @@ def main():
                                 capture_output=True, text=True)
         if result.returncode != 0:
             raise SystemExit(result.stdout + result.stderr)
+        reported_thin = set(json.loads(result.stdout)['thin'])
         fnt = read_fnt(output)
         field = read_atlas(output.with_suffix('.edds'))
     font = TTFont(arguments.font)
     cmap = font.getBestCmap()
     scale = arguments.size / font['head'].unitsPerEm
     codes = sorted(fnt['boxes'])
-    faults = check_glyphs(font, fnt, field, cmap, scale)
+    faults, losses = check_glyphs(font, fnt, field, cmap, scale)
     expected = expected_pairs(font, codes, cmap, scale)
     actual = sorted(fnt['pairs'], key=lambda pair: (pair[0] << 16) | pair[1])
     print('glyphs %d, faulty %d %s' % (len(codes), len(faults),
                                        ' '.join('U+%04X:%d' % item for item in sorted(faults.items()))))
+    # Every glyph this check sees losing a stroke must be on the generator's own thin list.
+    unreported = sorted(code for code, lost in losses.items() if lost >= CLEARLY_THIN and code not in reported_thin)
+    print('thin %d reported, %d losing %g square px or more, unreported %d %s' % (
+        len(reported_thin), sum(lost >= CLEARLY_THIN for lost in losses.values()), CLEARLY_THIN, len(unreported),
+        ' '.join('U+%04X:%.2f' % (code, losses[code]) for code in unreported)))
     print('pairs %d, fontTools %d, %s' % (len(actual), len(expected), 'equal' if actual == expected else 'DIFFERENT'))
     if actual != expected:
         missing, extra = sorted(set(expected) - set(actual)), sorted(set(actual) - set(expected))
@@ -362,7 +389,7 @@ def main():
             'pairs': [list(pair) for pair in expected]}, indent=None) + '\n')
     if arguments.preview:
         preview(fnt, field, arguments.preview[1], arguments.preview[0])
-    return 1 if faults or actual != expected else 0
+    return 1 if faults or actual != expected or unreported else 0
 
 
 if __name__ == '__main__':

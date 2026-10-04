@@ -212,6 +212,8 @@ typedef struct font_placement {
  * Colours the boundary and renders its multi-channel field into the glyph's cell of an RGBA atlas,
  * placed so that the box the engine centres in the cell holds the outline exactly where it is.
  * `shape` is the original outline: the inside is decided by its winding, not by the boundary.
+ * `lost` gets the area in square atlas pixels that the outline fills and the shader leaves out:
+ * strokes thinner than a texel, where they fall between texel centres.
  */
 edds_status font_field_render(
     font_shape           *boundary,
@@ -219,6 +221,7 @@ edds_status font_field_render(
     const font_placement *placement,
     uint8_t              *atlas,
     uint32_t              atlas_width,
+    double               *lost,
     edds_error           *error);
 
 /* --- FNT5 ------------------------------------------------------------------------------------- */
