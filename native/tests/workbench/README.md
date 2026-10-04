@@ -4,6 +4,10 @@
 DayZ Workbench 1.29.163709 texture importer. The executable SHA-256 is recorded in the capture.
 No Workbench binaries or disassembly are distributed.
 
+Legacy target research, complete writer captures and the LZO writer blocker are documented in
+[target-evidence.md](target-evidence.md). Ticket 09 remains incomplete; captures do not enable
+either legacy authoring target.
+
 The capture executes the installed importer's machine code in Unicorn, starting at its texture
 conversion function (RVA `0xfcc0d0`), with decoded BGRA8/BGRX8 input and `Conversion=None`.
 It never starts the executable, its Windows entry point, a window, or an operating-system process.
