@@ -278,9 +278,32 @@ if(NOT before_fnt STREQUAL after_fnt OR NOT before_edds STREQUAL after_edds OR N
 endif()
 expect_no_temps("cancellation")
 
+# Without a resource name a font has no recipe: its FNT and atlas alone, and no GUID. It never
+# replaces a font that has a recipe.
+set(detached "${work}/out/detached/SDF_Detached32.fnt")
+file(MAKE_DIRECTORY "${work}/out/detached")
+execute_process(
+  COMMAND "${CLI}" font generate --machine --protocol 1 --input "${work}/fixture-gpos.ttf" --output "${detached}"
+    --characters "${work}/fixture.charset.txt"
+    --expect-output-revision missing --expect-atlas-revision missing --expect-metadata-revision missing
+  RESULT_VARIABLE exit OUTPUT_VARIABLE output ERROR_VARIABLE error)
+string(JSON detached_guid ERROR_VARIABLE json_error TYPE "${output}" guid)
+if(NOT exit EQUAL 0 OR json_error OR NOT detached_guid STREQUAL "NULL" OR NOT EXISTS "${detached}" OR
+    NOT EXISTS "${work}/out/detached/SDF_Detached32.edds" OR EXISTS "${detached}.meta")
+  message(FATAL_ERROR "a font without a recipe was not written alone: ${exit} ${output}${error}")
+endif()
+expect_refusal("a font without a recipe over one with a recipe" 3 detached-metadata-conflict
+  font generate --machine --protocol 1 --input "${work}/fixture-gpos.ttf" --output "${font}")
+hash_font(after)
+if(NOT before_fnt STREQUAL after_fnt OR NOT before_edds STREQUAL after_edds OR NOT before_meta STREQUAL after_meta)
+  message(FATAL_ERROR "a refused font without a recipe changed the font that has one")
+endif()
+expect_no_temps("a font without a recipe")
+
 # Invocations that do not say which font, or say it twice, are refused as invocations.
-expect_refusal("no resource name" 2 invalid-options
-  font generate --machine --protocol 1 --input "${work}/fixture-gpos.ttf" --output "${refused}")
+expect_refusal("a GUID for a font without a recipe" 2 invalid-options
+  font generate --machine --protocol 1 --input "${work}/fixture-gpos.ttf" --output "${refused}"
+  --guid 0123456789ABCDEF)
 expect_refusal("a recipe and a source at once" 2 invalid-options
   font generate --machine --protocol 1 --meta "${recipe}" --input "${work}/fixture-gpos.ttf")
 expect_refusal("an output that is not a font" 2 invalid-options

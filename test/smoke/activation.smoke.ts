@@ -246,8 +246,18 @@ export async function run(): Promise<void> {
 
 async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executable: string): Promise<void> {
   const generator = new FontGenerator(extensionPath);
-  const source = vscode.Uri.joinPath(workspace, 'Font smoke.ttf');
-  const characters = vscode.Uri.joinPath(workspace, 'Font smoke.txt');
+  // A mod of its own, so that a font inside its prefix root gets a recipe; the font beside the
+  // workspace file below gets none, as a texture there gets no registration.
+  const mod = vscode.Uri.joinPath(workspace, 'SmokeMod');
+  const fonts = vscode.Uri.joinPath(mod, 'SmokeMod', 'Fonts');
+  await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(mod, 'mod.enf'), new TextEncoder().encode('{ "name": "SmokeMod" }\n'));
+  await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(mod, 'SmokeMod', 'config.cpp'), new TextEncoder().encode(
+    'class CfgPatches { class SmokeMod { requiredAddons[] = {}; }; };\nclass CfgMods { class SmokeMod { dir = "SmokeMod"; }; };\n'));
+  for (const file of ['Font smoke.ttf', 'Font smoke.txt']) {
+    await vscode.workspace.fs.copy(vscode.Uri.joinPath(workspace, file), vscode.Uri.joinPath(fonts, file));
+  }
+  const source = vscode.Uri.joinPath(fonts, 'Font smoke.ttf');
+  const characters = vscode.Uri.joinPath(fonts, 'Font smoke.txt');
   // "SDF_Proverka32", Russian for "check": a name outside ASCII must survive the CLI and the recipe.
   const name = 'SDF_\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u043032';
   assert.deepEqual(await generator.inspect(source.fsPath), { family: 'Fixture Sans', style: 'Regular' });
@@ -263,7 +273,7 @@ async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executabl
   const recipe = new TextDecoder().decode(await vscode.workspace.fs.readFile(metadata));
   assert.match(recipe, /SourceFile "Font smoke.ttf"/);
   assert.match(recipe, /Characters "Font smoke.txt"/);
-  assert.ok(recipe.includes(`{${made.guid}}`));
+  assert.ok(made.guid !== undefined && recipe.includes(`{${made.guid}}SmokeMod/Fonts/${name}.fnt`));
   const inspected = machineValue((await executeFile(executable,
     ['font', 'inspect', '--machine', '--protocol', '1', '--input', output.fsPath],
     { encoding: 'utf8', shell: false, windowsHide: true })).stdout);
@@ -297,6 +307,16 @@ async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executabl
   await assert.rejects(assertFontCommandCurrent(replacement), /changed/);
   await vscode.workspace.fs.delete(metadata);
   await assert.rejects(loadFontCommand(output, { kind: 'regenerate' }), /no .fnt.meta recipe/);
+
+  // Outside every prefix root: the font and its atlas alone, and no recipe to regenerate from.
+  const loose = await loadFontCommand(vscode.Uri.joinPath(workspace, 'Font smoke.ttf'), {
+    kind: 'generate', name, size: 32, characters: vscode.Uri.joinPath(workspace, 'Font smoke.txt').fsPath,
+  });
+  assert.equal(loose.plan.resourceName, undefined);
+  assert.equal((await generator.generate(loose, new AbortController().signal)).guid, undefined);
+  assert.equal((await vscode.workspace.fs.stat(vscode.Uri.file(loose.plan.atlas))).type, vscode.FileType.File);
+  await assert.rejects(Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(loose.plan.metadata))));
+  await assert.rejects(loadFontCommand(vscode.Uri.file(loose.plan.output), { kind: 'regenerate' }), /no recipe to regenerate from/);
 }
 
 /** One machine-protocol result as a plain record, so a smoke assertion never indexes `any`. */

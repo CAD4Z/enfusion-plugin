@@ -10,7 +10,7 @@ const PROTOCOL = JSON.stringify({
 });
 
 const INPUT: FontCommandInput = {
-  platform: 'win32', scheme: 'file', roots: [{ root: 'C:/Mods/Example' }], kind: 'generate',
+  platform: 'win32', scheme: 'file', roots: [{ root: 'C:/Mods/Example', prefixRoot: 'C:/Mods/Example' }], kind: 'generate',
   file: 'C:/Mods/Example/Sans.ttf', name: 'SDF_Sans24', size: 24, characters: 'C:/Mods/Example/set.txt',
   existing: [], metadata: { kind: 'missing' },
 };
@@ -101,4 +101,23 @@ test('a generation result without its thin glyphs is refused', async () => {
     })));
     await assert.rejects(generator.generate(sessionOf(INPUT), new AbortController().signal), /invalid generation result/, String(thin));
   }
+});
+
+test('a font outside a prefix root is generated without a resource name, and has no GUID', async () => {
+  const detached = { ...INPUT, roots: [{ root: 'C:/Mods/Example' }] };
+  const answer = (guid: string | null) => {
+    const calls: ExecutableRequest[] = [];
+    const generator = new FontGenerator('C:\\extension', answering(() => Promise.resolve({
+      stdout: JSON.stringify({ protocolVersion: 1, kind: 'font-generate', guid, glyphCount: 3, missing: [], thin: [] }),
+      stderr: '',
+    }), calls));
+    return { generator, calls };
+  };
+  const { generator, calls } = answer(null);
+  assert.equal((await generator.generate(sessionOf(detached), new AbortController().signal)).guid, undefined);
+  assert.equal(calls.at(-1)?.args.includes('--resource-name'), false);
+  // A GUID where no recipe was asked for, or none where one was, is not what was planned.
+  await assert.rejects(answer('0123456789ABCDEF').generator.generate(sessionOf(detached), new AbortController().signal),
+    /invalid generation result/);
+  await assert.rejects(answer(null).generator.generate(sessionOf(INPUT), new AbortController().signal), /invalid generation result/);
 });

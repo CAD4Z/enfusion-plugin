@@ -58,8 +58,9 @@ export function registerFontCommands(context: vscode.ExtensionContext, log: vsco
       });
       // The log names every thin glyph; the notification only the first few.
       const file = path.basename(session.plan.output);
-      const summary = fontGenerationSummaryOf(file, result, THIN_GLYPHS_SHOWN);
-      log.info(fontGenerationSummaryOf(file, result).message);
+      const outcome = { ...result, notice: session.plan.notice };
+      const summary = fontGenerationSummaryOf(file, outcome, THIN_GLYPHS_SHOWN);
+      log.info(fontGenerationSummaryOf(file, outcome).message);
       if (summary.warning) void vscode.window.showWarningMessage(summary.message);
       else void vscode.window.showInformationMessage(summary.message);
     } catch (error: unknown) {

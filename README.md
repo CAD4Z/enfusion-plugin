@@ -113,8 +113,9 @@ discarded when the profile changes.
 Right-click a `.ttf` inside a discovered mod or workspace and choose **Generate Enfusion Font…**.
 Choose a size (32 by default, 8–40), a nearby `.txt` character set or the built-in set, and a name.
 The command writes `.fnt`, `.edds` and the recipe `.fnt.meta` beside the source, reports missing
-characters and asks before replacing existing files. **Regenerate Enfusion Font** on the `.fnt`
-uses the saved recipe and keeps its GUID. Both commands show cancellable progress; no Workbench
+characters and glyphs whose strokes are thinner than an atlas pixel, and asks before replacing
+existing files. Outside a mod's prefix root, as with textures, it writes the font without a recipe.
+**Regenerate Enfusion Font** on the `.fnt` uses the saved recipe and keeps its GUID. Both commands show cancellable progress; no Workbench
 or DayZ Tools are needed. The same generator is available through the
 [native CLI](native/README.md#fonts-sdf-fonts-from-truetype).
 

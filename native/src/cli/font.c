@@ -1,6 +1,7 @@
 /*
- * `enfusion font generate | inspect`. A font is three files beside each other (the recipe
- * `.fnt.meta`, the `.fnt` and its `.edds` atlas), and they are replaced together or not at all.
+ * `enfusion font generate | inspect`. A font is the `.fnt` and its `.edds` atlas beside each other,
+ * with the recipe `.fnt.meta` unless it was made without one, and they are replaced together or
+ * not at all.
  */
 #ifdef _WIN32
 #define _CRT_RAND_S
@@ -62,7 +63,7 @@ static void usage(void) {
         "usage:\n"
         "  enfusion font generate --machine --protocol 1 --meta PATH.fnt.meta [--resource-name NAME]\n"
         "  enfusion font generate --machine --protocol 1 --input SOURCE.ttf --output FONT.fnt\n"
-        "      --resource-name NAME [--size N] [--characters FILE] [--guid HEX]\n"
+        "      [--resource-name NAME [--guid HEX]] [--size N] [--characters FILE]\n"
         "  enfusion font inspect --machine --protocol 1 --input FONT.fnt|SOURCE.ttf\n",
         stderr);
 }
@@ -825,7 +826,8 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
 /**
  * The recipe built from the flags: the `.meta` and the `.edds` beside the `--output` `.fnt`, the
  * source and character files as paths relative to its folder, and the GUID of the font already
- * there, the one `--guid` gives, or a new one. Returns EDDS_OK, or the refusal.
+ * there, the one `--guid` gives, or a new one. Without `--resource-name` the font has no recipe:
+ * the paths alone, the size, and an empty GUID. Returns EDDS_OK, or the refusal.
  */
 static edds_status recipe_from_input(const font_options *options, font_paths *paths, font_recipe *recipe, edds_error *error) {
     char *text;
@@ -851,6 +853,19 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
         paths->source == NULL ||
         (options->characters != NULL && paths->characters == NULL)) {
         return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed", "The font paths could not be prepared.");
+    }
+
+    /*
+     * A font without a recipe: nothing in it is relative to anything, and a recipe already beside
+     * it would go on describing a font this one replaces.
+     */
+    if (options->resource_name == NULL) {
+        if (path_exists(paths->meta)) {
+            return refuse(error, EDDS_INVALID_INPUT, "detached-metadata-conflict",
+                "A font without a recipe cannot replace one that has a .fnt.meta beside it.");
+        }
+
+        return EDDS_OK;
     }
 
     /* The resource name, as UTF-8 that fits the recipe. */
@@ -985,7 +1000,8 @@ static edds_status validate_revisions(const font_options *options, const font_pa
 
 /**
  * Builds the temporaries, then checks the confirmed revisions immediately before replacing any
- * output. Returns EDDS_OK, or the first failure with `error` filled in.
+ * output. A font without a recipe, which has no GUID, publishes only its atlas and FNT. Returns
+ * EDDS_OK, or the first failure with `error` filled in.
  */
 static edds_status publish(
     const font_options *options,
@@ -993,12 +1009,13 @@ static edds_status publish(
     const font_recipe  *recipe,
     const font_output  *font,
     edds_error         *error) {
-    /* The atlas, the FNT and the recipe, in that order. */
+    /* The atlas, the FNT and the recipe, in that order, and how many of them there are. */
     cli_artifact artifacts[3] = {
         { paths->atlas, NULL, NULL, 0, 0 },
         { paths->fnt, NULL, NULL, 0, 0 },
         { paths->meta, NULL, NULL, 0, 0 }
     };
+    const size_t count = recipe->guid[0] != '\0' ? 3u : 2u;
 
     /* For each of the three, the stage names a test can make fail. */
     static const char *const write_stages[3] = {
@@ -1016,7 +1033,7 @@ static edds_status publish(
     size_t      backed = 0, committed = 0;
 
     /* Each file written into its own temporary, flushed and closed. */
-    for (size_t at = 0; at < 3u && status == EDDS_OK; ++at) {
+    for (size_t at = 0; at < count && status == EDDS_OK; ++at) {
         FILE *file = create_temporary(&artifacts[at], "new");
 
         if (file == NULL) {
@@ -1054,7 +1071,7 @@ static edds_status publish(
     }
 
     /* The old files moved aside, one by one. */
-    for (; status == EDDS_OK && backed < 3u; ++backed) {
+    for (; status == EDDS_OK && backed < count; ++backed) {
         if (!backup_artifact(&artifacts[backed], "old", backup_stages[backed])) {
             status = refuse(error, EDDS_INTERNAL_FAILURE, "artifact-backup-failed", "The previous font files could not be moved aside.");
             break;
@@ -1062,7 +1079,7 @@ static edds_status publish(
     }
 
     /* The new files moved into place, one by one. */
-    for (; status == EDDS_OK && committed < 3u; ++committed) {
+    for (; status == EDDS_OK && committed < count; ++committed) {
         if (!commit_artifact(&artifacts[committed], commit_stages[committed])) {
             status = refuse(error, EDDS_INTERNAL_FAILURE, "artifact-commit-failed",
                 "The new font files could not replace the previous ones; the previous ones were restored.");
@@ -1074,7 +1091,7 @@ static edds_status publish(
         /* A partial swap goes back: newest first, every file that moved returns to where it was. */
         int restored = 1;
 
-        for (size_t at = 3u; at > 0; --at) {
+        for (size_t at = count; at > 0; --at) {
             if (!rollback_artifact(&artifacts[at - 1u])) {
                 restored = 0;
             }
@@ -1088,7 +1105,7 @@ static edds_status publish(
     }
 
     /* The temporaries go, and after a success the backups too. */
-    for (size_t at = 0; at < 3u; ++at) {
+    for (size_t at = 0; at < count; ++at) {
         cleanup_artifact(&artifacts[at], status == EDDS_OK);
     }
 
@@ -1217,7 +1234,14 @@ static int generate_command(const font_options *options) {
 
     /* What was made, as one JSON line on stdout. */
     (void)printf("{\"protocolVersion\":1,\"kind\":\"font-generate\",\"guid\":");
-    json_string(recipe.guid);
+
+    /* A font without a recipe has no GUID. */
+    if (recipe.guid[0] != '\0') {
+        json_string(recipe.guid);
+    } else {
+        fputs("null", stdout);
+    }
+
     (void)printf(",\"glyphCount\":%u,\"rangeCount\":%u,\"pairCount\":%u,\"cell\":%u,"
                  "\"atlasWidth\":%u,\"atlasHeight\":%u",
         font.glyph_count, font.range_count, font.pair_count, font.cell, font.atlas_width,
@@ -1362,7 +1386,8 @@ int font_command(int argc, cli_char **argv) {
 
     /*
      * generate takes `--meta`, without `--input`, `--output`, `--size`, `--characters` or
-     * `--guid`; or else `--input`, `--output` and `--resource-name`.
+     * `--guid`; or else `--input` and `--output`, with `--resource-name` for a font with a recipe.
+     * A font without one has no GUID to be given.
      */
     if (options.meta != NULL
             ? (options.input != NULL ||
@@ -1370,8 +1395,9 @@ int font_command(int argc, cli_char **argv) {
                   options.size_seen ||
                   options.characters != NULL ||
                   options.guid != NULL)
-            : (options.input == NULL || options.output == NULL || options.resource_name == NULL)) {
-        return invalid("invalid-options", "generate takes --meta, or --input, --output and --resource-name with optional recipe flags.");
+            : (options.input == NULL || options.output == NULL || (options.resource_name == NULL && options.guid != NULL))) {
+        return invalid("invalid-options",
+            "generate takes --meta, or --input and --output, with --resource-name and --guid only for a font with a recipe.");
     }
 
     cli_watch_cancel_file(options.cancel_file);

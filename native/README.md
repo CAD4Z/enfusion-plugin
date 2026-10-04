@@ -229,6 +229,11 @@ written. A new font gets `--guid` or a random GUID no `.meta` beside it uses; a 
 has a recipe keeps its GUID, and a different `--guid` is refused. The atlas is not registered: no
 `.edds.meta` is written for it.
 
+Without `--resource-name`, `--input` makes the font alone, the way a texture converted outside a
+prefix root is made: the `.fnt` and its atlas, no recipe, and a `null` `guid` in the result. A
+`.fnt.meta` already beside the font refuses it (`detached-metadata-conflict`), since that recipe
+would go on describing a font it no longer made, and `--guid` has nothing to name.
+
 An interactive caller can bind generation to its confirmed files with `--expect-output-revision`,
 `--expect-atlas-revision` and `--expect-metadata-revision`. Supply all three as `size:mtime` (bytes
 and Unix milliseconds), or `missing`. They are checked before generation and again immediately
@@ -277,7 +282,7 @@ What the engine is given:
 - The atlas is BGRA8 with alpha 255, LZ4 without loss and without mips, written through
   `edds_core` in the same process.
 
-The three files are built and flushed in sibling temporaries and replaced together, with rollback
+The font's files are built and flushed in sibling temporaries and replaced together, with rollback
 on any failure, and a rollback that could not put everything back says so and keeps the previous
 files beside the new ones. There is no crash journal as there is for textures: a process killed
 in the middle of the swap can leave the new atlas beside the old `.fnt`, with the old files kept
@@ -293,10 +298,10 @@ characters (`character-set-limit`) and a character file of 1 MiB (`character-fil
 kerning pairs and 4096 pair subtables in the `kern` feature (`kerning-limit`). A glyph whose box
 does not fit an atlas is `glyph-too-large`.
 
-A made font is reported as `font-generate` with its `guid`, `glyphCount`, `rangeCount`,
-`pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points the font lacks (`missing`),
-those the generator drew (`drawn`) and those whose strokes the atlas cannot hold (`thin`), and the
-`source` family and style. `inspect` of an `.fnt`
+A made font is reported as `font-generate` with its `guid` (`null` without a recipe),
+`glyphCount`, `rangeCount`, `pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points
+the font lacks (`missing`), those the generator drew (`drawn`) and those whose strokes the atlas
+cannot hold (`thin`), and the `source` family and style. `inspect` of an `.fnt`
 (`font-inspect`) reports its header — `name`, `size`, `type`, `cell`, `capHeight` (A),
 `lineHeight` (B), `c` (C), `r`, `bold`, `italic` — with `glyphCount`, `pairCount` and the code
 `ranges`; of a TrueType file (`font-source`), its `family` and `style`, typographic names first,

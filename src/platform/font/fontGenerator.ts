@@ -15,7 +15,8 @@ export interface FontSource {
 }
 
 export interface FontGeneration {
-  readonly guid: string;
+  /** The recipe's GUID; a font outside a prefix root has no recipe and no GUID. */
+  readonly guid: string | undefined;
   readonly glyphCount: number;
   readonly missing: readonly number[];
   /** Characters with strokes thinner than an atlas pixel, which break up when drawn above the atlas size. */
@@ -49,7 +50,8 @@ export class FontGenerator {
     await this.handshake.ensure();
     signal.throwIfAborted();
     const plan = session.plan;
-    const args = ['font', 'generate', '--machine', '--protocol', '1', '--resource-name', plan.resourceName];
+    const args = ['font', 'generate', '--machine', '--protocol', '1'];
+    if (plan.resourceName !== undefined) args.push('--resource-name', plan.resourceName);
     for (const target of ['output', 'atlas', 'metadata'] as const) {
       const revision = session.revisions.get(plan[target]);
       args.push(`--expect-${target}-revision`, revision === undefined ? 'missing' : `${revision.size}:${revision.modified}`);
@@ -61,12 +63,18 @@ export class FontGenerator {
       if (plan.characters !== undefined) args.push('--characters', plan.characters);
     }
     const value = await this.invoke(args, signal);
-    if (value.kind !== 'font-generate' || typeof value.guid !== 'string' || !/^[\da-f]{16}$/i.test(value.guid) ||
+    const guid = plan.resourceName === undefined
+      ? value.guid === null
+      : typeof value.guid === 'string' && /^[\da-f]{16}$/i.test(value.guid);
+    if (value.kind !== 'font-generate' || !guid ||
       typeof value.glyphCount !== 'number' || !Number.isInteger(value.glyphCount) || value.glyphCount < 1 ||
       !isCodeList(value.missing) || !isCodeList(value.thin)) {
       throw new Error('The font generator returned an invalid generation result.');
     }
-    return { guid: value.guid, glyphCount: value.glyphCount, missing: value.missing, thin: value.thin };
+    return {
+      guid: typeof value.guid === 'string' ? value.guid : undefined,
+      glyphCount: value.glyphCount, missing: value.missing, thin: value.thin,
+    };
   }
 
   /**

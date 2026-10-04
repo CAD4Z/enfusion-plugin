@@ -34,10 +34,19 @@ export interface FontTargets {
   readonly metadata: string;
 }
 
-/** A regeneration takes everything from the recipe; a generation names its source and size. */
+/**
+ * A regeneration takes everything from the recipe; a generation names its source and size. A font
+ * outside a prefix root has no resource name and gets no recipe, as a texture there gets no
+ * registration, and says so in its notice.
+ */
 export type FontCommandPlan =
   | { readonly kind: 'refused'; readonly reason: string }
-  | (FontTargets & { readonly kind: 'ready'; readonly resourceName: string; readonly replace: readonly string[] } & (
+  | (FontTargets & {
+      readonly kind: 'ready';
+      readonly resourceName: string | undefined;
+      readonly notice: string | undefined;
+      readonly replace: readonly string[];
+    } & (
       | { readonly action: 'regenerate' }
       | {
           readonly action: 'generate' | 'replace';
@@ -50,9 +59,6 @@ export type FontCommandPlan =
 export function fontCommandPlanOf(input: FontCommandInput): FontCommandPlan {
   const refusal = fontCommandRefusalOf(input);
   if (refusal !== undefined) return { kind: 'refused', reason: refusal };
-  if (input.kind === 'regenerate' && input.metadata.kind === 'missing') {
-    return { kind: 'refused', reason: 'This font has no .fnt.meta recipe. Generate it from a .ttf first.' };
-  }
   if (input.kind === 'generate') {
     const nameProblem = fontNameProblemOf(input.name);
     if (nameProblem !== undefined) return { kind: 'refused', reason: nameProblem };
@@ -64,8 +70,24 @@ export function fontCommandPlanOf(input: FontCommandInput): FontCommandPlan {
   const root = input.roots.filter((root) => within(input.file, root.root))
     .sort((a, b) => samePath(b.root).length - samePath(a.root).length)[0];
   if (root === undefined) return { kind: 'refused', reason: 'The file is outside every discovered Enfusion root in this window.' };
-  const resourceRoot = root.prefixRoot !== undefined && within(targets.output, root.prefixRoot) ? root.prefixRoot : root.root;
-  const ready = { kind: 'ready', ...targets, resourceName: targets.output.slice(windowsFolder(resourceRoot).length + 1) } as const;
+  const prefixRoot = root.prefixRoot !== undefined && within(targets.output, root.prefixRoot) ? root.prefixRoot : undefined;
+  const registered = prefixRoot !== undefined;
+  if (input.kind === 'regenerate') {
+    if (!registered) {
+      return { kind: 'refused', reason: 'Fonts outside an Enfusion prefix root have no recipe to regenerate from. Generate the font again from its .ttf.' };
+    }
+    if (input.metadata.kind === 'missing') {
+      return { kind: 'refused', reason: 'This font has no .fnt.meta recipe. Generate it from a .ttf first.' };
+    }
+  }
+  if (!registered && input.metadata.kind === 'present') {
+    return { kind: 'refused', reason: 'A font outside an Enfusion prefix root gets no recipe, so it cannot replace one that has a .fnt.meta.' };
+  }
+  const ready = {
+    kind: 'ready', ...targets,
+    resourceName: prefixRoot === undefined ? undefined : targets.output.slice(windowsFolder(prefixRoot).length + 1),
+    notice: registered ? undefined : 'The recipe was skipped because the font is outside an Enfusion prefix root.',
+  } as const;
   if (input.kind === 'regenerate') return { ...ready, action: 'regenerate', replace: [] };
   return {
     ...ready, action: input.existing.length > 0 ? 'replace' : 'generate', replace: input.existing,
@@ -101,11 +123,12 @@ export function defaultFontName(family: string, style: string, size: number): st
   return `SDF_${(clean(family) + clean(style)).slice(0, 230)}${size}`;
 }
 
-/** What a generated font reports, as far as the user is told about it. */
+/** What a generated font reports, as far as the user is told about it, and the plan's notice. */
 export interface FontGenerationOutcome {
   readonly glyphCount: number;
   readonly missing: readonly number[];
   readonly thin: readonly number[];
+  readonly notice?: string | undefined;
 }
 
 /**
@@ -120,6 +143,7 @@ export function fontGenerationSummaryOf(file: string, outcome: FontGenerationOut
   const shown = outcome.thin.slice(0, thinShown).map(named);
   const more = outcome.thin.length - shown.length;
   const message = `${file}: ${outcome.glyphCount} glyphs generated.` +
+    (outcome.notice === undefined ? '' : ` ${outcome.notice}`) +
     (outcome.missing.length === 0 ? '' : ` Skipped characters: ${outcome.missing.map(named).join(', ')}.`) +
     (outcome.thin.length === 0 ? '' : ` ${outcome.thin.length} glyphs have strokes thinner than an atlas pixel and break up ` +
       `when drawn larger than the atlas size: ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''}. ` +
