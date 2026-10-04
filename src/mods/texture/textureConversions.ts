@@ -33,6 +33,11 @@ export type DecodablePixelFormat =
   | 'BC6H'
   | 'RGBA32F';
 
+/** The runtime formats that hold float radiance, which a preview maps for display. */
+export function isHdrPixelFormat(format: string): boolean {
+  return format === 'BC6H' || format === 'RGBA32F';
+}
+
 export type TextureChannels = 'R' | 'RG' | 'RGB' | 'RGBA';
 
 export interface TextureConversionCapability {

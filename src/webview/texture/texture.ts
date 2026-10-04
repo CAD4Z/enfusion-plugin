@@ -1,4 +1,4 @@
-import { textureSurfaceControls } from './textureSurface';
+import { byteAnalysisApplies, textureSurfaceControls } from './textureSurface';
 /** Browser rendering for the standalone EDDS preview. No file or converter access lives here. */
 
 import type { EddsInspection, EddsPreview } from '../../mods/texture/edds';
@@ -136,7 +136,7 @@ function viewer(current: Extract<TextureEditorState, { kind: 'inspect-only' }>, 
     draw(canvas, decoded, current.channel);
     viewport.append(textureSurfaceControls(decoded, (surface) => draw(canvas, surface, current.channel)));
     viewport.append(canvas);
-    if (decoded.displayMapping === undefined && decoded.faces === undefined) analysis.bind(viewport, canvas, { ...decoded, channels: current.inspection.channels }, 'Result');
+    if (byteAnalysisApplies(decoded)) analysis.bind(viewport, canvas, { ...decoded, channels: current.inspection.channels }, 'Result');
     return viewport;
   }
 

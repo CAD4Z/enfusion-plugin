@@ -59,6 +59,16 @@ export interface DdsFacts {
   readonly miscFlag: number;
 }
 
+/** The caps2 bit of a cube map and the caps2 bits of all six faces; the DX10 header's cube flag. */
+export const DDSCAPS2_CUBEMAP = 0x200;
+export const DDSCAPS2_CUBEMAP_ALL_FACES = 0xfe00;
+export const DDS_RESOURCE_MISC_TEXTURECUBE = 4;
+
+/** Whether the header declares a cube map at all, complete or not. */
+export function isCubemap(dds: DdsFacts): boolean {
+  return (dds.caps2 & DDSCAPS2_CUBEMAP) !== 0 || (dds.miscFlag & DDS_RESOURCE_MISC_TEXTURECUBE) !== 0;
+}
+
 /** One actual entry of the ENF1 mip table. Level zero is the largest image. */
 export interface EddsMip {
   readonly level: number;
@@ -95,7 +105,9 @@ export interface EddsPreview {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8Array;
+  /** A cube's six faces, +X first; or, when six would pass the preview limit, why only +X is here. */
   readonly faces?: readonly Uint8Array[];
+  readonly facesOmitted?: string;
   readonly displayMapping?: string;
 }
 
@@ -304,6 +316,7 @@ export function previewOf(source: string): EddsPreview {
   const encoded = stringOf(value, 'pixelsBase64');
   const rgba = base64Of(encoded, byteLength);
   const displayMapping = value.displayMapping === undefined ? undefined : stringOf(value, 'displayMapping');
+  const facesOmitted = value.facesOmitted === undefined ? undefined : stringOf(value, 'facesOmitted');
   let faces: readonly Uint8Array[] | undefined;
   if (value.facesBase64 !== undefined) {
     const encodedFaces = arrayOf(value, 'facesBase64');
@@ -312,9 +325,12 @@ export function previewOf(source: string): EddsPreview {
     }
     faces = encodedFaces.map((face) => base64Of(stringValue(face, 'face'), byteLength));
   }
+  if (faces !== undefined && facesOmitted !== undefined) {
+    throw new Error('preview cannot return cube faces and the reason they are omitted together.');
+  }
   return { level, width, height, rgba, ...(faces === undefined ? {} : { faces }),
+    ...(facesOmitted === undefined ? {} : { facesOmitted }),
     ...(displayMapping === undefined ? {} : { displayMapping }) };
-
 }
 
 /** A structured failure is useful text; the process exit code remains its authoritative category. */

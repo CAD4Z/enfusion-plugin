@@ -1,7 +1,9 @@
 /** Read-only arithmetic over decoded samples. No codec, process, profile mutation or I/O. */
-import type { EddsInspection, EddsPreview } from './edds';
+import {
+  DDSCAPS2_CUBEMAP_ALL_FACES, DDS_RESOURCE_MISC_TEXTURECUBE, isCubemap, type EddsInspection, type EddsPreview,
+} from './edds';
 import type { TextureProfile } from './textureConversion';
-import type { TextureChannels, TextureChannelView } from './textureConversions';
+import { isHdrPixelFormat, type TextureChannels, type TextureChannelView } from './textureConversions';
 
 /** A fixed work ceiling, independent of the converter's larger preview allocation limit. */
 export const ANALYSIS_MAX_PIXELS = 1024 * 1024;
@@ -157,9 +159,9 @@ export function runtimeMemoryOf(inspection: EddsInspection, level: number): Anal
   if (inspection.channels === 'UNKNOWN') return unavailable('Runtime storage is unknown for this pixel format.');
   const dds = inspection.dds;
   const completeCube = inspection.pixels.kind === 'supported' && inspection.width === inspection.height &&
-    (dds.caps2 & 0xfe00) === 0xfe00 &&
-    (dds.fourCC !== 'DX10' || (dds.arraySize === 6 && (dds.miscFlag & 4) !== 0));
-  if (dds.depth > 1 || (!completeCube && (dds.arraySize > 1 || (dds.caps2 & 0x200) !== 0 || (dds.miscFlag & 4) !== 0))) {
+    (dds.caps2 & DDSCAPS2_CUBEMAP_ALL_FACES) === DDSCAPS2_CUBEMAP_ALL_FACES &&
+    (dds.fourCC !== 'DX10' || (dds.arraySize === 6 && (dds.miscFlag & DDS_RESOURCE_MISC_TEXTURECUBE) !== 0));
+  if (dds.depth > 1 || (!completeCube && (dds.arraySize > 1 || isCubemap(dds)))) {
     return unavailable('Runtime size requires decoded payload sizes for every texture surface.');
   }
   const mipBytes = inspection.mips.find((mip) => mip.level === level)?.decodedBytes;
@@ -218,8 +220,7 @@ function referenceOf(input: TextureAnalysisInput): AnalysisValue<AnalysisPixels>
 
 /** One pure projection shared by standalone and source-image viewports. */
 export function analysisOf(input: TextureAnalysisInput, selection: AnalysisSelection): TextureAnalysis {
-  if (input.inspection.pixelFormat === 'BC6H' || input.inspection.pixelFormat === 'RGBA32F' ||
-      (input.inspection.dds.caps2 & 0x200) !== 0) {
+  if (isHdrPixelFormat(input.inspection.pixelFormat) || isCubemap(input.inspection.dds)) {
     const reason = unavailable('Byte analysis is unavailable for HDR display mapping or a multi-face texture. Use native preview --float --face N for linear HDR samples.');
     return { pixels: reason, histogram: reason, error: reason,
       memory: runtimeMemoryOf(input.inspection, input.result?.level ?? input.selectedMip ?? 0) };

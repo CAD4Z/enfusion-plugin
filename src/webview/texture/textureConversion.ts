@@ -1,4 +1,4 @@
-import { textureSurfaceControls } from './textureSurface';
+import { byteAnalysisApplies, textureSurfaceControls } from './textureSurface';
 /** Browser-only rendering for source-image authoring. Every write remains an explicit host request. */
 
 import type { EddsPreview } from '../../mods/texture/edds';
@@ -202,7 +202,7 @@ function previewPane(title: string, preview: EddsPreview, channels: TextureChann
   draw(canvas, preview);
   pane.append(textureSurfaceControls(preview, (surface) => draw(canvas, surface)));
   viewport.append(canvas);
-  if (preview.displayMapping === undefined && preview.faces === undefined) analysis?.bind(viewport, canvas, { ...preview, channels }, title.startsWith('Source') ? 'Source' : 'Result');
+  if (byteAnalysisApplies(preview)) analysis?.bind(viewport, canvas, { ...preview, channels }, title.startsWith('Source') ? 'Source' : 'Result');
   pane.append(viewport);
   return pane;
 }

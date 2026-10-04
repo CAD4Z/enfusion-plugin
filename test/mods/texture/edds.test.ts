@@ -487,6 +487,21 @@ test('preview returns exactly the declared top-to-bottom RGBA bytes', () => {
   assert.deepEqual(preview.rgba, rgba);
 });
 
+test('a cube too large for six faces arrives as +X with the reason, never with both', () => {
+  const rgba = Uint8Array.from([1, 2, 3, 4]);
+  const message = {
+    protocolVersion: 1, kind: 'preview', mip: 0, width: 1, height: 1, face: 0, pixelFormat: 'RGBA8',
+    byteLength: 4, pixelsBase64: Buffer.from(rgba).toString('base64'),
+    facesOmitted: 'All six faces exceed the preview memory limit; only +X is shown.',
+  };
+  const preview = previewOf(JSON.stringify(message));
+  assert.equal(preview.faces, undefined);
+  assert.match(preview.facesOmitted ?? '', /only \+X/);
+  const six = Array.from({ length: 6 }, () => message.pixelsBase64);
+  assert.throws(() => previewOf(JSON.stringify({ ...message, facesBase64: six })), /omitted together/);
+  assert.equal(previewOf(JSON.stringify({ ...message, facesOmitted: undefined, facesBase64: six })).faces?.length, 6);
+});
+
 test('preview refuses truncated, non-base64, and mis-sized pixel output', () => {
   const message = {
     protocolVersion: 1,
