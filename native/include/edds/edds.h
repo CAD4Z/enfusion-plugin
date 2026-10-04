@@ -63,6 +63,9 @@ typedef enum edds_pixel_format {
 const char *edds_pixel_format_name(edds_pixel_format format);
 const char *edds_pixel_format_channels(edds_pixel_format format);
 
+/** Whether a runtime format holds float radiance: RGBA32F or BC6H. */
+int edds_pixel_format_is_hdr(edds_pixel_format format);
+
 /** The kinds of source image the converter reads. */
 typedef enum edds_source_format {
     EDDS_SOURCE_PNG,
@@ -321,11 +324,24 @@ edds_status edds_inspect(
     void             *cancel_context,
     edds_error       *error);
 
-/** Select one face (+X,-X,+Y,-Y,+Z,-Z) and optional linear RGBA32F output for HDR formats.
- * The default byte display maps RGB by pow(max(0,v)/(1+max(0,v)), 1/2.2); alpha is clamped.
- * Both outputs decode the stored GPU payload; linear samples have no display mapping. */
-edds_status edds_preview_surface(uint32_t face, int linear, FILE *input, const edds_info *info,
-    uint32_t level, edds_cancelled_fn cancel, void *context, uint8_t **rgba, size_t *size, edds_error *error);
+/**
+ * Decodes face `face` (+X, -X, +Y, -Y, +Z, -Z as 0 to 5) of one mip, top row first. Without
+ * `float_samples` the result is RGBA8; an HDR format is shown by mapping each RGB value v to
+ * pow(max(0, v) / (1 + max(0, v)), 1 / 2.2), with alpha clamped to 1. With `float_samples`, which
+ * only an HDR format takes, the result is the stored RGBA32F samples, without that mapping. On
+ * success `*rgba` holds `*rgba_size` bytes, which the caller releases with `edds_free`.
+ */
+edds_status edds_preview_surface(
+    uint32_t          face,
+    int               float_samples,
+    FILE             *input,
+    const edds_info  *info,
+    uint32_t          level,
+    edds_cancelled_fn cancelled,
+    void             *cancel_context,
+    uint8_t         **rgba,
+    size_t           *rgba_size,
+    edds_error       *error);
 
 /**
  * Decodes face zero of one mip into display-mapped RGBA8, top row first. On success `*rgba`

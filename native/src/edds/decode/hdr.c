@@ -1,4 +1,9 @@
-/* Radiance RGBE: the -Y/+X contract captured from the installed Workbench decoder. */
+/*
+ * Radiance `.hdr` sources, as far as the installed Workbench decoder was captured reading them:
+ * `#?RADIANCE` or `#?RGBE`, comment lines, one `FORMAT=32-bit_rle_rgbe`, a blank line, then the
+ * `-Y height +X width` resolution and RGBE pixels, flat or in planar scanline runs. The result is
+ * linear RGBA32F with alpha 1.
+ */
 #include "image.h"
 #include "memory.h"
 
@@ -80,6 +85,7 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
         goto done;
     }
 
+    /* The header up to its blank line: comments, and one FORMAT; any other variable is refused. */
     for (;;) {
         if (!line_of(data, size, &at, line)) {
             goto done;
@@ -107,6 +113,7 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
         goto done;
     }
 
+    /* The resolution: rows from the top down, each row from left to right. */
     const char *dimensions = line + 3;
 
     if (strncmp(line, "-Y ", 3) != 0 ||
@@ -120,6 +127,7 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
         goto done;
     }
 
+    /* Both sides within the converter's limit, and the float samples within 64 MiB. */
     if (width == 0 ||
         height == 0 ||
         width > EDDS_MAX_DIMENSION ||
@@ -163,6 +171,10 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
                         goto done;
                     }
 
+                    /*
+                     * A token above 128 repeats the next byte token - 128 times; any other is
+                     * followed by that many literal bytes.
+                     */
                     const uint32_t token = data[at++];
                     const uint32_t count = token > 128 ? token - 128 : token;
 
@@ -188,6 +200,7 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
             at += (size_t)width * 4u;
         }
 
+        /* Mantissas m share the exponent byte e: a channel is m * 2^(e - 136); e = 0 is black. */
         for (uint32_t x = 0; x < width; ++x) {
             const uint8_t *rgbe  = scanline + x * 4u;
             const float    scale = rgbe[3] == 0 ? 0.0f : ldexpf(1.0f, (int)rgbe[3] - 136);
@@ -212,7 +225,9 @@ edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error 
     image->float_rgba = pixels;
     pixels            = NULL;
     status            = EDDS_OK;
+
 done:
+
     edds_free(data);
     edds_free(scanline);
     edds_free(pixels);

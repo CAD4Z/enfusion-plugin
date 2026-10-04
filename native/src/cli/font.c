@@ -983,9 +983,16 @@ static edds_status validate_revisions(const font_options *options, const font_pa
     return EDDS_OK;
 }
 
-/** Builds temporaries, then checks the confirmed revisions immediately before replacing any output. */
+/**
+ * Builds the temporaries, then checks the confirmed revisions immediately before replacing any
+ * output. Returns EDDS_OK, or the first failure with `error` filled in.
+ */
 static edds_status publish(
-    const font_options *options, const font_paths *paths, const font_recipe *recipe, const font_output *font, edds_error *error) {
+    const font_options *options,
+    const font_paths   *paths,
+    const font_recipe  *recipe,
+    const font_output  *font,
+    edds_error         *error) {
     /* The atlas, the FNT and the recipe, in that order. */
     cli_artifact artifacts[3] = {
         { paths->atlas, NULL, NULL, 0, 0 },

@@ -193,6 +193,7 @@ class Oracle:
         if self.uc.reg_read(UC_X86_REG_RIP) != self.sentinel: raise RuntimeError('instruction limit')
         if not self.uc.reg_read(UC_X86_REG_RAX)&255: raise RuntimeError('importer refused fixture')
         self.output_format = self.images[output]['format']
+        self.converted_address = output
         return [{'width':w,'height':h,'bgra':bytes(self.uc.mem_read(p,n)).hex()} for w,h,p,n in self.images[output]['levels']]
 
 def pixels_of(width, height, alpha):

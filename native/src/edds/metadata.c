@@ -366,9 +366,10 @@ static edds_status recipe_setting(
 
         metadata->profile.normalize = number != 0;
     } else if (bit == SETTING_CUBEMAP) {
-        if (number > 1) {
+        if (number > 1u) {
             goto malformed;
         }
+
         metadata->profile.generate_cubemap = number != 0;
     } else if (bit == SETTING_TILED) {
         if (number > 1u) {

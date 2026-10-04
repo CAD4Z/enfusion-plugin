@@ -106,6 +106,11 @@ const char *edds_pixel_format_channels(edds_pixel_format format) {
     }
 }
 
+/** Whether the format holds float radiance rather than bytes: RGBA32F, or BC6H's half floats. */
+int edds_pixel_format_is_hdr(edds_pixel_format format) {
+    return format == EDDS_PIXEL_RGBA32F || format == EDDS_PIXEL_BC6H;
+}
+
 /** `value` held to 0..255. */
 static uint8_t clamp_byte(int value) {
     return value < 0 ? 0u : (value > 255 ? 255u : (uint8_t)value);

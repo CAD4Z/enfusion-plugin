@@ -18,8 +18,12 @@ enum {
     DDS_HEADER_BYTES      = 128,
     DDS_DX10_HEADER_BYTES = 20,
 
-    /** The resource dimension the DX10 header gives: a 2D texture. */
+    /** The resource dimension the DX10 header gives: a 2D texture; and its flag of a cube. */
     DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
+    DDS_RESOURCE_MISC_TEXTURECUBE    = 4,
+
+    /** The legacy format code of 32-bit float RGBA, which the header gives as its FourCC. */
+    D3DFMT_A32B32G32R32F = 116,
 
     /** The header's flags, at byte 8. */
     DDSD_CAPS        = 0x00000001,
@@ -40,17 +44,25 @@ enum {
     DDSCAPS_TEXTURE = 0x00001000,
     DDSCAPS_MIPMAP  = 0x00400000,
 
+    /** The caps2 of a cube that has all six faces, at byte 112. */
+    DDSCAPS2_CUBEMAP_ALL_FACES = 0x0000fe00,
+
     /** The DXGI formats a DX10 header names (see dxgi_format_of). */
     DXGI_FORMAT_R8G8_UNORM = 49,
     DXGI_FORMAT_R8_UNORM   = 61,
     DXGI_FORMAT_BC4_UNORM  = 80,
     DXGI_FORMAT_BC5_UNORM  = 83,
+    DXGI_FORMAT_BC6H_UF16  = 95,
     DXGI_FORMAT_BC7_UNORM  = 98
 };
 
 /**
  * One level of the mip chain as it goes through the pipeline: its BGRA samples, then the same mip
  * in the runtime format, then the bytes the file stores for it.
+ *
+ * An HDR chain (encode_hdr) uses the same level with float samples: `bytes` still counts the
+ * samples of one face, four per pixel, `bgra` stays NULL, and `filter_pixels` points into the
+ * float RGBA payload of all faces until BC6H replaces that payload.
  */
 typedef struct generated_mip {
     /** The size, and the BGRA samples: `bytes` of them, four per pixel. */
@@ -1156,15 +1168,13 @@ static void free_source(edds_decoded_source *source) {
 
 /** The DXGI format a DX10 header names, or 0 for a format that has a legacy descriptor. */
 static uint32_t dxgi_format_of(edds_pixel_format format) {
-    if (format == EDDS_PIXEL_BC6H) {
-        return 95;
-    }
     switch (format) {
-        case EDDS_PIXEL_R8:  return DXGI_FORMAT_R8_UNORM;
-        case EDDS_PIXEL_RG8: return DXGI_FORMAT_R8G8_UNORM;
-        case EDDS_PIXEL_BC4: return DXGI_FORMAT_BC4_UNORM;
-        case EDDS_PIXEL_BC5: return DXGI_FORMAT_BC5_UNORM;
-        case EDDS_PIXEL_BC7: return DXGI_FORMAT_BC7_UNORM;
+        case EDDS_PIXEL_R8:   return DXGI_FORMAT_R8_UNORM;
+        case EDDS_PIXEL_RG8:  return DXGI_FORMAT_R8G8_UNORM;
+        case EDDS_PIXEL_BC4:  return DXGI_FORMAT_BC4_UNORM;
+        case EDDS_PIXEL_BC5:  return DXGI_FORMAT_BC5_UNORM;
+        case EDDS_PIXEL_BC6H: return DXGI_FORMAT_BC6H_UF16;
+        case EDDS_PIXEL_BC7:  return DXGI_FORMAT_BC7_UNORM;
 
         default: return 0;
     }
@@ -1221,11 +1231,11 @@ static uint32_t dds_header(
     /* Every other format is named by a four-character code: DXT1, DXT5, or DX10. */
     edds_put_u32le(header + 80, DDPF_FOURCC);
 
+    /* 32-bit float RGBA by its legacy code; Workbench's float header declares no byte pitch. */
     if (format == EDDS_PIXEL_RGBA32F) {
-        /* Workbench's legacy float header does not declare a byte pitch. */
         edds_put_u32le(header + 8, flags & ~DDSD_PITCH);
         edds_put_u32le(header + 20, 0);
-        edds_put_u32le(header + 84, 116);
+        edds_put_u32le(header + 84, D3DFMT_A32B32G32R32F);
 
         return DDS_HEADER_BYTES;
     }
@@ -1249,7 +1259,8 @@ static uint32_t dds_header(
 /**
  * Writes the EDDS file: the DDS header, then one 8-byte descriptor per mip ("COPY" or "LZ4 " and
  * the stored size), then the stored bytes of every mip. Both lists run from the smallest mip to
- * the largest. A write that fails ends it with "output-write-failed".
+ * the largest. `faces` is 1, or 6 for a cube, whose every mip holds its six faces one after the
+ * other. A write that fails ends it with "output-write-failed".
  */
 static edds_status write_edds(
     FILE                *output,
@@ -1262,16 +1273,18 @@ static edds_status write_edds(
     uint8_t        descriptor[8];
     const uint32_t header_bytes = dds_header(header, format, mips[0].width, mips[0].height, count, mips[0].payload_bytes / faces);
 
+    /* A cube: complex caps, all six faces in caps2, and in a DX10 header the cube flag. */
     if (faces == 6) {
-        edds_put_u32le(header + 108, DDSCAPS_TEXTURE | DDSCAPS_COMPLEX | (count > 1 ? DDSCAPS_MIPMAP : 0));
-        edds_put_u32le(header + 112, 0xfe00);
+        edds_put_u32le(header + 108, DDSCAPS_TEXTURE | DDSCAPS_COMPLEX | (count > 1 ? DDSCAPS_MIPMAP : 0u));
+        edds_put_u32le(header + 112, DDSCAPS2_CUBEMAP_ALL_FACES);
 
-        if (header_bytes == 148) {
-            edds_put_u32le(header + 136, 4);
-            /* DayZ's EDDS writer counts faces here, as captured by capture_hdr.py. */
+        /* DayZ's EDDS writer counts the faces in the array size, as captured by capture_hdr.py. */
+        if (header_bytes == DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES) {
+            edds_put_u32le(header + 136, DDS_RESOURCE_MISC_TEXTURECUBE);
             edds_put_u32le(header + 140, 6);
         }
     }
+
     if (fwrite(header, 1, header_bytes, output) != header_bytes) {
         goto failure;
     }
@@ -1541,27 +1554,37 @@ static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
     return EDDS_ALPHA_OPAQUE;
 }
 
-/** Fill six RGBA32F cube faces with the captured Workbench corner-sampled panorama projection. */
+/**
+ * Fills six RGBA32F cube faces of side `size` from a 2:1 panorama, by the projection Workbench's
+ * importer was captured using: corner samples, bilinear, with longitude wrapping around and
+ * latitude stopping at the poles. The faces are +X, -X, +Y, -Y, +Z, -Z, one after the other.
+ */
 static void hdr_panorama(const edds_decoded_source *image, float *output, uint32_t size) {
     const double pi = 3.14159265358979323846;
 
     for (uint32_t face = 0; face < 6; ++face) {
         for (uint32_t y = 0; y < size; ++y) {
             for (uint32_t x = 0; x < size; ++x) {
+                /* The direction of this corner sample on its face, from u and v in [0, 2). */
                 const float u = (float)(2.0 * x / size), v = (float)(2.0 * y / size);
 
                 const float directions[6][3] = {
                     { 1, 1 - v, 1 - u }, { -1, 1 - v, u - 1 }, { u - 1, 1, v - 1 },
                     { u - 1, -1, 1 - v }, { u - 1, 1 - v, 1 }, { 1 - u, 1 - v, -1 }
                 };
-                const float   *d      = directions[face];
-                const float    sx     = (float)((image->width * 0.5) * (atan2f(d[0], d[2]) + pi) / pi);
-                const float    sy     = (float)((image->width * 0.5) * (pi * 0.5 - atan2f(d[1], hypotf(d[2], d[0]))) / pi);
+                const float *d = directions[face];
+
+                /* Where it lands on the panorama: longitude across, latitude down from the top. */
+                const float sx = (float)((image->width * 0.5) * (atan2f(d[0], d[2]) + pi) / pi);
+                const float sy = (float)((image->width * 0.5) * (pi * 0.5 - atan2f(d[1], hypotf(d[2], d[0]))) / pi);
+
+                /* The four neighbours, and how far the sample lies between them. */
                 const uint32_t left   = (uint32_t)floorf(sx) % image->width;
                 const uint32_t right  = (left + 1) % image->width;
                 const uint32_t top    = (uint32_t)fmaxf(0, fminf(floorf(sy), (float)(image->height - 1)));
                 const uint32_t bottom = (uint32_t)fmaxf(0, fminf(floorf(sy) + 1, (float)(image->height - 1)));
-                const float    fx = sx - floorf(sx), fy = sy - floorf(sy);
+                const float    fx     = sx - floorf(sx);
+                const float    fy     = sy - floorf(sy);
 
                 for (uint32_t c = 0; c < 4; ++c) {
                     const float a = image->float_rgba[((size_t)top * image->width + left) * 4 + c];
@@ -1577,11 +1600,22 @@ static void hdr_panorama(const edds_decoded_source *image, float *output, uint32
     }
 }
 
-/** Filter the float face/mip chain, encode its runtime payloads, and serialize one EDDS. */
+/**
+ * Everything after decoding for a float source, the counterpart of encode_image: the six cube
+ * faces when GenerateCubemap asks for them, the float mip chain of every face, BC6H blocks when
+ * HDRCompression asks for them, and the file. Returns EDDS_OK, or the first refusal with `error`
+ * filled in; nothing is written before every level is ready.
+ */
 static edds_status encode_hdr(
-    const edds_decoded_source *image, FILE *output, const edds_profile *profile,
-    edds_cancelled_fn cancel, void *context, edds_progress_fn progress, void *progress_context,
-    edds_error *error) {
+    const edds_decoded_source *image,
+    FILE                      *output,
+    const edds_profile        *profile,
+    edds_cancelled_fn          cancel,
+    void                      *context,
+    edds_progress_fn           progress,
+    void                      *progress_context,
+    edds_error                *error) {
+    /* The top level: the source's size, or for a cube a face a quarter of the panorama wide. */
     generated_mip  mips[EDDS_MAX_MIPS] = { 0 };
     const uint32_t width               = profile->generate_cubemap ? image->width / 4 : image->width;
     const uint32_t height              = profile->generate_cubemap ? width : image->height;
@@ -1589,25 +1623,17 @@ static edds_status encode_hdr(
     const uint32_t count               = mip_count(width, height, profile->generate_mips);
     edds_status    status              = EDDS_OK;
 
-    if (profile->conversion == EDDS_CONVERSION_HDR) {
-        if (width < 4 || height < 4 || (width & (width - 1)) || (height & (height - 1))) {
-            edds_fail(error, "unsupported-hdr-dimensions", "HDRCompression requires power-of-two dimensions of at least 4.");
-
-            return EDDS_UNSUPPORTED_FORMAT;
-        }
-
-        for (size_t i = 0; i < (size_t)image->width * image->height * 4; ++i) {
-            if (!isfinite(image->float_rgba[i]) || image->float_rgba[i] < 0 || image->float_rgba[i] > 65504) {
-                edds_fail(error, "hdr-range", "Unsigned BC6H requires finite RGB values between 0 and 65504.");
-
-                return EDDS_UNSUPPORTED_FORMAT;
-            }
-        }
-    }
-
+    /* GenerateCubemap needs what Workbench's importer needs: a 2:1 panorama, width 2^n of 16+. */
     if (profile->generate_cubemap && (image->width != image->height * 2 || image->width < 16 || (image->width & (image->width - 1)) != 0)) {
         edds_fail(error, "unsupported-cubemap-topology",
             "GenerateCubemap requires a -Y/+X 2:1 equirectangular HDR panorama, power-of-two width at least 16.");
+
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+
+    /* HDRCompression, likewise: power-of-two sides of at least 4, as any such cube face has. */
+    if (profile->conversion == EDDS_CONVERSION_HDR && (width < 4 || height < 4 || (width & (width - 1)) || (height & (height - 1)))) {
+        edds_fail(error, "unsupported-hdr-dimensions", "HDRCompression requires power-of-two dimensions of at least 4.");
 
         return EDDS_UNSUPPORTED_FORMAT;
     }
@@ -1618,6 +1644,7 @@ static edds_status encode_hdr(
         return EDDS_INVALID_INPUT;
     }
 
+    /* The float chain: each level holds all its faces one after the other, four floats a pixel. */
     for (uint32_t level = 0; level < count; ++level) {
         generated_mip *mip = &mips[level];
 
@@ -1641,6 +1668,7 @@ static edds_status encode_hdr(
 
         mip->filter_pixels = (float *)mip->payload;
 
+        /* The top level is the source itself, or the six faces projected from it. */
         if (level == 0) {
             if (faces == 1) {
                 memcpy(mip->payload, image->float_rgba, mip->payload_bytes);
@@ -1649,6 +1677,7 @@ static edds_status encode_hdr(
             }
 
         } else {
+            /* Every next level, face by face, is filtered from the one above with Box or Kaiser. */
             for (uint32_t face = 0; face < faces; ++face) {
                 generated_mip previous = mips[level - 1];
 
@@ -1671,6 +1700,7 @@ static edds_status encode_hdr(
         }
     }
 
+    /* Filtering extreme radiance can overflow to infinity; such a chain is refused, not written. */
     for (uint32_t level = 0; level < count; ++level) {
         for (size_t at = 0; at < (size_t)mips[level].bytes * faces; ++at) {
             if (!isfinite(mips[level].filter_pixels[at])) {
@@ -1681,7 +1711,7 @@ static edds_status encode_hdr(
         }
     }
 
-    /* Filtering finishes in float before any lossy block encoding. */
+    /* HDRCompression: each face of each level becomes BC6H blocks, after all float filtering. */
     if (profile->conversion == EDDS_CONVERSION_HDR) {
         for (uint32_t level = 0; level < count; ++level) {
             generated_mip *mip      = &mips[level];
@@ -1708,15 +1738,20 @@ static edds_status encode_hdr(
                     for (uint32_t x = 0; x < mip->width; x += 4) {
                         float block[64];
 
+                        /* The block's 16 samples; below 4x4 a level repeats its edge. */
                         for (uint32_t by = 0; by < 4; ++by) {
                             for (uint32_t bx = 0; bx < 4; ++bx) {
                                 uint32_t sx = x + bx < mip->width ? x + bx : mip->width - 1;
                                 uint32_t sy = y + by < mip->height ? y + by : mip->height - 1;
 
                                 for (uint32_t c = 0; c < 4; ++c) {
-                                    /* Kaiser ringing has no unsigned BC6H representation. */
                                     const size_t sample_index = ((size_t)face * mip->height * mip->width + sy * mip->width + sx) * 4 + c;
 
+                                    /*
+                                     * Unsigned BC6H holds 0 to 65504. Radiance above it
+                                     * saturates, as in Workbench's encoder, and so does
+                                     * Kaiser ringing below 0.
+                                     */
                                     block[(by * 4 + bx) * 4 + c] = fmaxf(0, fminf(65504, mip->filter_pixels[sample_index]));
                                 }
                             }
@@ -1728,6 +1763,7 @@ static edds_status encode_hdr(
                 }
             }
 
+            /* The blocks take the place of the float samples. */
             edds_free(mip->payload);
             mip->payload       = encoded;
             mip->filter_pixels = NULL;
@@ -1735,6 +1771,7 @@ static edds_status encode_hdr(
         }
     }
 
+    /* The kept levels' containers, then the file: BC6H or RGBA32F, flat or a cube. */
     status = prepare_storage(mips + profile->remove_mips, count - profile->remove_mips, profile, progress, progress_context, error);
 
     if (status == EDDS_OK) {
@@ -1744,6 +1781,7 @@ static edds_status encode_hdr(
 
 done:
 
+    /* `filter_pixels` only ever pointed into a payload, which free_mips releases. */
     for (uint32_t level = 0; level < count; ++level) {
         mips[level].filter_pixels = NULL;
     }
@@ -1767,9 +1805,11 @@ static edds_status encode_image(
     edds_progress_fn           progress,
     void                      *progress_context,
     edds_error                *error) {
+    /* A float source has a pipeline of its own. */
     if (image->float_rgba != NULL) {
         return encode_hdr(image, output, profile, cancelled, cancel_context, progress, progress_context, error);
     }
+
     /* The mip chain and how many levels it has; the runtime format, by the alpha really used. */
     generated_mip           mips[EDDS_MAX_MIPS];
     const edds_pixel_format format = edds_profile_pixel_format(profile, source_alpha_of(image));

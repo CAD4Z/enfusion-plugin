@@ -3730,9 +3730,9 @@ static int truncated_gpu_blocks_are_refused(void) {
 
 /**
  * Every conversion and every quality the CLI accepts survives a trip through the metadata text.
- * TGA or HDR metadata under each of the eight conversions and six qualities: a conversion that is not
- * supported, or a quality other than 1 on one that does not use quality, cannot be written; every
- * other one parses back with the same conversion and quality.
+ * TGA or HDR metadata under each of the eight conversions and six qualities: a conversion that is
+ * not supported, or a quality other than 1 on one that does not use quality, cannot be written;
+ * every other one parses back with the same conversion and quality.
  */
 static int every_conversion_round_trips_through_metadata(void) {
     /* The qualities tried, in thousandths. */

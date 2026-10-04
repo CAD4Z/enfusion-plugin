@@ -1,9 +1,15 @@
+/*
+ * Unsigned BC6H, DXGI_FORMAT_BC6H_UF16: 4x4 blocks of RGB half floats in 16 bytes each. The
+ * decoder reads all fourteen modes; the encoder writes mode 11 only, two 10-bit endpoints and
+ * 4-bit indices. Where each mode keeps its endpoint bits is the table in bc6_tables.h.
+ */
 #include "bc6.h"
 #include <float.h>
 #include <math.h>
 #include <string.h>
 #include "bc6_tables.h"
 
+/** The weights of 4-bit and of 3-bit indices, out of 64, between a subset's two endpoints. */
 static const uint8_t weights4[16] = { 0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64 };
 static const uint8_t weights3[8]  = { 0, 9, 18, 27, 37, 46, 55, 64 };
 
@@ -89,9 +95,11 @@ void edds_bc6_decode(const uint8_t block[16], float rgba[64]) {
         return;
     }
 
-    const uint32_t two = mode < 10, count = two ? 12 : 6, base = precision[mode];
+    /* Modes 1 to 10 have two subsets, so twelve endpoint values; 11 to 14 have one, six. */
+    const uint32_t two_subsets = mode < 10, count = two_subsets ? 12 : 6, base = precision[mode];
 
-    for (uint32_t bit = 0; bit < (two ? 77u : 65u); ++bit) {
+    /* The endpoint bits, scattered over the block in the order the mode lays them out. */
+    for (uint32_t bit = 0; bit < (two_subsets ? 77u : 65u); ++bit) {
         const uint32_t target = endpoint_bits[mode][bit];
 
         if (target != 255) {
@@ -99,6 +107,7 @@ void edds_bc6_decode(const uint8_t block[16], float rgba[64]) {
         }
     }
 
+    /* Except in modes 10 and 11, the later endpoints are signed offsets from the first one. */
     if (mode != 9 && mode != 10) {
         for (uint32_t i = 3; i < count; ++i) {
             uint32_t n = delta[mode][i % 3], v = endpoints[i];
@@ -116,14 +125,15 @@ void edds_bc6_decode(const uint8_t block[16], float rgba[64]) {
         endpoints[i] = unquantize(endpoints[i], base);
     }
 
-    const uint32_t partition = two ? bits(block, 77, 5) : 0;
-    uint32_t       at        = two ? 82 : 65;
+    /* Each pixel's index: its subset's anchor pixel stores one bit less, its top bit being 0. */
+    const uint32_t partition = two_subsets ? bits(block, 77, 5) : 0;
+    uint32_t       at        = two_subsets ? 82 : 65;
 
     for (uint32_t pixel = 0; pixel < 16; ++pixel) {
-        uint32_t subset = two ? ((partitions[partition] >> pixel) & 1) : 0;
-        uint32_t anchor = pixel == 0 || (two && pixel == anchors[partition]);
-        uint32_t n = (two ? 3u : 4u) - anchor, index = bits(block, at, n);
-        uint32_t w = two ? weights3[index] : weights4[index];
+        uint32_t subset = two_subsets ? ((partitions[partition] >> pixel) & 1) : 0;
+        uint32_t anchor = pixel == 0 || (two_subsets && pixel == anchors[partition]);
+        uint32_t n = (two_subsets ? 3u : 4u) - anchor, index = bits(block, at, n);
+        uint32_t w = two_subsets ? weights3[index] : weights4[index];
 
         at += n;
 
@@ -133,7 +143,11 @@ void edds_bc6_decode(const uint8_t block[16], float rgba[64]) {
     }
 }
 
-/* Minimise relative squared RGB error using decoded palette values, not byte or half-code error. */
+/**
+ * How far mode-11 endpoints leave the block's samples: each sample takes the nearest of the 16
+ * colours the endpoints decode to, and its RGB error is relative, (decoded - value) / (1 + value),
+ * so dark and bright samples weigh alike. Returns the summed squares and fills `indices`.
+ */
 static double evaluate(const float *rgba, const uint32_t endpoint[6], uint8_t indices[16]) {
     float  palette[16][3];
     double error = 0;
@@ -168,7 +182,10 @@ static double evaluate(const float *rgba, const uint32_t endpoint[6], uint8_t in
     return error;
 }
 
-/* Nearest decoded mode-11 endpoint. Binary search avoids dependence on host half intrinsics. */
+/**
+ * The 10-bit mode-11 endpoint that decodes nearest to `value`; above 65504 that is the largest.
+ * A binary search over the decoded values needs no half-float support from the host.
+ */
 static uint32_t quantize(float value) {
     uint32_t lo = 0, hi = 1023;
 
@@ -194,6 +211,7 @@ void edds_bc6_encode(const float rgba[64], uint32_t quality, uint8_t block[16]) 
     uint32_t endpoint[6];
     uint8_t  indices[16];
 
+    /* The first candidate: the corners of the block's RGB box. */
     for (uint32_t c = 0; c < 3; ++c) {
         float lo = rgba[c], hi = rgba[c];
 
@@ -235,6 +253,7 @@ void edds_bc6_encode(const float rgba[64], uint32_t quality, uint8_t block[16]) 
         }
     }
 
+    /* Then each endpoint value nudged up and down, while that still helps, as quality allows. */
     const uint32_t rounds = quality * 8 / 1000;
 
     for (uint32_t round = 0; round < rounds; ++round) {
@@ -270,6 +289,7 @@ void edds_bc6_encode(const float rgba[64], uint32_t quality, uint8_t block[16]) 
 
     (void)evaluate(rgba, endpoint, indices);
 
+    /* Pixel 0 stores three index bits, so its index must be below 8: else swap and mirror. */
     if (indices[0] >= 8) {
         for (uint32_t c = 0; c < 3; ++c) {
             uint32_t t = endpoint[c];
@@ -283,6 +303,7 @@ void edds_bc6_encode(const float rgba[64], uint32_t quality, uint8_t block[16]) 
         }
     }
 
+    /* The block: mode 11's five-bit code 00011, the six 10-bit endpoints, then the 16 indices. */
     memset(block, 0, 16);
     put(block, 0, 5, 3);
 

@@ -43,7 +43,8 @@ The optional fixture-capture script uses pefile and Unicorn, and the font check 
 numpy, from the developer's Python environment. None of these tools, nor any Workbench executable
 or font, is shipped in the extension.
 
-BC6H endpoint bit-layout tables in `src/edds/bc6_tables.h` derive from Microsoft DirectXTex
+The BC6H tables in `src/edds/bc6_tables.h` (endpoint bit layout, partitions, anchors) and in
+`src/edds/bc6.c` (mode codes, precisions, delta widths, weights) follow Microsoft DirectXTex
 `BC6HBC7.cpp`. No DirectXTex codec or runtime library is linked.
 
 Source: https://github.com/microsoft/DirectXTex/blob/main/DirectXTex/BC6HBC7.cpp

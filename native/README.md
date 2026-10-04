@@ -311,13 +311,15 @@ and `-Y height +X width`, using flat RGBE or planar scanline RLE. Unsupported he
 transforms, XYZE, other orientations, truncated streams and oversized float allocations
 are refused. The decoded RGBA32F source is bounded to 64 MiB.
 
-`Conversion=None` preserves float radiance in RGBA32F (legacy FOURCC 116).
+`Conversion=None` preserves float radiance in RGBA32F (legacy FOURCC 116), at any size.
 `--conversion hdr-compression` writes unsigned BC6H (DXGI 95); source dimensions must
-be powers of two of at least four, and RGB must lie within the finite half-float range
-0–65504. ConversionQuality controls the deterministic endpoint search. Box and Kaiser
-mips are filtered in float first; unsigned BC6H clamps filter ringing to its representable
-range. A nonfinite filtering result is refused. Swizzling, normalization and other HDR
-conversion combinations are unavailable with an explicit reason in both editors.
+be powers of two of at least four, as Workbench requires. ConversionQuality controls the
+deterministic endpoint search. Box and Kaiser mips are filtered in float first; then, as in
+Workbench's encoder, radiance above the half-float maximum 65504 saturates, and so does filter
+ringing below zero. A nonfinite filtering result is refused. The encoder writes BC6H mode 11
+only, which reproduces a block whose colours lie near one line closely and others less so.
+Swizzling, normalization and other HDR conversion combinations are unavailable with an
+explicit reason in both editors.
 
 `--generate-cubemap true` requires the captured 2:1 equirectangular HDR panorama with
 power-of-two width at least 16. It writes six square faces of side width/4. The canonical
@@ -328,9 +330,11 @@ continue to use the existing revision-checked EDDS/meta transaction.
 RGBA32F samples as little-endian floats in `pixelsBase64`. The default RGBA8 display uses
 Reinhard mapping followed by gamma 2.2 and labels this mapping; it does not alter the
 stored result. `--all-faces` returns six RGBA8 `facesBase64` images within a 64 MiB total
-limit and is mutually exclusive with `--face` and `--float`. The editor exposes their
-face selector and mip controls. Byte histogram/error analysis is unavailable for mapped
-HDR displays rather than presenting clipped samples as radiance.
+limit and is mutually exclusive with `--face` and `--float`; a cube whose six faces would
+exceed it returns +X alone, with the reason in `facesOmitted`. A float sample that is not a
+finite number is refused as `invalid-float-sample`. The editor exposes the face selector
+and mip controls. Byte histogram/error analysis is unavailable for mapped HDR displays
+rather than presenting clipped samples as radiance.
 
 Independent verification and the outstanding visual release checks are recorded in
 [HDR evidence](tests/workbench/hdr-evidence.md). The Python 3 standard library is needed

@@ -1,7 +1,8 @@
 /*
  * Reading an EDDS: a DDS header with the `ENF1` marker, the mip table after it, and the mips, each
  * stored as it is (COPY) or in LZ4 blocks. `edds_inspect` checks the whole layout without decoding
- * anything; `edds_preview` decodes one mip into RGBA.
+ * anything; `edds_preview_surface` decodes one face of one mip, into RGBA8 or, for an HDR format,
+ * into its float samples.
  */
 #include "memory.h"
 #include <edds/edds.h>
@@ -23,9 +24,26 @@ enum {
     DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
     DDS_RESOURCE_MISC_TEXTURECUBE    = 4,
 
-    /** The bits of `caps2` that mark a cube map and a volume. */
-    DDSCAPS2_CUBEMAP = 0x00000200,
-    DDSCAPS2_VOLUME  = 0x00200000,
+    /** The bits of `caps2` that mark a cube map, its six faces, and a volume. */
+    DDSCAPS2_CUBEMAP           = 0x00000200,
+    DDSCAPS2_CUBEMAP_ALL_FACES = 0x0000fe00,
+    DDSCAPS2_VOLUME            = 0x00200000,
+
+    /** The legacy format code of 32-bit float RGBA, which a header gives as its FourCC. */
+    D3DFMT_A32B32G32R32F = 116,
+
+    /** The DXGI formats with their own runtime format here (see classify). */
+    DXGI_FORMAT_R32G32B32A32_FLOAT  = 2,
+    DXGI_FORMAT_R8G8_UNORM          = 49,
+    DXGI_FORMAT_R8_UNORM            = 61,
+    DXGI_FORMAT_BC4_UNORM           = 80,
+    DXGI_FORMAT_BC5_UNORM           = 83,
+    DXGI_FORMAT_B8G8R8A8_UNORM      = 87,
+    DXGI_FORMAT_B8G8R8X8_UNORM      = 88,
+    DXGI_FORMAT_B8G8R8A8_UNORM_SRGB = 91,
+    DXGI_FORMAT_B8G8R8X8_UNORM_SRGB = 93,
+    DXGI_FORMAT_BC6H_UF16           = 95,
+    DXGI_FORMAT_BC7_UNORM           = 98,
 
     /** The pixel format flags: an alpha mask, a format named by FourCC, a format given by masks. */
     DDPF_ALPHAPIXELS = 0x00000001,
@@ -131,13 +149,15 @@ static int expected_rgba_bytes(uint32_t width, uint32_t height, uint32_t *bytes)
 }
 
 /**
- * The runtime format the header describes: by FourCC, `DXT1`, `DXT5`, or `DX10` with the DXGI
- * number of its header; without one, 32-bit pixels with the masks of BGRA or BGRX.
+ * The runtime format the header describes: by FourCC, the legacy float code, `DXT1`, `DXT5`, or
+ * `DX10` with the DXGI number of its header; without one, 32-bit pixels with the masks of BGRA
+ * or BGRX.
  */
 static edds_pixel_format classify(const edds_info *info) {
-    if ((info->pixel_format_flags & DDPF_FOURCC) && info->four_cc_value == 116) {
+    if ((info->pixel_format_flags & DDPF_FOURCC) != 0 && info->four_cc_value == D3DFMT_A32B32G32R32F) {
         return EDDS_PIXEL_RGBA32F;
     }
+
     if ((info->pixel_format_flags & DDPF_FOURCC) != 0) {
         if (strcmp(info->four_cc, "DXT1") == 0) {
             return EDDS_PIXEL_DXT1;
@@ -150,18 +170,18 @@ static edds_pixel_format classify(const edds_info *info) {
         /* The DXGI numbers known here; any other is `EDDS_PIXEL_DXGI`. */
         if (strcmp(info->four_cc, "DX10") == 0) {
             switch (info->dxgi_format) {
-                case 87:
-                case 91: return EDDS_PIXEL_BGRA8;
-                case 88:
-                case 93: return EDDS_PIXEL_BGRX8;
-                case 61: return EDDS_PIXEL_R8;
-                case 49: return EDDS_PIXEL_RG8;
-                case 80: return EDDS_PIXEL_BC4;
-                case 83: return EDDS_PIXEL_BC5;
-                case 2:  return EDDS_PIXEL_RGBA32F;
-                case 95: return EDDS_PIXEL_BC6H;
-                case 98: return EDDS_PIXEL_BC7;
-                default: return EDDS_PIXEL_DXGI;
+                case DXGI_FORMAT_B8G8R8A8_UNORM:
+                case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: return EDDS_PIXEL_BGRA8;
+                case DXGI_FORMAT_B8G8R8X8_UNORM:
+                case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB: return EDDS_PIXEL_BGRX8;
+                case DXGI_FORMAT_R8_UNORM:            return EDDS_PIXEL_R8;
+                case DXGI_FORMAT_R8G8_UNORM:          return EDDS_PIXEL_RG8;
+                case DXGI_FORMAT_BC4_UNORM:           return EDDS_PIXEL_BC4;
+                case DXGI_FORMAT_BC5_UNORM:           return EDDS_PIXEL_BC5;
+                case DXGI_FORMAT_R32G32B32A32_FLOAT:  return EDDS_PIXEL_RGBA32F;
+                case DXGI_FORMAT_BC6H_UF16:           return EDDS_PIXEL_BC6H;
+                case DXGI_FORMAT_BC7_UNORM:           return EDDS_PIXEL_BC7;
+                default:                              return EDDS_PIXEL_DXGI;
             }
         }
 
@@ -187,12 +207,17 @@ static edds_pixel_format classify(const edds_info *info) {
 }
 
 /**
- * One 2D image or a complete square cubemap. DayZ's DX10 EDDS array size counts its six faces.
+ * One 2D image or a complete square cubemap; returns 0 for anything else. DayZ's DX10 EDDS array
+ * size counts the six faces of its cube.
  */
 static int topology_is_previewable(const edds_info *info) {
-    if ((info->caps2 & DDSCAPS2_VOLUME) != 0 || info->depth > 1 ||
-        ((info->caps2 & 0xfe00u) != 0 && (info->caps2 & 0xfe00u) != 0xfe00u) ||
-        ((info->caps2 & DDSCAPS2_CUBEMAP) && info->width != info->height)) {
+    const uint32_t faces = info->caps2 & DDSCAPS2_CUBEMAP_ALL_FACES;
+
+    /* No volume, and a cube is square with all its faces. */
+    if ((info->caps2 & DDSCAPS2_VOLUME) != 0 ||
+        info->depth > 1 ||
+        (faces != 0 && faces != DDSCAPS2_CUBEMAP_ALL_FACES) ||
+        ((info->caps2 & DDSCAPS2_CUBEMAP) != 0 && info->width != info->height)) {
         return 0;
     }
 
@@ -726,11 +751,77 @@ static edds_status decode_lz4(
 }
 
 /**
- * Decodes mip `level` of an inspected EDDS into RGBA8, top row first. On success `*rgba` holds
+ * Decodes one face of one mip of an HDR format into `pixels`: the stored RGBA32F samples with
+ * `float_samples`, or else RGBA8 mapped for display (see edds_preview_surface in edds.h). Returns
+ * EDDS_OK, EDDS_CANCELLED, or EDDS_INVALID_INPUT for a sample that is not a finite number.
+ */
+static edds_status decode_hdr_surface(
+    const edds_info  *info,
+    const edds_mip   *mip,
+    const uint8_t    *surface,
+    int               float_samples,
+    edds_cancelled_fn cancel,
+    void             *cancel_context,
+    uint8_t          *pixels,
+    edds_error       *error) {
+    for (uint32_t y = 0; y < mip->height; y += 4) {
+        if (cancelled(cancel, cancel_context, error)) {
+            return EDDS_CANCELLED;
+        }
+
+        for (uint32_t x = 0; x < mip->width; x += 4) {
+            float block[64];
+
+            /* BC6H decodes a 4x4 block at a time; RGBA32F is read sample by sample below. */
+            if (info->pixel_format == EDDS_PIXEL_BC6H) {
+                edds_bc6_decode(surface + ((size_t)(y / 4) * ((mip->width + 3) / 4) + x / 4) * 16, block);
+            }
+
+            for (uint32_t by = 0; by < 4 && y + by < mip->height; ++by) {
+                for (uint32_t bx = 0; bx < 4 && x + bx < mip->width; ++bx) {
+                    const size_t index = ((size_t)(y + by) * mip->width + x + bx) * 4;
+                    float        values[4];
+
+                    if (info->pixel_format == EDDS_PIXEL_RGBA32F) {
+                        memcpy(values, surface + index * 4, 16);
+                    } else {
+                        memcpy(values, block + (by * 4 + bx) * 4, 16);
+                    }
+
+                    for (uint32_t c = 0; c < 4; ++c) {
+                        /* A NaN or an infinity has neither a value to show nor one to analyse. */
+                        if (!isfinite(values[c])) {
+                            fail(error, "invalid-float-sample", "Mip %u holds a float sample that is not a finite number.",
+                                (uint32_t)(mip - info->mips));
+                            return EDDS_INVALID_INPUT;
+                        }
+
+                        if (float_samples) {
+                            memcpy(pixels + (index + c) * 4, &values[c], 4);
+                        } else {
+                            /* Reinhard, then gamma 2.2; alpha is only clamped. */
+                            float v = fmaxf(0, values[c]);
+
+                            v                 = c == 3 ? fminf(1, v) : powf(v / (1 + v), 1.0f / 2.2f);
+                            pixels[index + c] = (uint8_t)(v * 255 + 0.5f);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return EDDS_OK;
+}
+
+/**
+ * Decodes face `face` of mip `level` of an inspected EDDS, top row first: into RGBA8, or for an
+ * HDR format with `float_samples` into its RGBA32F samples (see edds.h). On success `*rgba` holds
  * `*rgba_size` bytes, which the caller releases with `edds_free`; otherwise they are NULL and 0.
  */
 edds_status edds_preview_surface(
-    uint32_t face, int linear,
+    uint32_t          face,
+    int               float_samples,
     FILE             *input,
     const edds_info  *info,
     uint32_t          level,
@@ -758,17 +849,17 @@ edds_status edds_preview_surface(
         return EDDS_INTERNAL_FAILURE;
     }
 
+    /* The face, the sample kind and the mip asked for must exist in this file. */
     if (face >= info->face_count) {
         fail(error, "invalid-face", "The requested cube face does not exist.");
-
         return EDDS_INVALID_INPUT;
     }
 
-    if (linear && info->pixel_format != EDDS_PIXEL_BC6H && info->pixel_format != EDDS_PIXEL_RGBA32F) {
+    if (float_samples && !edds_pixel_format_is_hdr(info->pixel_format)) {
         fail(error, "unsupported-float-preview", "Float preview requires an HDR runtime format.");
-
         return EDDS_UNSUPPORTED_FORMAT;
     }
+
     if (level >= info->mip_count) {
         fail(error, "invalid-mip", "Mip level %u does not exist.", level);
         return EDDS_INVALID_INPUT;
@@ -785,20 +876,21 @@ edds_status edds_preview_surface(
 
     mip = &info->mips[level];
 
+    /* What the result takes: four bytes a pixel, or four floats with `float_samples`. */
     if (!expected_rgba_bytes(mip->width, mip->height, &decoded_bytes)) {
         fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.", level);
         return EDDS_INVALID_INPUT;
     }
 
-    if (linear) {
+    if (float_samples) {
         if (decoded_bytes > EDDS_MAX_PREVIEW_BYTES / 4) {
             fail(error, "decoded-size-limit", "The float preview exceeds the pixel limit.");
-
             return EDDS_INVALID_INPUT;
         }
 
         decoded_bytes *= 4;
     }
+
     /* Two buffers: the mip's bytes in its runtime format, and the RGBA they decode to. */
     raw    = edds_alloc(mip->decoded_bytes);
     pixels = edds_alloc(decoded_bytes);
@@ -820,74 +912,21 @@ edds_status edds_preview_surface(
         status = decode_lz4(input, mip, cancel, cancel_context, raw, error);
     }
 
-    /* Then the runtime format decoded into RGBA, which goes to the caller. */
+    /* Then the face decoded, which goes to the caller; a cube's mip holds its faces in order. */
     if (status == EDDS_OK) {
         const uint32_t bytes   = mip->decoded_bytes / info->face_count;
         const uint8_t *surface = raw + (size_t)face * bytes;
-        int            decoded = 1;
 
-        if (info->pixel_format == EDDS_PIXEL_BC6H || info->pixel_format == EDDS_PIXEL_RGBA32F) {
-            for (uint32_t y = 0; y < mip->height; y += 4) {
-                if (cancelled(cancel, cancel_context, error)) {
-                    status = EDDS_CANCELLED;
-                    break;
-                }
-
-                for (uint32_t x = 0; x < mip->width; x += 4) {
-                    float block[64];
-
-                    if (info->pixel_format == EDDS_PIXEL_BC6H) {
-                        edds_bc6_decode(surface + ((size_t)(y / 4) * ((mip->width + 3) / 4) + x / 4) * 16, block);
-                    }
-
-                    for (uint32_t by = 0; by < 4 && y + by < mip->height; ++by) {
-                        for (uint32_t bx = 0; bx < 4 && x + bx < mip->width; ++bx) {
-                            size_t index = ((size_t)(y + by) * mip->width + x + bx) * 4;
-                            float  values[4];
-
-                            if (info->pixel_format == EDDS_PIXEL_RGBA32F) {
-                                memcpy(values, surface + index * 4, 16);
-                            } else {
-                                memcpy(values, block + (by * 4 + bx) * 4, 16);
-                            }
-
-                            for (uint32_t c = 0; c < 4; ++c) {
-                                if (!isfinite(values[c])) {
-                                    decoded   = 0;
-                                    values[c] = 0;
-                                }
-
-                                if (linear) {
-                                    memcpy(pixels + (index + c) * 4, &values[c], 4);
-                                } else {
-                                    float v = fmaxf(0, values[c]);
-
-                                    v                 = c == 3 ? fminf(1, v) : powf(v / (1 + v), 1.0f / 2.2f);
-                                    pixels[index + c] = (uint8_t)(v * 255 + 0.5f);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-        } else {
-            decoded = edds_gpu_decode(info->pixel_format, surface, bytes, mip->width, mip->height, pixels);
-        }
-
-        if (status != EDDS_OK) {
-            edds_free(raw);
-            edds_free(pixels);
-
-            return status;
-        }
-
-        if (!decoded) {
+        if (edds_pixel_format_is_hdr(info->pixel_format)) {
+            status = decode_hdr_surface(info, mip, surface, float_samples, cancel, cancel_context, pixels, error);
+        } else if (!edds_gpu_decode(info->pixel_format, surface, bytes, mip->width, mip->height, pixels)) {
             fail(error, "invalid-gpu-payload",
                 "Mip %u does not hold whole %s blocks for its dimensions.",
                 level, edds_pixel_format_name(info->pixel_format));
             status = EDDS_INVALID_INPUT;
-        } else {
+        }
+
+        if (status == EDDS_OK) {
             *rgba      = pixels;
             *rgba_size = decoded_bytes;
             pixels     = NULL;
@@ -920,8 +959,15 @@ const char *edds_status_category(edds_status status) {
     }
 }
 
-/** Compatibility entry point: display-mapped bytes of face zero. */
-edds_status edds_preview(FILE *input, const edds_info *info, uint32_t level,
-    edds_cancelled_fn cancel, void *context, uint8_t **rgba, size_t *size, edds_error *error) {
-    return edds_preview_surface(0, 0, input, info, level, cancel, context, rgba, size, error);
+/** Decodes face zero of one mip into display-mapped RGBA8; see edds_preview_surface. */
+edds_status edds_preview(
+    FILE             *input,
+    const edds_info  *info,
+    uint32_t          level,
+    edds_cancelled_fn cancel,
+    void             *cancel_context,
+    uint8_t         **rgba,
+    size_t           *rgba_size,
+    edds_error       *error) {
+    return edds_preview_surface(0, 0, input, info, level, cancel, cancel_context, rgba, rgba_size, error);
 }
