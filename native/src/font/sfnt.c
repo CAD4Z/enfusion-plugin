@@ -10,14 +10,14 @@
  */
 
 enum {
-    ARG_1_AND_2_ARE_WORDS = 0x0001,
-    ARGS_ARE_XY_VALUES = 0x0002,
-    WE_HAVE_A_SCALE = 0x0008,
-    MORE_COMPONENTS = 0x0020,
-    WE_HAVE_AN_X_AND_Y_SCALE = 0x0040,
-    WE_HAVE_A_TWO_BY_TWO = 0x0080,
-    USE_MY_METRICS = 0x0200,
-    SCALED_COMPONENT_OFFSET = 0x0800,
+    ARG_1_AND_2_ARE_WORDS     = 0x0001,
+    ARGS_ARE_XY_VALUES        = 0x0002,
+    WE_HAVE_A_SCALE           = 0x0008,
+    MORE_COMPONENTS           = 0x0020,
+    WE_HAVE_AN_X_AND_Y_SCALE  = 0x0040,
+    WE_HAVE_A_TWO_BY_TWO      = 0x0080,
+    USE_MY_METRICS            = 0x0200,
+    SCALED_COMPONENT_OFFSET   = 0x0800,
     UNSCALED_COMPONENT_OFFSET = 0x1000
 };
 
@@ -83,10 +83,10 @@ static unsigned cmap_rank(uint16_t platform, uint16_t encoding, uint16_t format)
 }
 
 static edds_status choose_cmap(font_face *face, edds_error *error) {
-    const uint8_t *table = face->data + face->cmap.offset;
+    const uint8_t *table  = face->data + face->cmap.offset;
     const uint32_t length = face->cmap.length;
-    unsigned best = 0;
-    uint32_t count;
+    unsigned       best   = 0;
+    uint32_t       count;
     if (length < 4u) {
         return malformed(error, "the cmap table is truncated");
     }
@@ -97,22 +97,22 @@ static edds_status choose_cmap(font_face *face, edds_error *error) {
     for (uint32_t at = 0; at < count; ++at) {
         const uint8_t *record = table + 4u + 8u * at;
         const uint32_t offset = u32(record + 4);
-        uint32_t limit;
-        unsigned rank;
+        uint32_t       limit;
+        unsigned       rank;
         if (offset > length - 2u) {
             continue;
         }
         limit = length - offset;
-        rank = cmap_rank(u16(record), u16(record + 2), u16(table + offset));
+        rank  = cmap_rank(u16(record), u16(record + 2), u16(table + offset));
         if (rank <= best) {
             continue;
         }
         if (u16(table + offset) == 4u ? !valid_format4(table + offset, limit) : !valid_format12(table + offset, limit)) {
             return malformed(error, "a character map subtable is truncated or unsorted");
         }
-        best = rank;
+        best              = rank;
         face->cmap_offset = face->cmap.offset + offset;
-        face->cmap_limit = limit;
+        face->cmap_limit  = limit;
         face->cmap_format = u16(table + offset);
     }
     if (best == 0) {
@@ -124,13 +124,13 @@ static edds_status choose_cmap(font_face *face, edds_error *error) {
 
 uint32_t font_face_glyph(const font_face *face, uint32_t code) {
     const uint8_t *subtable = face->data + face->cmap_offset;
-    uint32_t glyph = 0;
+    uint32_t       glyph    = 0;
     if (face->cmap_format == 4u) {
         const uint32_t segments = u16(subtable + 6) / 2u;
-        const uint8_t *ends = subtable + 14;
-        const uint8_t *starts = ends + 2u * segments + 2u;
-        const uint8_t *deltas = starts + 2u * segments;
-        const uint8_t *ranges = deltas + 2u * segments;
+        const uint8_t *ends     = subtable + 14;
+        const uint8_t *starts   = ends + 2u * segments + 2u;
+        const uint8_t *deltas   = starts + 2u * segments;
+        const uint8_t *ranges   = deltas + 2u * segments;
         if (code > 0xFFFFu) {
             return 0;
         }
@@ -161,14 +161,14 @@ uint32_t font_face_glyph(const font_face *face, uint32_t code) {
         uint32_t low = 0, high = u32(subtable + 12);
         while (low < high) {
             const uint32_t middle = low + (high - low) / 2u;
-            const uint8_t *group = subtable + 16u + 12u * middle;
+            const uint8_t *group  = subtable + 16u + 12u * middle;
             if (code < u32(group)) {
                 high = middle;
             } else if (code > u32(group + 4)) {
                 low = middle + 1u;
             } else {
                 const uint64_t found = (uint64_t)u32(group + 8) + (code - u32(group));
-                glyph = found > UINT32_MAX ? 0u : (uint32_t)found;
+                glyph                = found > UINT32_MAX ? 0u : (uint32_t)found;
                 break;
             }
         }
@@ -178,7 +178,7 @@ uint32_t font_face_glyph(const font_face *face, uint32_t code) {
 
 uint32_t font_face_advance(const font_face *face, uint32_t glyph) {
     const uint8_t *metrics = face->data + face->hmtx.offset;
-    const uint32_t index = glyph < face->metric_count ? glyph : face->metric_count - 1u;
+    const uint32_t index   = glyph < face->metric_count ? glyph : face->metric_count - 1u;
     return u16(metrics + 4u * index);
 }
 
@@ -187,15 +187,15 @@ uint32_t font_face_advance(const font_face *face, uint32_t glyph) {
 edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, edds_error *error) {
     uint32_t version;
     uint32_t tables;
-    int cff = 0;
-    int variable = 0;
+    int      cff      = 0;
+    int      variable = 0;
     if (face == NULL || data == NULL) {
         font_fail(error, "invalid-api-argument", "The font bytes are required.");
         return EDDS_INTERNAL_FAILURE;
     }
     memset(face, 0, sizeof *face);
-    face->data = data;
-    face->size = size;
+    face->data       = data;
+    face->size       = size;
     face->cap_height = -1;
     if (size > FONT_MAX_FILE_BYTES) {
         font_fail(error, "font-file-limit", "A font file is at most %u bytes.", FONT_MAX_FILE_BYTES);
@@ -224,8 +224,8 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     }
     for (uint32_t at = 0; at < tables; ++at) {
         const uint8_t *record = data + 12u + 16u * at;
-        const uint32_t tag = u32(record);
-        font_table *slot = NULL;
+        const uint32_t tag    = u32(record);
+        font_table    *slot   = NULL;
         if (!inside(size, u32(record + 8), u32(record + 12))) {
             return malformed(error, "a table lies outside the file");
         }
@@ -244,7 +244,7 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
             case TAG('C', 'F', 'F', ' '):
             case TAG('C', 'F', 'F', '2'): cff = 1; break;
             case TAG('f', 'v', 'a', 'r'): variable = 1; break;
-            default: break;
+            default:                      break;
         }
         if (slot == NULL) {
             continue;
@@ -253,8 +253,8 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
             return malformed(error, "a table is listed twice");
         }
         slot->present = 1;
-        slot->offset = u32(record + 8);
-        slot->length = u32(record + 12);
+        slot->offset  = u32(record + 8);
+        slot->length  = u32(record + 12);
     }
     if (cff || !face->glyf.present || !face->loca.present) {
         font_fail(error, "unsupported-outline-format",
@@ -314,34 +314,34 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
 /* --- Names ------------------------------------------------------------------------------------ */
 
 static void utf8_append(char *out, size_t capacity, size_t *size, uint32_t code) {
-    char bytes[4];
+    char   bytes[4];
     size_t length;
     if (code < 0x80u) {
         bytes[0] = (char)code;
-        length = 1;
+        length   = 1;
     } else if (code < 0x800u) {
         bytes[0] = (char)(0xC0u | (code >> 6));
         bytes[1] = (char)(0x80u | (code & 0x3Fu));
-        length = 2;
+        length   = 2;
     } else if (code < 0x10000u) {
         bytes[0] = (char)(0xE0u | (code >> 12));
         bytes[1] = (char)(0x80u | ((code >> 6) & 0x3Fu));
         bytes[2] = (char)(0x80u | (code & 0x3Fu));
-        length = 3;
+        length   = 3;
     } else {
         bytes[0] = (char)(0xF0u | (code >> 18));
         bytes[1] = (char)(0x80u | ((code >> 12) & 0x3Fu));
         bytes[2] = (char)(0x80u | ((code >> 6) & 0x3Fu));
         bytes[3] = (char)(0x80u | (code & 0x3Fu));
-        length = 4;
+        length   = 4;
     }
     /* A name that does not fit is cut at a character, never inside one. */
     if (*size + length >= capacity) {
         return;
     }
     memcpy(out + *size, bytes, length);
-    *size += length;
-    out[*size] = '\0';
+    *size      += length;
+    out[*size]  = '\0';
 }
 
 /** Windows English first, then any Windows language, then Unicode, then Macintosh Roman. */
@@ -359,32 +359,32 @@ static unsigned name_rank(uint16_t platform, uint16_t encoding, uint16_t languag
 }
 
 static int read_name(const font_face *face, uint16_t id, char *out, size_t capacity) {
-    const uint8_t *table = face->data + face->name.offset;
+    const uint8_t *table  = face->data + face->name.offset;
     const uint32_t length = face->name.length;
-    uint32_t count, storage;
-    unsigned best = 0;
-    const uint8_t *chosen = NULL;
-    uint32_t chosen_length = 0;
-    unsigned chosen_platform = 0;
-    out[0] = '\0';
+    uint32_t       count, storage;
+    unsigned       best            = 0;
+    const uint8_t *chosen          = NULL;
+    uint32_t       chosen_length   = 0;
+    unsigned       chosen_platform = 0;
+    out[0]                         = '\0';
     if (!face->name.present || length < 6u) {
         return 0;
     }
-    count = u16(table + 2);
+    count   = u16(table + 2);
     storage = u16(table + 4);
     if (6u + 12u * (uint64_t)count > length) {
         return 0;
     }
     for (uint32_t at = 0; at < count; ++at) {
         const uint8_t *record = table + 6u + 12u * at;
-        const unsigned rank = name_rank(u16(record), u16(record + 2), u16(record + 4));
+        const unsigned rank   = name_rank(u16(record), u16(record + 2), u16(record + 4));
         const uint32_t start = storage + u16(record + 10), bytes = u16(record + 8);
         if (u16(record + 6) != id || rank <= best || !inside(length, start, bytes)) {
             continue;
         }
-        best = rank;
-        chosen = table + start;
-        chosen_length = bytes;
+        best            = rank;
+        chosen          = table + start;
+        chosen_length   = bytes;
         chosen_platform = u16(record);
     }
     if (chosen == NULL) {
@@ -402,8 +402,8 @@ static int read_name(const font_face *face, uint16_t id, char *out, size_t capac
                 uint32_t code = u16(chosen + at);
                 if (code >= 0xD800u && code <= 0xDBFFu && at + 3u < chosen_length &&
                     u16(chosen + at + 2u) >= 0xDC00u && u16(chosen + at + 2u) <= 0xDFFFu) {
-                    code = 0x10000u + ((code - 0xD800u) << 10) + (u16(chosen + at + 2u) - 0xDC00u);
-                    at += 2u;
+                    code  = 0x10000u + ((code - 0xD800u) << 10) + (u16(chosen + at + 2u) - 0xDC00u);
+                    at   += 2u;
                 } else if (code >= 0xD800u && code <= 0xDFFFu) {
                     code = 0xFFFDu;
                 }
@@ -430,7 +430,7 @@ static int reserve_points(font_contours *contours, size_t needed) {
         return 1;
     }
     {
-        size_t capacity = contours->capacity == 0 ? 64u : contours->capacity;
+        size_t      capacity = contours->capacity == 0 ? 64u : contours->capacity;
         font_point *grown;
         while (capacity < needed) {
             capacity *= 2u;
@@ -439,7 +439,7 @@ static int reserve_points(font_contours *contours, size_t needed) {
         if (grown == NULL) {
             return 0;
         }
-        contours->points = grown;
+        contours->points   = grown;
         contours->capacity = capacity;
     }
     return 1;
@@ -448,11 +448,11 @@ static int reserve_points(font_contours *contours, size_t needed) {
 static int add_end(font_contours *contours, size_t end) {
     if (contours->contour_count == contours->contour_capacity) {
         const size_t capacity = contours->contour_capacity == 0 ? 8u : contours->contour_capacity * 2u;
-        size_t *grown = realloc(contours->ends, capacity * sizeof *grown);
+        size_t      *grown    = realloc(contours->ends, capacity * sizeof *grown);
         if (grown == NULL) {
             return 0;
         }
-        contours->ends = grown;
+        contours->ends             = grown;
         contours->contour_capacity = capacity;
     }
     contours->ends[contours->contour_count++] = end;
@@ -481,15 +481,15 @@ static edds_status glyph_limit(edds_error *error) {
 
 static edds_status read_simple(
     const uint8_t *glyph,
-    uint32_t size,
-    uint32_t contour_total,
+    uint32_t       size,
+    uint32_t       contour_total,
     font_contours *out,
-    edds_error *error) {
-    const size_t base = out->count;
-    uint32_t at = 10;
-    uint32_t point_total = 0;
-    uint8_t *flags;
-    int32_t x = 0, y = 0;
+    edds_error    *error) {
+    const size_t base        = out->count;
+    uint32_t     at          = 10;
+    uint32_t     point_total = 0;
+    uint8_t     *flags;
+    int32_t      x = 0, y = 0;
     if (contour_total == 0) {
         return EDDS_OK;
     }
@@ -520,7 +520,7 @@ static edds_status read_simple(
         return out_of_memory(error);
     }
     for (uint32_t point = 0; point < point_total;) {
-        uint8_t flag;
+        uint8_t  flag;
         uint32_t repeat = 0;
         if (at >= size) {
             goto truncated;
@@ -551,10 +551,10 @@ static edds_status read_simple(
             if (at + 2u > size) {
                 goto truncated;
             }
-            x += s16(glyph + at);
+            x  += s16(glyph + at);
             at += 2u;
         }
-        out->points[base + point].x = x;
+        out->points[base + point].x        = x;
         out->points[base + point].on_curve = (flag & 0x01u) != 0;
     }
     for (uint32_t point = 0; point < point_total; ++point) {
@@ -569,7 +569,7 @@ static edds_status read_simple(
             if (at + 2u > size) {
                 goto truncated;
             }
-            y += s16(glyph + at);
+            y  += s16(glyph + at);
             at += 2u;
         }
         out->points[base + point].y = y;
@@ -598,32 +598,32 @@ typedef struct read_state {
 
 static edds_status read_glyph(
     const font_face *face,
-    uint32_t glyph,
-    uint32_t depth,
-    read_state *state,
-    font_contours *out,
-    uint32_t *advance,
-    edds_error *error);
+    uint32_t         glyph,
+    uint32_t         depth,
+    read_state      *state,
+    font_contours   *out,
+    uint32_t        *advance,
+    edds_error      *error);
 
 static edds_status read_composite(
     const font_face *face,
-    const uint8_t *data,
-    uint32_t size,
-    uint32_t depth,
-    read_state *state,
-    font_contours *out,
-    uint32_t *advance,
-    edds_error *error) {
+    const uint8_t   *data,
+    uint32_t         size,
+    uint32_t         depth,
+    read_state      *state,
+    font_contours   *out,
+    uint32_t        *advance,
+    edds_error      *error) {
     const size_t base = out->count;
-    uint32_t at = 10;
-    uint16_t flags;
+    uint32_t     at   = 10;
+    uint16_t     flags;
     do {
-        uint32_t component;
-        double a = 1, b = 0, c = 0, d = 1, dx, dy;
-        int32_t first, second;
-        font_contours child = { 0 };
-        uint32_t child_advance = 0;
-        edds_status status;
+        uint32_t      component;
+        double        a = 1, b = 0, c = 0, d = 1, dx, dy;
+        int32_t       first, second;
+        font_contours child         = { 0 };
+        uint32_t      child_advance = 0;
+        edds_status   status;
         if (++state->components > FONT_MAX_COMPONENTS) {
             font_fail(error, "glyph-size-limit", "A glyph has more than %u components.", FONT_MAX_COMPONENTS);
             return EDDS_INVALID_INPUT;
@@ -631,9 +631,9 @@ static edds_status read_composite(
         if (!inside(size, at, 4u)) {
             return malformed(error, "a component record");
         }
-        flags = u16(data + at);
-        component = u16(data + at + 2u);
-        at += 4u;
+        flags      = u16(data + at);
+        component  = u16(data + at + 2u);
+        at        += 4u;
         if (component >= face->glyph_count) {
             return malformed(error, "a component names a glyph the font lacks");
         }
@@ -641,38 +641,38 @@ static edds_status read_composite(
             if (!inside(size, at, 4u)) {
                 return malformed(error, "a component record");
             }
-            first = (flags & ARGS_ARE_XY_VALUES) != 0 ? s16(data + at) : u16(data + at);
-            second = (flags & ARGS_ARE_XY_VALUES) != 0 ? s16(data + at + 2u) : u16(data + at + 2u);
-            at += 4u;
+            first   = (flags & ARGS_ARE_XY_VALUES) != 0 ? s16(data + at) : u16(data + at);
+            second  = (flags & ARGS_ARE_XY_VALUES) != 0 ? s16(data + at + 2u) : u16(data + at + 2u);
+            at     += 4u;
         } else {
             if (!inside(size, at, 2u)) {
                 return malformed(error, "a component record");
             }
-            first = (flags & ARGS_ARE_XY_VALUES) != 0 ? (int8_t)data[at] : data[at];
-            second = (flags & ARGS_ARE_XY_VALUES) != 0 ? (int8_t)data[at + 1u] : data[at + 1u];
-            at += 2u;
+            first   = (flags & ARGS_ARE_XY_VALUES) != 0 ? (int8_t)data[at] : data[at];
+            second  = (flags & ARGS_ARE_XY_VALUES) != 0 ? (int8_t)data[at + 1u] : data[at + 1u];
+            at     += 2u;
         }
         if ((flags & WE_HAVE_A_SCALE) != 0) {
             if (!inside(size, at, 2u)) {
                 return malformed(error, "a component transform");
             }
-            a = d = f2dot14(data + at);
-            at += 2u;
+            a = d  = f2dot14(data + at);
+            at    += 2u;
         } else if ((flags & WE_HAVE_AN_X_AND_Y_SCALE) != 0) {
             if (!inside(size, at, 4u)) {
                 return malformed(error, "a component transform");
             }
-            a = f2dot14(data + at);
-            d = f2dot14(data + at + 2u);
+            a   = f2dot14(data + at);
+            d   = f2dot14(data + at + 2u);
             at += 4u;
         } else if ((flags & WE_HAVE_A_TWO_BY_TWO) != 0) {
             if (!inside(size, at, 8u)) {
                 return malformed(error, "a component transform");
             }
-            a = f2dot14(data + at);
-            b = f2dot14(data + at + 2u);
-            c = f2dot14(data + at + 4u);
-            d = f2dot14(data + at + 6u);
+            a   = f2dot14(data + at);
+            b   = f2dot14(data + at + 2u);
+            c   = f2dot14(data + at + 4u);
+            d   = f2dot14(data + at + 6u);
             at += 8u;
         }
         status = read_glyph(face, component, depth + 1u, state, &child, &child_advance, error);
@@ -696,9 +696,9 @@ static edds_status read_composite(
             }
             {
                 const font_point parent = out->points[base + (size_t)first];
-                const font_point own = child.points[second];
-                dx = parent.x - (a * own.x + c * own.y);
-                dy = parent.y - (b * own.x + d * own.y);
+                const font_point own    = child.points[second];
+                dx                      = parent.x - (a * own.x + c * own.y);
+                dy                      = parent.y - (b * own.x + d * own.y);
             }
         }
         if (out->count + child.count > FONT_MAX_GLYPH_POINTS ||
@@ -714,10 +714,10 @@ static edds_status read_composite(
             const size_t offset = out->count;
             for (size_t point = 0; point < child.count; ++point) {
                 const font_point source = child.points[point];
-                font_point *moved = &out->points[offset + point];
-                moved->x = a * source.x + c * source.y + dx;
-                moved->y = b * source.x + d * source.y + dy;
-                moved->on_curve = source.on_curve;
+                font_point      *moved  = &out->points[offset + point];
+                moved->x                = a * source.x + c * source.y + dx;
+                moved->y                = b * source.x + d * source.y + dy;
+                moved->on_curve         = source.on_curve;
             }
             out->count += child.count;
             for (size_t contour = 0; contour < child.contour_count; ++contour) {
@@ -737,15 +737,15 @@ static edds_status read_composite(
 
 static edds_status read_glyph(
     const font_face *face,
-    uint32_t glyph,
-    uint32_t depth,
-    read_state *state,
-    font_contours *out,
-    uint32_t *advance,
-    edds_error *error) {
+    uint32_t         glyph,
+    uint32_t         depth,
+    read_state      *state,
+    font_contours   *out,
+    uint32_t        *advance,
+    edds_error      *error) {
     const uint8_t *loca = face->data + face->loca.offset;
-    uint32_t start, end;
-    int16_t contours;
+    uint32_t       start, end;
+    int16_t        contours;
     *advance = font_face_advance(face, glyph);
     if (depth > FONT_MAX_COMPONENT_DEPTH) {
         font_fail(error, "glyph-size-limit", "Composite glyphs nest deeper than %u levels.", FONT_MAX_COMPONENT_DEPTH);
@@ -753,10 +753,10 @@ static edds_status read_glyph(
     }
     if (face->long_offsets) {
         start = u32(loca + 4u * glyph);
-        end = u32(loca + 4u * glyph + 4u);
+        end   = u32(loca + 4u * glyph + 4u);
     } else {
         start = 2u * u16(loca + 2u * glyph);
-        end = 2u * u16(loca + 2u * glyph + 2u);
+        end   = 2u * u16(loca + 2u * glyph + 2u);
     }
     if (start > end || end > face->glyf.length) {
         return malformed(error, "a glyph lies outside the glyf table");
@@ -776,11 +776,11 @@ static edds_status read_glyph(
 
 edds_status font_face_contours(
     const font_face *face,
-    uint32_t glyph,
-    font_contours *contours,
-    uint32_t *advance,
-    edds_error *error) {
-    read_state state = { 0 };
+    uint32_t         glyph,
+    font_contours   *contours,
+    uint32_t        *advance,
+    edds_error      *error) {
+    read_state  state = { 0 };
     edds_status status;
     memset(contours, 0, sizeof *contours);
     if (glyph >= face->glyph_count) {

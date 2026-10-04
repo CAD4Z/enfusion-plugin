@@ -17,9 +17,9 @@ void font_fail(edds_error *error, const char *code, const char *format, ...) {
 }
 
 enum {
-    SETTING_SOURCE = 1u << 0,
+    SETTING_SOURCE     = 1u << 0,
     SETTING_CHARACTERS = 1u << 1,
-    SETTING_SIZE = 1u << 2
+    SETTING_SIZE       = 1u << 2
 };
 
 static edds_status malformed(edds_error *error, const char *what) {
@@ -46,8 +46,8 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
     uint32_t seen = 0;
     for (;;) {
         const meta_token key = meta_next_token(scan);
-        meta_token value;
-        uint32_t bit = 0;
+        meta_token       value;
+        uint32_t         bit = 0;
         if (key.kind == META_TOKEN_CLOSE) {
             break;
         }
@@ -100,8 +100,8 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
     int found_pc = 0;
     for (;;) {
         const meta_token resource = meta_next_token(scan);
-        meta_token platform;
-        meta_token next;
+        meta_token       platform;
+        meta_token       next;
         if (resource.kind == META_TOKEN_CLOSE) {
             break;
         }
@@ -129,7 +129,7 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
                 return EDDS_INVALID_INPUT;
             }
             found_pc = 1;
-            status = parse_pc(scan, recipe, error);
+            status   = parse_pc(scan, recipe, error);
             if (status != EDDS_OK) {
                 return status;
             }
@@ -149,21 +149,21 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
  * else, which is all a recipe that is about to be replaced has to give.
  */
 static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADATA_GUID_BYTES], edds_error *error) {
-    char *source = NULL;
-    size_t size = 0;
+    char        *source = NULL;
+    size_t       size   = 0;
     meta_scanner scan;
-    meta_token value;
-    int found_name = 0;
-    int found_configurations = 0;
-    char name[EDDS_METADATA_PATH_BYTES];
-    edds_status status = EDDS_INVALID_INPUT;
+    meta_token   value;
+    int          found_name           = 0;
+    int          found_configurations = 0;
+    char         name[EDDS_METADATA_PATH_BYTES];
+    edds_status  status = EDDS_INVALID_INPUT;
     if (!meta_read_text(input, &source, &size, error)) {
         return EDDS_INVALID_INPUT;
     }
     scan.source = source;
-    scan.size = size;
-    scan.at = 0;
-    value = meta_next_token(&scan);
+    scan.size   = size;
+    scan.at     = 0;
+    value       = meta_next_token(&scan);
     if (value.kind != META_TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 ||
         meta_next_token(&scan).kind != META_TOKEN_OPEN) {
         status = malformed(error, "it must be one MetaFileClass block");
@@ -171,7 +171,7 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
     }
     for (;;) {
         const meta_token key = meta_next_token(&scan);
-        meta_token field;
+        meta_token       field;
         if (key.kind == META_TOKEN_CLOSE) {
             break;
         }
@@ -198,7 +198,7 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
                 goto done;
             }
             found_configurations = 1;
-            status = parse_configurations(&scan, recipe, error);
+            status               = parse_configurations(&scan, recipe, error);
             if (status != EDDS_OK) {
                 goto done;
             }

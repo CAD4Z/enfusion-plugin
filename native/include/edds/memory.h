@@ -7,9 +7,9 @@ typedef edds_status (*edds_memory_operation_fn)(void *context, edds_error *error
 
 typedef struct edds_memory_result {
     edds_status status;
-    uint64_t peak;
+    uint64_t    peak;
     /* Nonzero only when the quota, rather than the system allocator, refused an allocation. */
-    uint64_t required;
+    uint64_t    required;
 } edds_memory_result;
 
 /**

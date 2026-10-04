@@ -10,14 +10,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { DEFLATE_MAX_BITS = 15 };
+enum {
+    DEFLATE_MAX_BITS = 15
+};
 
 typedef struct bit_reader {
     const uint8_t *bytes;
-    size_t size;
-    size_t at;
-    uint64_t bits;
-    unsigned bit_count;
+    size_t         size;
+    size_t         at;
+    uint64_t       bits;
+    unsigned       bit_count;
 } bit_reader;
 
 typedef struct huffman {
@@ -67,10 +69,10 @@ void edds_put_u32le(uint8_t *at, uint32_t value) {
 }
 
 int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error) {
-    long length;
+    long     length;
     uint8_t *allocation;
     *bytes = NULL;
-    *size = 0;
+    *size  = 0;
     if (fseek(input, 0, SEEK_END) != 0 || (length = ftell(input)) < 0 ||
         fseek(input, 0, SEEK_SET) != 0 || (uint64_t)length > EDDS_MAX_FILE_BYTES) {
         edds_fail(error, "source-size-limit", "The source image could not be measured within the supported limit.");
@@ -87,15 +89,15 @@ int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error)
         return 0;
     }
     *bytes = allocation;
-    *size = (size_t)length;
+    *size  = (size_t)length;
     return 1;
 }
 
 static uint32_t adler32(const uint8_t *bytes, size_t size) {
-    uint32_t first = 1;
+    uint32_t first  = 1;
     uint32_t second = 0;
     for (size_t at = 0; at < size; ++at) {
-        first = (first + bytes[at]) % 65521u;
+        first  = (first + bytes[at]) % 65521u;
         second = (second + first) % 65521u;
     }
     return (second << 16) | first;
@@ -106,24 +108,24 @@ static int take_bits(bit_reader *reader, unsigned count, uint32_t *value) {
         if (reader->at >= reader->size) {
             return 0;
         }
-        reader->bits |= (uint64_t)reader->bytes[reader->at++] << reader->bit_count;
+        reader->bits      |= (uint64_t)reader->bytes[reader->at++] << reader->bit_count;
         reader->bit_count += 8;
     }
-    *value = (uint32_t)(reader->bits & (((uint64_t)1u << count) - 1u));
-    reader->bits >>= count;
-    reader->bit_count -= count;
+    *value              = (uint32_t)(reader->bits & (((uint64_t)1u << count) - 1u));
+    reader->bits      >>= count;
+    reader->bit_count  -= count;
     return 1;
 }
 
 static void align_bits(bit_reader *reader) {
-    const unsigned discard = reader->bit_count & 7u;
-    reader->bits >>= discard;
-    reader->bit_count -= discard;
+    const unsigned discard   = reader->bit_count & 7u;
+    reader->bits           >>= discard;
+    reader->bit_count       -= discard;
 }
 
 static int build_huffman(huffman *tree, const uint8_t *lengths, uint32_t symbols) {
     uint16_t offsets[DEFLATE_MAX_BITS + 1];
-    int left = 1;
+    int      left = 1;
     memset(tree, 0, sizeof *tree);
     for (uint32_t symbol = 0; symbol < symbols; ++symbol) {
         if (lengths[symbol] > DEFLATE_MAX_BITS) {
@@ -153,11 +155,11 @@ static int build_huffman(huffman *tree, const uint8_t *lengths, uint32_t symbols
 }
 
 static int decode_symbol(bit_reader *reader, const huffman *tree, uint32_t *symbol) {
-    uint32_t code = 0;
+    uint32_t code  = 0;
     uint32_t first = 0;
     uint32_t index = 0;
     for (unsigned length = 1; length <= DEFLATE_MAX_BITS; ++length) {
-        uint32_t bit;
+        uint32_t       bit;
         const uint32_t count = tree->count[length];
         if (!take_bits(reader, 1, &bit)) {
             return 0;
@@ -167,9 +169,9 @@ static int decode_symbol(bit_reader *reader, const huffman *tree, uint32_t *symb
             *symbol = tree->symbol[index + code - first];
             return 1;
         }
-        index += count;
-        first = (first + count) << 1;
-        code <<= 1;
+        index  += count;
+        first   = (first + count) << 1;
+        code  <<= 1;
     }
     return 0;
 }
@@ -198,9 +200,9 @@ static int dynamic_trees(bit_reader *reader, huffman *literal, huffman *distance
     static const uint8_t order[19] = {
         16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
     };
-    uint8_t code_lengths[19] = { 0 };
-    uint8_t lengths[288 + 32] = { 0 };
-    huffman codes;
+    uint8_t  code_lengths[19]  = { 0 };
+    uint8_t  lengths[288 + 32] = { 0 };
+    huffman  codes;
     uint32_t value;
     uint32_t literal_count;
     uint32_t distance_count;
@@ -233,7 +235,7 @@ static int dynamic_trees(bit_reader *reader, huffman *literal, huffman *distance
     while (at < literal_count + distance_count) {
         uint32_t symbol;
         uint32_t repeat = 1;
-        uint8_t length;
+        uint8_t  length;
         if (!decode_symbol(reader, &codes, &symbol)) {
             return 0;
         }
@@ -276,12 +278,12 @@ static int dynamic_trees(bit_reader *reader, huffman *literal, huffman *distance
 }
 
 static int inflate_codes(
-    bit_reader *reader,
+    bit_reader    *reader,
     const huffman *literal,
     const huffman *distance,
-    uint8_t *output,
-    size_t output_size,
-    size_t *output_at) {
+    uint8_t       *output,
+    size_t         output_size,
+    size_t        *output_at) {
     static const uint16_t length_base[29] = {
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27,
         31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258
@@ -302,8 +304,8 @@ static int inflate_codes(
     for (;;) {
         uint32_t symbol;
         uint32_t extra;
-        size_t length;
-        size_t offset;
+        size_t   length;
+        size_t   offset;
         if (!decode_symbol(reader, literal, &symbol)) {
             return 0;
         }
@@ -342,22 +344,22 @@ static int inflate_codes(
 
 int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
     bit_reader reader;
-    size_t output_at = 0;
-    int final = 0;
+    size_t     output_at = 0;
+    int        final     = 0;
     if (input_size < 6u || (input[0] & 0x0fu) != 8u || (input[0] >> 4) > 7u ||
         (((uint32_t)input[0] << 8) | input[1]) % 31u != 0 || (input[1] & 0x20u) != 0) {
         return 0;
     }
-    reader.bytes = input + 2;
-    reader.size = input_size - 6u;
-    reader.at = 0;
-    reader.bits = 0;
+    reader.bytes     = input + 2;
+    reader.size      = input_size - 6u;
+    reader.at        = 0;
+    reader.bits      = 0;
     reader.bit_count = 0;
     while (!final) {
         uint32_t value;
         uint32_t type;
-        huffman literal;
-        huffman distance;
+        huffman  literal;
+        huffman  distance;
         if (!take_bits(&reader, 1, &value)) {
             return 0;
         }

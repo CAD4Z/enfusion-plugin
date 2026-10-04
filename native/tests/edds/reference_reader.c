@@ -5,7 +5,7 @@
 
 typedef struct bytes {
     uint8_t *data;
-    size_t size;
+    size_t   size;
 } bytes;
 
 static uint32_t u32le(const uint8_t *at) {
@@ -17,9 +17,9 @@ static uint32_t u32le(const uint8_t *at) {
 
 static int load(const char *path, bytes *result) {
     FILE *file = fopen(path, "rb");
-    long length;
-    int read_ok;
-    int close_ok;
+    long  length;
+    int   read_ok;
+    int   close_ok;
     result->data = NULL;
     result->size = 0;
     if (file == NULL || fseek(file, 0, SEEK_END) != 0 || (length = ftell(file)) < 0 ||
@@ -35,7 +35,7 @@ static int load(const char *path, bytes *result) {
         fclose(file);
         return 0;
     }
-    read_ok = fread(result->data, 1, result->size, file) == result->size;
+    read_ok  = fread(result->data, 1, result->size, file) == result->size;
     close_ok = fclose(file) == 0;
     if (!read_ok || !close_ok) {
         free(result->data);
@@ -68,9 +68,9 @@ static int length(const uint8_t *input, size_t input_size, size_t *at, size_t ba
 }
 
 static int decode_lz4(const uint8_t *payload, size_t stored, bytes *decoded) {
-    size_t input_at = 4;
+    size_t input_at  = 4;
     size_t output_at = 0;
-    int saw_final = 0;
+    int    saw_final = 0;
     if (stored < 8u) {
         return 0;
     }
@@ -82,11 +82,11 @@ static int decode_lz4(const uint8_t *payload, size_t stored, bytes *decoded) {
 
     while (input_at < stored && !saw_final) {
         uint32_t framed;
-        size_t block_end;
+        size_t   block_end;
         if (stored - input_at < 4u) {
             goto failure;
         }
-        framed = u32le(payload + input_at);
+        framed    = u32le(payload + input_at);
         input_at += 4u;
         if ((size_t)(framed & 0x7fffffffu) > stored - input_at) {
             goto failure;
@@ -94,15 +94,15 @@ static int decode_lz4(const uint8_t *payload, size_t stored, bytes *decoded) {
         block_end = input_at + (framed & 0x7fffffffu);
         while (input_at < block_end) {
             const uint8_t token = payload[input_at++];
-            size_t literals;
-            size_t match;
-            uint32_t offset;
+            size_t        literals;
+            size_t        match;
+            uint32_t      offset;
             if (!length(payload, block_end, &input_at, token >> 4, &literals) ||
                 literals > block_end - input_at || literals > decoded->size - output_at) {
                 goto failure;
             }
             memcpy(decoded->data + output_at, payload + input_at, literals);
-            input_at += literals;
+            input_at  += literals;
             output_at += literals;
             if (input_at == block_end) {
                 break;
@@ -110,7 +110,7 @@ static int decode_lz4(const uint8_t *payload, size_t stored, bytes *decoded) {
             if (block_end - input_at < 2u) {
                 goto failure;
             }
-            offset = (uint32_t)payload[input_at] | ((uint32_t)payload[input_at + 1u] << 8);
+            offset    = (uint32_t)payload[input_at] | ((uint32_t)payload[input_at + 1u] << 8);
             input_at += 2u;
             if (offset == 0 || offset > output_at ||
                 !length(payload, block_end, &input_at, token & 0x0fu, &match) ||
@@ -142,18 +142,18 @@ failure:
 
 static int selected_mip(
     const bytes *file,
-    uint32_t level,
-    uint32_t expected_width,
-    uint32_t expected_height,
-    uint32_t expected_mips,
-    const char expected_container[4],
-    bytes *decoded) {
-    uint32_t mips;
-    uint32_t stored_index;
-    size_t table_at = 128u;
-    size_t selected_payload = 0;
-    size_t complete;
-    uint32_t selected_size = 0;
+    uint32_t     level,
+    uint32_t     expected_width,
+    uint32_t     expected_height,
+    uint32_t     expected_mips,
+    const char   expected_container[4],
+    bytes       *decoded) {
+    uint32_t       mips;
+    uint32_t       stored_index;
+    size_t         table_at         = 128u;
+    size_t         selected_payload = 0;
+    size_t         complete;
+    uint32_t       selected_size       = 0;
     const uint8_t *selected_descriptor = NULL;
 
     decoded->data = NULL;
@@ -177,19 +177,19 @@ static int selected_mip(
         (size_t)mips > (file->size - table_at) / 8u) {
         return 0;
     }
-    complete = table_at + (size_t)mips * 8u;
+    complete     = table_at + (size_t)mips * 8u;
     stored_index = mips - level - 1u;
     for (uint32_t index = 0; index < mips; ++index) {
         const uint8_t *descriptor = file->data + table_at + (size_t)index * 8u;
-        const uint32_t stored = u32le(descriptor + 4);
+        const uint32_t stored     = u32le(descriptor + 4);
         if ((memcmp(descriptor, "COPY", 4) != 0 && memcmp(descriptor, "LZ4 ", 4) != 0) ||
             stored == 0 || stored > file->size - complete) {
             return 0;
         }
         if (index == stored_index) {
             selected_descriptor = descriptor;
-            selected_size = stored;
-            selected_payload = complete;
+            selected_size       = stored;
+            selected_payload    = complete;
         }
         complete += stored;
     }
@@ -235,11 +235,11 @@ static int within(const bytes *decoded, const uint8_t *expected, size_t size, in
 typedef struct gpu_format {
     const char *name;
     const char *four_cc;
-    uint32_t dxgi;
-    uint32_t block_bytes;
-    uint32_t pixel_bytes;
+    uint32_t    dxgi;
+    uint32_t    block_bytes;
+    uint32_t    pixel_bytes;
     /* Which of R, G, B, A the format really carries, as a mask over the channel index. */
-    unsigned channel_mask;
+    unsigned    channel_mask;
 } gpu_format;
 
 static const gpu_format gpu_formats[] = {
@@ -284,16 +284,16 @@ static uint8_t blend(uint32_t low, uint32_t high, uint32_t low_parts, uint32_t h
 
 /* Standing alone the endpoint order picks the layout; inside BC3 it is always four colours. */
 static void decode_bc1(const uint8_t block[8], int always_four_colours, uint8_t rgba[64]) {
-    const uint32_t first = (uint32_t)block[0] | ((uint32_t)block[1] << 8);
-    const uint32_t second = (uint32_t)block[2] | ((uint32_t)block[3] << 8);
-    const int four_colours = always_four_colours || first > second;
-    uint8_t palette[4][4];
+    const uint32_t first        = (uint32_t)block[0] | ((uint32_t)block[1] << 8);
+    const uint32_t second       = (uint32_t)block[2] | ((uint32_t)block[3] << 8);
+    const int      four_colours = always_four_colours || first > second;
+    uint8_t        palette[4][4];
     for (unsigned entry = 0; entry < 2; ++entry) {
         const uint32_t value = entry == 0 ? first : second;
-        palette[entry][0] = channel_of_565(value, 11, 5);
-        palette[entry][1] = channel_of_565(value, 5, 6);
-        palette[entry][2] = channel_of_565(value, 0, 5);
-        palette[entry][3] = 255u;
+        palette[entry][0]    = channel_of_565(value, 11, 5);
+        palette[entry][1]    = channel_of_565(value, 5, 6);
+        palette[entry][2]    = channel_of_565(value, 0, 5);
+        palette[entry][3]    = 255u;
     }
     for (unsigned channel = 0; channel < 3; ++channel) {
         if (four_colours) {
@@ -313,10 +313,10 @@ static void decode_bc1(const uint8_t block[8], int always_four_colours, uint8_t 
 }
 
 static void decode_bc4(const uint8_t block[8], uint8_t values[16]) {
-    uint8_t palette[8];
+    uint8_t  palette[8];
     uint64_t packed = 0;
-    palette[0] = block[0];
-    palette[1] = block[1];
+    palette[0]      = block[0];
+    palette[1]      = block[1];
     if (block[0] > block[1]) {
         for (unsigned entry = 2; entry < 8; ++entry) {
             palette[entry] = blend(block[0], block[1], 8u - entry, entry - 1u, 7);
@@ -382,8 +382,8 @@ static const uint8_t reference_anchor[64] = {
 static uint32_t reference_bits(const uint8_t *block, unsigned *at, unsigned count) {
     uint32_t value = 0;
     for (unsigned bit = 0; bit < count; ++bit) {
-        const unsigned position = *at + bit;
-        value |= (uint32_t)((block[position >> 3] >> (position & 7u)) & 1u) << bit;
+        const unsigned position  = *at + bit;
+        value                   |= (uint32_t)((block[position >> 3] >> (position & 7u)) & 1u) << bit;
     }
     *at += count;
     return value;
@@ -399,53 +399,53 @@ static uint8_t reference_expand(uint32_t value, unsigned bits) {
  * than guessed at: an oracle that accepted a block it could not read would prove nothing.
  */
 static int decode_bc7(const uint8_t block[16], uint8_t rgba[64]) {
-    static const uint8_t weights_two[4] = { 0, 21, 43, 64 };
+    static const uint8_t weights_two[4]   = { 0, 21, 43, 64 };
     static const uint8_t weights_three[8] = { 0, 9, 18, 27, 37, 46, 55, 64 };
     static const uint8_t weights_four[16] = {
         0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 56, 60, 64
     };
-    unsigned at = 0;
-    unsigned mode = 0;
-    unsigned subsets;
-    unsigned channels;
-    unsigned bits;
-    unsigned index_bits;
-    unsigned anchor = 0;
-    uint32_t partition = 0;
+    unsigned       at   = 0;
+    unsigned       mode = 0;
+    unsigned       subsets;
+    unsigned       channels;
+    unsigned       bits;
+    unsigned       index_bits;
+    unsigned       anchor    = 0;
+    uint32_t       partition = 0;
     const uint8_t *weights;
     const uint8_t *membership;
-    uint8_t endpoints[4][4];
-    uint8_t indices[16];
-    uint32_t raw[4][4] = { { 0 } };
-    uint32_t p[4] = { 0, 0, 0, 0 };
+    uint8_t        endpoints[4][4];
+    uint8_t        indices[16];
+    uint32_t       raw[4][4] = { { 0 } };
+    uint32_t       p[4]      = { 0, 0, 0, 0 };
 
     while (mode < 8 && reference_bits(block, &at, 1) == 0) {
         ++mode;
     }
     if (mode == 1) {
-        subsets = 2;
-        channels = 3;
-        bits = 6;
+        subsets    = 2;
+        channels   = 3;
+        bits       = 6;
         index_bits = 3;
-        weights = weights_three;
+        weights    = weights_three;
     } else if (mode == 6) {
-        subsets = 1;
-        channels = 4;
-        bits = 7;
+        subsets    = 1;
+        channels   = 4;
+        bits       = 7;
         index_bits = 4;
-        weights = weights_four;
+        weights    = weights_four;
     } else if (mode == 7) {
-        subsets = 2;
-        channels = 4;
-        bits = 5;
+        subsets    = 2;
+        channels   = 4;
+        bits       = 5;
         index_bits = 2;
-        weights = weights_two;
+        weights    = weights_two;
     } else {
         return 0;
     }
     if (subsets == 2) {
         partition = reference_bits(block, &at, 6);
-        anchor = reference_anchor[partition];
+        anchor    = reference_anchor[partition];
     }
     membership = subsets == 2 ? reference_partitions[partition] : NULL;
     for (unsigned channel = 0; channel < channels; ++channel) {
@@ -457,8 +457,8 @@ static int decode_bc7(const uint8_t block[16], uint8_t rgba[64]) {
     if (mode == 1) {
         for (unsigned subset = 0; subset < 2; ++subset) {
             const uint32_t shared = reference_bits(block, &at, 1);
-            p[subset * 2u] = shared;
-            p[subset * 2u + 1u] = shared;
+            p[subset * 2u]        = shared;
+            p[subset * 2u + 1u]   = shared;
         }
     } else {
         for (unsigned endpoint = 0; endpoint < subsets * 2u; ++endpoint) {
@@ -482,8 +482,8 @@ static int decode_bc7(const uint8_t block[16], uint8_t rgba[64]) {
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
         const unsigned subset = membership == NULL ? 0u : membership[pixel];
         for (unsigned channel = 0; channel < 4; ++channel) {
-            const uint32_t low = endpoints[subset * 2u][channel];
-            const uint32_t high = endpoints[subset * 2u + 1u][channel];
+            const uint32_t low         = endpoints[subset * 2u][channel];
+            const uint32_t high        = endpoints[subset * 2u + 1u][channel];
             rgba[pixel * 4u + channel] = (uint8_t)((low * (64u - weights[indices[pixel]]) +
                                                        high * weights[indices[pixel]] + 32u) >>
                 6);
@@ -494,11 +494,11 @@ static int decode_bc7(const uint8_t block[16], uint8_t rgba[64]) {
 
 static void place_block(
     const uint8_t decoded[64],
-    uint32_t width,
-    uint32_t height,
-    uint32_t left,
-    uint32_t top,
-    uint8_t *rgba) {
+    uint32_t      width,
+    uint32_t      height,
+    uint32_t      left,
+    uint32_t      top,
+    uint8_t      *rgba) {
     for (unsigned row = 0; row < 4 && top + row < height; ++row) {
         for (unsigned column = 0; column < 4 && left + column < width; ++column) {
             memcpy(rgba + (((size_t)(top + row) * width) + left + column) * 4u,
@@ -509,20 +509,20 @@ static void place_block(
 
 static int decode_gpu_mip(
     const gpu_format *format,
-    const bytes *stored,
-    uint32_t width,
-    uint32_t height,
-    uint8_t *rgba) {
+    const bytes      *stored,
+    uint32_t          width,
+    uint32_t          height,
+    uint8_t          *rgba) {
     if (stored->size != gpu_mip_bytes(format, width, height)) {
         return 0;
     }
     if (format->block_bytes == 0) {
         for (size_t pixel = 0; pixel < (size_t)width * height; ++pixel) {
-            const uint8_t *at = stored->data + pixel * format->pixel_bytes;
-            uint8_t *out = rgba + pixel * 4u;
-            out[1] = 0;
-            out[2] = 0;
-            out[3] = 255u;
+            const uint8_t *at  = stored->data + pixel * format->pixel_bytes;
+            uint8_t       *out = rgba + pixel * 4u;
+            out[1]             = 0;
+            out[2]             = 0;
+            out[3]             = 255u;
             if (format->pixel_bytes == 4u) {
                 /* Four bytes is the stored BGRA order, which is why blue comes off the front. */
                 out[0] = at[2];
@@ -557,14 +557,14 @@ static int decode_gpu_mip(
             } else if (strcmp(format->name, "BC4") == 0) {
                 decode_bc4(block, channel);
                 for (unsigned pixel = 0; pixel < 16; ++pixel) {
-                    decoded[pixel * 4u] = channel[pixel];
+                    decoded[pixel * 4u]      = channel[pixel];
                     decoded[pixel * 4u + 3u] = 255u;
                 }
             } else if (strcmp(format->name, "BC5") == 0) {
                 decode_bc4(block, channel);
                 decode_bc4(block + 8, second);
                 for (unsigned pixel = 0; pixel < 16; ++pixel) {
-                    decoded[pixel * 4u] = channel[pixel];
+                    decoded[pixel * 4u]      = channel[pixel];
                     decoded[pixel * 4u + 1u] = second[pixel];
                     decoded[pixel * 4u + 3u] = 255u;
                 }
@@ -585,10 +585,10 @@ static int expected_source(const bytes *tga, uint32_t *width, uint32_t *height, 
         (tga->data[16] != 32u && tga->data[16] != 24u)) {
         return 0;
     }
-    stride = tga->data[16] == 32u ? 4u : 3u;
-    *width = (uint32_t)tga->data[12] | ((uint32_t)tga->data[13] << 8);
+    stride  = tga->data[16] == 32u ? 4u : 3u;
+    *width  = (uint32_t)tga->data[12] | ((uint32_t)tga->data[13] << 8);
     *height = (uint32_t)tga->data[14] | ((uint32_t)tga->data[15] << 8);
-    pixels = (size_t)*width * *height;
+    pixels  = (size_t)*width * *height;
     if (tga->size != 18u + pixels * stride) {
         return 0;
     }
@@ -597,8 +597,8 @@ static int expected_source(const bytes *tga, uint32_t *width, uint32_t *height, 
         return 0;
     }
     for (size_t pixel = 0; pixel < pixels; ++pixel) {
-        const uint8_t *at = tga->data + 18u + pixel * stride;
-        (*rgba)[pixel * 4u] = at[2];
+        const uint8_t *at        = tga->data + 18u + pixel * stride;
+        (*rgba)[pixel * 4u]      = at[2];
         (*rgba)[pixel * 4u + 1u] = at[1];
         (*rgba)[pixel * 4u + 2u] = at[0];
         /* A twenty-four bit TGA declares no alpha, so the source it stands for is opaque. */
@@ -614,21 +614,21 @@ static int expected_source(const bytes *tga, uint32_t *width, uint32_t *height, 
  */
 static int verify_gpu(const char *source_path, const char *result_path, const char *format_name,
     unsigned bound) {
-    bytes source = { NULL, 0 };
-    bytes result = { NULL, 0 };
-    bytes stored = { NULL, 0 };
-    const gpu_format *format = gpu_format_named(format_name);
-    uint8_t *expected = NULL;
-    uint8_t *decoded = NULL;
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t mips;
-    uint32_t header_bytes;
-    size_t table_at;
-    size_t payload_at;
-    uint64_t total = 0;
-    unsigned counted = 0;
-    int ok = 0;
+    bytes             source   = { NULL, 0 };
+    bytes             result   = { NULL, 0 };
+    bytes             stored   = { NULL, 0 };
+    const gpu_format *format   = gpu_format_named(format_name);
+    uint8_t          *expected = NULL;
+    uint8_t          *decoded  = NULL;
+    uint32_t          width    = 0;
+    uint32_t          height   = 0;
+    uint32_t          mips;
+    uint32_t          header_bytes;
+    size_t            table_at;
+    size_t            payload_at;
+    uint64_t          total   = 0;
+    unsigned          counted = 0;
+    int               ok      = 0;
 
     if (format == NULL || !load(source_path, &source) || !load(result_path, &result) ||
         !expected_source(&source, &width, &height, &expected)) {
@@ -639,7 +639,7 @@ static int verify_gpu(const char *source_path, const char *result_path, const ch
         u32le(result.data + 16) != width || u32le(result.data + 12) != height) {
         goto done;
     }
-    mips = u32le(result.data + 28);
+    mips         = u32le(result.data + 28);
     header_bytes = 128u;
     if (format->four_cc[0] == '\0') {
         if ((u32le(result.data + 80) & 0x4u) != 0) {
@@ -667,16 +667,16 @@ static int verify_gpu(const char *source_path, const char *result_path, const ch
         goto done;
     }
 
-    table_at = header_bytes;
+    table_at   = header_bytes;
     payload_at = table_at + (size_t)mips * 8u;
     for (uint32_t index = 0; index < mips; ++index) {
-        const uint32_t level = mips - index - 1u;
-        uint32_t mip_width = width;
-        uint32_t mip_height = height;
+        const uint32_t level      = mips - index - 1u;
+        uint32_t       mip_width  = width;
+        uint32_t       mip_height = height;
         const uint8_t *descriptor = result.data + table_at + (size_t)index * 8u;
-        const uint32_t size = u32le(descriptor + 4);
+        const uint32_t size       = u32le(descriptor + 4);
         for (uint32_t step = 0; step < level; ++step) {
-            mip_width = mip_width > 1u ? mip_width / 2u : 1u;
+            mip_width  = mip_width > 1u ? mip_width / 2u : 1u;
             mip_height = mip_height > 1u ? mip_height / 2u : 1u;
         }
         if (payload_at + size > result.size) {
@@ -725,7 +725,7 @@ static int verify_gpu(const char *source_path, const char *result_path, const ch
         }
         free(stored.data);
         free(decoded);
-        decoded = NULL;
+        decoded     = NULL;
         payload_at += size;
     }
     ok = payload_at == result.size && counted != 0 && total <= (uint64_t)bound * counted;
@@ -742,15 +742,15 @@ done:
 }
 
 static int mip_equals(
-    const bytes *file,
-    uint32_t level,
-    uint32_t width,
-    uint32_t height,
-    uint32_t mips,
+    const bytes   *file,
+    uint32_t       level,
+    uint32_t       width,
+    uint32_t       height,
+    uint32_t       mips,
     const uint8_t *expected,
-    size_t expected_size) {
-    bytes decoded = { NULL, 0 };
-    const int ok = selected_mip(file, level, width, height, mips, "COPY", &decoded) &&
+    size_t         expected_size) {
+    bytes     decoded = { NULL, 0 };
+    const int ok      = selected_mip(file, level, width, height, mips, "COPY", &decoded) &&
         decoded.size == expected_size && memcmp(decoded.data, expected, expected_size) == 0;
     free(decoded.data);
     return ok;
@@ -763,16 +763,16 @@ static int verify_mip_modes(const char *kaiser_path, const char *pre_path, const
         120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
     };
     static const uint8_t kaiser_smallest[] = { 105, 95, 85, 255 };
-    static const uint8_t pre_normalized[] = {
+    static const uint8_t pre_normalized[]  = {
         61, 54, 47, 255, 64, 54, 45, 255, 70, 55, 39, 255,
         99, 61, 22, 255, 240, 190, 140, 255, 218, 201, 184, 255
     };
     static const uint8_t post_normalized_smallest[] = { 78, 56, 34, 255 };
-    bytes kaiser = { NULL, 0 };
-    bytes pre = { NULL, 0 };
-    bytes post = { NULL, 0 };
-    const int loaded = load(kaiser_path, &kaiser) && load(pre_path, &pre) && load(post_path, &post);
-    const int ok = loaded &&
+    bytes                kaiser                     = { NULL, 0 };
+    bytes                pre                        = { NULL, 0 };
+    bytes                post                       = { NULL, 0 };
+    const int            loaded                     = load(kaiser_path, &kaiser) && load(pre_path, &pre) && load(post_path, &post);
+    const int            ok                         = loaded &&
         mip_equals(&kaiser, 0, 3, 2, 2, source, sizeof source) &&
         mip_equals(&kaiser, 1, 3, 2, 2, kaiser_smallest, sizeof kaiser_smallest) &&
         mip_equals(&pre, 0, 3, 2, 1, pre_normalized, sizeof pre_normalized) &&
@@ -790,29 +790,29 @@ static int verify_mip_modes(const char *kaiser_path, const char *pre_path, const
 
 static int verify_golden(const char *path, unsigned width, unsigned height,
     unsigned count, const char *hex, unsigned removed) {
-    bytes file = { NULL, 0 };
-    int ok = load(path, &file);
+    bytes    file      = { NULL, 0 };
+    int      ok        = load(path, &file);
     unsigned top_width = width, top_height = height;
-    size_t cursor = 0;
+    size_t   cursor = 0;
     for (unsigned level = 0; level < count; ++level) {
-        uint8_t expected[32 * 32 * 4];
+        uint8_t      expected[32 * 32 * 4];
         const size_t size = (size_t)width * height * 4;
         if (size > sizeof expected || strlen(hex + cursor) < size * 2) {
             ok = 0;
             break;
         }
         for (size_t at = 0; at < size; ++at) {
-            char byte[3] = { hex[cursor], hex[cursor + 1], 0 };
-            expected[at] = (uint8_t)strtoul(byte, NULL, 16);
-            cursor += 2;
+            char byte[3]  = { hex[cursor], hex[cursor + 1], 0 };
+            expected[at]  = (uint8_t)strtoul(byte, NULL, 16);
+            cursor       += 2;
         }
         if (level < removed) {
-            top_width = width > 1 ? width / 2 : 1;
+            top_width  = width > 1 ? width / 2 : 1;
             top_height = height > 1 ? height / 2 : 1;
         } else {
             ok = ok && mip_equals(&file, level - removed, top_width, top_height, count - removed, expected, size);
         }
-        width = width > 1 ? width / 2 : 1;
+        width  = width > 1 ? width / 2 : 1;
         height = height > 1 ? height / 2 : 1;
     }
     ok = ok && hex[cursor] == 0;
@@ -826,8 +826,8 @@ static int verify_golden(const char *path, unsigned width, unsigned height,
 static int verify_swizzle(const char *path, unsigned width, unsigned height,
     unsigned count, const char *hex, const char *format_name) {
     const gpu_format *format = gpu_format_named(format_name);
-    bytes file = { NULL, 0 };
-    int ok = format != NULL && load(path, &file) && file.size >= 136u;
+    bytes             file   = { NULL, 0 };
+    int               ok     = format != NULL && load(path, &file) && file.size >= 136u;
     if (ok && format->four_cc[0] != '\0') {
         ok = memcmp(file.data + 84, format->four_cc, 4) == 0;
         if (ok && format->dxgi != 0) {
@@ -838,33 +838,33 @@ static int verify_swizzle(const char *path, unsigned width, unsigned height,
             u32le(file.data + 88) == 32u;
     }
     const unsigned top_width = width, top_height = height;
-    size_t cursor = 0;
+    size_t         cursor = 0;
     for (unsigned level = 0; ok && level < count; ++level) {
-        uint8_t expected[32 * 32 * 4], decoded[sizeof expected];
-        const size_t size = (size_t)width * height * 4u;
-        bytes stored = { NULL, 0 };
+        uint8_t      expected[32 * 32 * 4], decoded[sizeof expected];
+        const size_t size   = (size_t)width * height * 4u;
+        bytes        stored = { NULL, 0 };
         if (size > sizeof expected || strlen(hex + cursor) < size * 2u) {
             ok = 0;
             break;
         }
         for (size_t at = 0; at < size; ++at) {
-            char byte[3] = { hex[cursor], hex[cursor + 1], 0 };
-            expected[at] = (uint8_t)strtoul(byte, NULL, 16);
-            cursor += 2;
+            char byte[3]  = { hex[cursor], hex[cursor + 1], 0 };
+            expected[at]  = (uint8_t)strtoul(byte, NULL, 16);
+            cursor       += 2;
         }
         ok = selected_mip(&file, level, top_width, top_height, count, "COPY", &stored) &&
             decode_gpu_mip(format, &stored, width, height, decoded);
         for (unsigned c = 0; ok && c < 4; ++c) {
             const unsigned bgra_channel = c == 0 ? 2 : c == 2 ? 0
                                                               : c;
-            uint64_t total = 0;
+            uint64_t       total        = 0;
             for (size_t pixel = 0; pixel < size / 4; ++pixel) {
-                const uint8_t wanted = (format->channel_mask & (1u << c)) != 0
-                    ? expected[pixel * 4 + bgra_channel]
-                    : c == 3 ? 255
-                             : 0;
-                int difference = decoded[pixel * 4 + c] - wanted;
-                total += (uint64_t)abs(difference);
+                const uint8_t wanted      = (format->channel_mask & (1u << c)) != 0
+                         ? expected[pixel * 4 + bgra_channel]
+                         : c == 3 ? 255
+                                  : 0;
+                int           difference  = decoded[pixel * 4 + c] - wanted;
+                total                    += (uint64_t)abs(difference);
             }
             const unsigned bound = format->block_bytes == 0 ||
                     (format->channel_mask & (1u << c)) == 0
@@ -878,7 +878,7 @@ static int verify_swizzle(const char *path, unsigned width, unsigned height,
             }
         }
         free(stored.data);
-        width = width > 1 ? width / 2 : 1;
+        width  = width > 1 ? width / 2 : 1;
         height = height > 1 ? height / 2 : 1;
     }
     ok = ok && hex[cursor] == 0;
@@ -911,16 +911,16 @@ int main(int argc, char **argv) {
         return verify_mip_modes(argv[2], argv[3], argv[4]) ? 0 : 1;
     }
     static const uint8_t copy_expected[] = { 30, 20, 10, 40 };
-    static const uint8_t lz4_expected[] = { 3, 2, 1, 0, 6, 5, 4, 17 };
-    bytes copy = { NULL, 0 };
-    bytes lz4 = { NULL, 0 };
-    bytes decoded = { NULL, 0 };
-    bytes png = { NULL, 0 };
-    bytes tga = { NULL, 0 };
-    bytes jpg = { NULL, 0 };
-    bytes tiff = { NULL, 0 };
-    bytes dds = { NULL, 0 };
-    int ok;
+    static const uint8_t lz4_expected[]  = { 3, 2, 1, 0, 6, 5, 4, 17 };
+    bytes                copy            = { NULL, 0 };
+    bytes                lz4             = { NULL, 0 };
+    bytes                decoded         = { NULL, 0 };
+    bytes                png             = { NULL, 0 };
+    bytes                tga             = { NULL, 0 };
+    bytes                jpg             = { NULL, 0 };
+    bytes                tiff            = { NULL, 0 };
+    bytes                dds             = { NULL, 0 };
+    int                  ok;
     if (argc != 3 && argc != 8) {
         fputs("usage: edds-reference-reader COPY LZ4 [PNG_RESULT TGA_RESULT JPG_RESULT TIFF_RESULT DDS_RESULT]\n"
               "       edds-reference-reader --mips KAISER PRE_NORMALIZE POST_NORMALIZE\n",
@@ -938,7 +938,7 @@ int main(int argc, char **argv) {
     free(decoded.data);
     decoded.data = NULL;
     decoded.size = 0;
-    ok = ok && selected_mip(&lz4, 0, 2, 1, 1, "LZ4 ", &decoded) &&
+    ok           = ok && selected_mip(&lz4, 0, 2, 1, 1, "LZ4 ", &decoded) &&
         decoded.size == sizeof lz4_expected &&
         memcmp(decoded.data, lz4_expected, sizeof lz4_expected) == 0;
     free(decoded.data);
@@ -949,11 +949,11 @@ int main(int argc, char **argv) {
             30, 20, 10, 40, 70, 60, 50, 80, 110, 100, 90, 120,
             130, 120, 110, 140, 170, 160, 150, 180, 210, 200, 190, 220
         };
-        static const uint8_t png_level_one[] = { 120, 110, 100, 130 };
+        static const uint8_t png_level_one[]  = { 120, 110, 100, 130 };
         static const uint8_t dds_level_zero[] = {
             33, 22, 11, 255, 66, 55, 44, 255
         };
-        static const uint8_t dds_level_one[] = { 99, 88, 77, 255 };
+        static const uint8_t dds_level_one[]           = { 99, 88, 77, 255 };
         static const uint8_t three_by_two_level_zero[] = {
             30, 20, 10, 255, 60, 50, 40, 255, 90, 80, 70, 255,
             120, 110, 100, 255, 150, 140, 130, 255, 180, 170, 160, 255
@@ -966,13 +966,13 @@ int main(int argc, char **argv) {
         free(decoded.data);
         decoded.data = NULL;
         decoded.size = 0;
-        ok = ok && selected_mip(&png, 1, 3, 2, 2, "COPY", &decoded) &&
+        ok           = ok && selected_mip(&png, 1, 3, 2, 2, "COPY", &decoded) &&
             decoded.size == sizeof png_level_one &&
             memcmp(decoded.data, png_level_one, sizeof png_level_one) == 0;
         free(decoded.data);
         decoded.data = NULL;
         decoded.size = 0;
-        ok = ok && selected_mip(&tga, 0, 3, 2, 1, "COPY", &decoded) &&
+        ok           = ok && selected_mip(&tga, 0, 3, 2, 1, "COPY", &decoded) &&
             decoded.size == sizeof three_by_two_level_zero &&
             memcmp(decoded.data, three_by_two_level_zero, sizeof three_by_two_level_zero) == 0;
         free(decoded.data);
@@ -984,11 +984,11 @@ int main(int argc, char **argv) {
          * 178 and the last mip of the box chain is their average. Both are judged within a bound.
          */
         {
-            uint8_t jpeg_level_zero[16 * 8 * 4];
+            uint8_t              jpeg_level_zero[16 * 8 * 4];
             static const uint8_t jpeg_smallest[] = { 128, 128, 128, 255 };
             for (size_t pixel = 0; pixel < 16u * 8u; ++pixel) {
-                const uint8_t grey = pixel % 16u < 8u ? 78u : 178u;
-                jpeg_level_zero[pixel * 4u] = grey;
+                const uint8_t grey               = pixel % 16u < 8u ? 78u : 178u;
+                jpeg_level_zero[pixel * 4u]      = grey;
                 jpeg_level_zero[pixel * 4u + 1u] = grey;
                 jpeg_level_zero[pixel * 4u + 2u] = grey;
                 jpeg_level_zero[pixel * 4u + 3u] = 255u;
@@ -1000,7 +1000,7 @@ int main(int argc, char **argv) {
             free(decoded.data);
             decoded.data = NULL;
             decoded.size = 0;
-            ok = ok && selected_mip(&jpg, 4, 16, 8, 5, "COPY", &decoded) &&
+            ok           = ok && selected_mip(&jpg, 4, 16, 8, 5, "COPY", &decoded) &&
                 within(&decoded, jpeg_smallest, sizeof jpeg_smallest, 2);
             free(decoded.data);
             decoded.data = NULL;
@@ -1012,14 +1012,14 @@ int main(int argc, char **argv) {
         free(decoded.data);
         decoded.data = NULL;
         decoded.size = 0;
-        ok = ok && load(argv[7], &dds) &&
+        ok           = ok && load(argv[7], &dds) &&
             selected_mip(&dds, 0, 2, 1, 2, "COPY", &decoded) &&
             decoded.size == sizeof dds_level_zero &&
             memcmp(decoded.data, dds_level_zero, sizeof dds_level_zero) == 0;
         free(decoded.data);
         decoded.data = NULL;
         decoded.size = 0;
-        ok = ok && selected_mip(&dds, 1, 2, 1, 2, "COPY", &decoded) &&
+        ok           = ok && selected_mip(&dds, 1, 2, 1, 2, "COPY", &decoded) &&
             decoded.size == sizeof dds_level_one &&
             memcmp(decoded.data, dds_level_one, sizeof dds_level_one) == 0;
         free(decoded.data);

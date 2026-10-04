@@ -6,31 +6,31 @@
 #include <string.h>
 
 enum {
-    DDS_HEADER_BYTES = 128,
-    DDS_DX10_HEADER_BYTES = 20,
-    DDSD_CAPS = 0x00000001,
-    DDSD_HEIGHT = 0x00000002,
-    DDSD_WIDTH = 0x00000004,
-    DDSD_PITCH = 0x00000008,
-    DDSD_PIXELFORMAT = 0x00001000,
-    DDSD_MIPMAPCOUNT = 0x00020000,
-    DDSD_LINEARSIZE = 0x00080000,
-    DDPF_ALPHAPIXELS = 0x00000001,
-    DDPF_FOURCC = 0x00000004,
-    DDPF_RGB = 0x00000040,
-    DDSCAPS_COMPLEX = 0x00000008,
-    DDSCAPS_TEXTURE = 0x00001000,
-    DDSCAPS_MIPMAP = 0x00400000,
+    DDS_HEADER_BYTES                 = 128,
+    DDS_DX10_HEADER_BYTES            = 20,
+    DDSD_CAPS                        = 0x00000001,
+    DDSD_HEIGHT                      = 0x00000002,
+    DDSD_WIDTH                       = 0x00000004,
+    DDSD_PITCH                       = 0x00000008,
+    DDSD_PIXELFORMAT                 = 0x00001000,
+    DDSD_MIPMAPCOUNT                 = 0x00020000,
+    DDSD_LINEARSIZE                  = 0x00080000,
+    DDPF_ALPHAPIXELS                 = 0x00000001,
+    DDPF_FOURCC                      = 0x00000004,
+    DDPF_RGB                         = 0x00000040,
+    DDSCAPS_COMPLEX                  = 0x00000008,
+    DDSCAPS_TEXTURE                  = 0x00001000,
+    DDSCAPS_MIPMAP                   = 0x00400000,
     DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
-    DXGI_FORMAT_R8G8_UNORM = 49,
-    DXGI_FORMAT_R8_UNORM = 61,
-    DXGI_FORMAT_BC1_UNORM = 71,
-    DXGI_FORMAT_BC3_UNORM = 77,
-    DXGI_FORMAT_BC4_UNORM = 80,
-    DXGI_FORMAT_BC5_UNORM = 83,
-    DXGI_FORMAT_B8G8R8A8_UNORM = 87,
-    DXGI_FORMAT_B8G8R8X8_UNORM = 88,
-    DXGI_FORMAT_BC7_UNORM = 98
+    DXGI_FORMAT_R8G8_UNORM           = 49,
+    DXGI_FORMAT_R8_UNORM             = 61,
+    DXGI_FORMAT_BC1_UNORM            = 71,
+    DXGI_FORMAT_BC3_UNORM            = 77,
+    DXGI_FORMAT_BC4_UNORM            = 80,
+    DXGI_FORMAT_BC5_UNORM            = 83,
+    DXGI_FORMAT_B8G8R8A8_UNORM       = 87,
+    DXGI_FORMAT_B8G8R8X8_UNORM       = 88,
+    DXGI_FORMAT_BC7_UNORM            = 98
 };
 
 static uint32_t mip_dimension(uint32_t base, uint32_t level) {
@@ -43,7 +43,7 @@ static uint32_t mip_dimension(uint32_t base, uint32_t level) {
 static uint32_t complete_mip_count(uint32_t width, uint32_t height) {
     uint32_t count = 1;
     while (width > 1 || height > 1) {
-        width = width > 1 ? width / 2u : 1u;
+        width  = width > 1 ? width / 2u : 1u;
         height = height > 1 ? height / 2u : 1u;
         ++count;
     }
@@ -61,7 +61,7 @@ static int all_zero(const uint8_t *bytes, size_t size) {
 
 static edds_pixel_format legacy_format(const uint8_t *header, int *declares_alpha) {
     const uint32_t flags = edds_u32le(header + 80);
-    *declares_alpha = 0;
+    *declares_alpha      = 0;
     if ((flags & DDPF_FOURCC) != 0) {
         if (flags != DDPF_FOURCC || !all_zero(header + 88, 20)) {
             return EDDS_PIXEL_UNKNOWN;
@@ -94,16 +94,16 @@ static edds_pixel_format legacy_format(const uint8_t *header, int *declares_alph
 static edds_pixel_format dx10_format(uint32_t dxgi, int *declares_alpha) {
     *declares_alpha = 0;
     switch (dxgi) {
-        case DXGI_FORMAT_R8_UNORM: return EDDS_PIXEL_R8;
-        case DXGI_FORMAT_R8G8_UNORM: return EDDS_PIXEL_RG8;
-        case DXGI_FORMAT_BC1_UNORM: return EDDS_PIXEL_DXT1;
-        case DXGI_FORMAT_BC3_UNORM: *declares_alpha = 1; return EDDS_PIXEL_DXT5;
-        case DXGI_FORMAT_BC4_UNORM: return EDDS_PIXEL_BC4;
-        case DXGI_FORMAT_BC5_UNORM: return EDDS_PIXEL_BC5;
+        case DXGI_FORMAT_R8_UNORM:       return EDDS_PIXEL_R8;
+        case DXGI_FORMAT_R8G8_UNORM:     return EDDS_PIXEL_RG8;
+        case DXGI_FORMAT_BC1_UNORM:      return EDDS_PIXEL_DXT1;
+        case DXGI_FORMAT_BC3_UNORM:      *declares_alpha = 1; return EDDS_PIXEL_DXT5;
+        case DXGI_FORMAT_BC4_UNORM:      return EDDS_PIXEL_BC4;
+        case DXGI_FORMAT_BC5_UNORM:      return EDDS_PIXEL_BC5;
         case DXGI_FORMAT_B8G8R8A8_UNORM: *declares_alpha = 1; return EDDS_PIXEL_BGRA8;
         case DXGI_FORMAT_B8G8R8X8_UNORM: return EDDS_PIXEL_BGRX8;
-        case DXGI_FORMAT_BC7_UNORM: *declares_alpha = 1; return EDDS_PIXEL_BC7;
-        default: return EDDS_PIXEL_UNKNOWN;
+        case DXGI_FORMAT_BC7_UNORM:      *declares_alpha = 1; return EDDS_PIXEL_BC7;
+        default:                         return EDDS_PIXEL_UNKNOWN;
     }
 }
 
@@ -112,22 +112,22 @@ static void release_mips(edds_decoded_source *image) {
         edds_free(image->supplied_mips[level].rgba);
         image->supplied_mips[level].rgba = NULL;
     }
-    image->rgba = NULL;
+    image->rgba               = NULL;
     image->supplied_mip_count = 0;
 }
 
 edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error *error) {
-    uint8_t *bytes = NULL;
-    size_t size = 0;
-    uint32_t width;
-    uint32_t height;
-    uint32_t mip_count;
-    uint32_t flags;
-    uint32_t caps;
-    uint32_t header_bytes = DDS_HEADER_BYTES;
+    uint8_t          *bytes = NULL;
+    size_t            size  = 0;
+    uint32_t          width;
+    uint32_t          height;
+    uint32_t          mip_count;
+    uint32_t          flags;
+    uint32_t          caps;
+    uint32_t          header_bytes = DDS_HEADER_BYTES;
     edds_pixel_format format;
-    int declares_alpha = 0;
-    uint64_t payload_at;
+    int               declares_alpha = 0;
+    uint64_t          payload_at;
 
     if (!edds_read_all(input, &bytes, &size, error)) {
         return EDDS_INVALID_INPUT;
@@ -153,11 +153,11 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         goto unsupported;
     }
 
-    flags = edds_u32le(bytes + 8);
-    width = edds_u32le(bytes + 16);
-    height = edds_u32le(bytes + 12);
+    flags     = edds_u32le(bytes + 8);
+    width     = edds_u32le(bytes + 16);
+    height    = edds_u32le(bytes + 12);
     mip_count = edds_u32le(bytes + 28);
-    caps = edds_u32le(bytes + 108);
+    caps      = edds_u32le(bytes + 108);
     if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
         edds_fail(error, "dds-dimension-limit", "DDS dimensions must be between 1 and %u.",
             EDDS_MAX_DIMENSION);
@@ -206,7 +206,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
                 "DDS arrays, cubes, volumes, and non-2D resources are not supported as input.");
             goto unsupported;
         }
-        format = dx10_format(dxgi, &declares_alpha);
+        format        = dx10_format(dxgi, &declares_alpha);
         header_bytes += DDS_DX10_HEADER_BYTES;
     } else {
         format = legacy_format(bytes, &declares_alpha);
@@ -217,9 +217,9 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         goto unsupported;
     }
     {
-        const uint32_t top_bytes = edds_gpu_mip_bytes(format, width, height);
-        const uint32_t block = edds_gpu_block_bytes(format);
-        const uint32_t required_flag = block == 0 ? DDSD_PITCH : DDSD_LINEARSIZE;
+        const uint32_t top_bytes      = edds_gpu_mip_bytes(format, width, height);
+        const uint32_t block          = edds_gpu_block_bytes(format);
+        const uint32_t required_flag  = block == 0 ? DDSD_PITCH : DDSD_LINEARSIZE;
         const uint32_t expected_pitch = block == 0
             ? width * edds_gpu_pixel_bytes(format)
             : top_bytes;
@@ -233,15 +233,15 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
 
     payload_at = header_bytes;
     memset(image, 0, sizeof *image);
-    image->width = width;
-    image->height = height;
+    image->width     = width;
+    image->height    = height;
     image->has_alpha = declares_alpha;
     for (uint32_t level = 0; level < mip_count; ++level) {
-        edds_decoded_mip *mip = &image->supplied_mips[level];
-        const uint32_t mip_width = mip_dimension(width, level);
-        const uint32_t mip_height = mip_dimension(height, level);
-        const uint32_t stored_bytes = edds_gpu_mip_bytes(format, mip_width, mip_height);
-        const uint64_t rgba_bytes = (uint64_t)mip_width * mip_height * 4u;
+        edds_decoded_mip *mip          = &image->supplied_mips[level];
+        const uint32_t    mip_width    = mip_dimension(width, level);
+        const uint32_t    mip_height   = mip_dimension(height, level);
+        const uint32_t    stored_bytes = edds_gpu_mip_bytes(format, mip_width, mip_height);
+        const uint64_t    rgba_bytes   = (uint64_t)mip_width * mip_height * 4u;
         if (stored_bytes == 0 || rgba_bytes > EDDS_MAX_PREVIEW_BYTES ||
             payload_at > size || stored_bytes > size - payload_at) {
             edds_fail(error, "truncated-dds-mip",
@@ -253,8 +253,8 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
             edds_fail(error, "allocation-failed", "Memory for DDS mip %u could not be allocated.", level);
             goto decoded_internal;
         }
-        mip->width = mip_width;
-        mip->height = mip_height;
+        mip->width                = mip_width;
+        mip->height               = mip_height;
         image->supplied_mip_count = level + 1u;
         if (!edds_gpu_decode(format, bytes + payload_at, stored_bytes,
                 mip_width, mip_height, mip->rgba)) {
@@ -270,8 +270,8 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
     image->rgba = image->supplied_mips[0].rgba;
     if (!image->has_alpha && format == EDDS_PIXEL_DXT1) {
         for (uint32_t level = 0; level < mip_count; ++level) {
-            const edds_decoded_mip *mip = &image->supplied_mips[level];
-            const size_t pixels = (size_t)mip->width * mip->height;
+            const edds_decoded_mip *mip    = &image->supplied_mips[level];
+            const size_t            pixels = (size_t)mip->width * mip->height;
             for (size_t pixel = 0; pixel < pixels; ++pixel) {
                 if (mip->rgba[pixel * 4u + 3u] != 255u) {
                     image->has_alpha = 1;

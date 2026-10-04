@@ -14,16 +14,16 @@
     } while (0)
 
 typedef struct conversion_input {
-    test_bytes source;
+    test_bytes         source;
     edds_source_format format;
-    edds_profile profile;
+    edds_profile       profile;
 } conversion_input;
 
 static edds_status convert_source(void *context, edds_error *error) {
-    const conversion_input *input = context;
-    FILE *source = tmpfile();
-    FILE *output = tmpfile();
-    edds_status status;
+    const conversion_input *input  = context;
+    FILE                   *source = tmpfile();
+    FILE                   *output = tmpfile();
+    edds_status             status;
     if (source == NULL || output == NULL) {
         if (source != NULL) {
             (void)fclose(source);
@@ -51,8 +51,8 @@ static edds_status convert_png(void *context, edds_error *error) {
 }
 
 static int a_conversion_cannot_allocate_past_its_quota(void) {
-    test_bytes fixture = fixture_png_rgba();
-    edds_error error;
+    test_bytes         fixture = fixture_png_rgba();
+    edds_error         error;
     edds_memory_result limited;
     edds_memory_result retried;
     CHECK(fixture.data != NULL);
@@ -69,13 +69,13 @@ static int a_conversion_cannot_allocate_past_its_quota(void) {
 }
 
 typedef struct conversion_batch {
-    test_bytes source;
+    test_bytes  source;
     edds_status results[8];
 } conversion_batch;
 
 static void convert_compressed_item(void *context, uint32_t index, edds_pool *pool) {
     conversion_batch *batch = context;
-    edds_error error;
+    edds_error        error;
     batch->results[index] = edds_pool_execute(pool, edds_pool_charge_of(batch->source.size),
         convert_png, &batch->source, NULL, NULL, &error);
     if (batch->results[index] != EDDS_OK) {
@@ -84,8 +84,8 @@ static void convert_compressed_item(void *context, uint32_t index, edds_pool *po
 }
 
 static int compressed_images_finish_even_when_the_initial_charge_is_too_small(void) {
-    conversion_batch batch = { 0 };
-    edds_error error;
+    conversion_batch   batch = { 0 };
+    edds_error         error;
     edds_memory_result measured;
     batch.source = fixture_png_flat(1024u);
     CHECK(batch.source.data != NULL);
@@ -103,14 +103,14 @@ static int compressed_images_finish_even_when_the_initial_charge_is_too_small(vo
 }
 
 static int every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota(void) {
-    test_bytes fixtures[] = { fixture_png_rgba(), fixture_tga_bgrx(), fixture_jpeg_ycbcr(),
-        fixture_tiff_rgb(), fixture_dds_bgrx_mips() };
-    const edds_source_format formats[] = {
+    test_bytes               fixtures[] = { fixture_png_rgba(), fixture_tga_bgrx(), fixture_jpeg_ycbcr(),
+                      fixture_tiff_rgb(), fixture_dds_bgrx_mips() };
+    const edds_source_format formats[]  = {
         EDDS_SOURCE_PNG, EDDS_SOURCE_TGA, EDDS_SOURCE_JPG, EDDS_SOURCE_TIFF, EDDS_SOURCE_DDS
     };
     for (size_t at = 0; at < sizeof formats / sizeof formats[0]; ++at) {
         conversion_input input;
-        edds_error error;
+        edds_error       error;
         CHECK(fixtures[at].data != NULL);
         input.source = fixtures[at];
         input.format = formats[at];
@@ -121,9 +121,9 @@ static int every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota(void) 
                 input.profile.conversion = EDDS_CONVERSION_COLOR_HQ;
             }
             if (mode == 2u) {
-                input.profile.mipmap_filter = EDDS_FILTER_KAISER;
+                input.profile.mipmap_filter   = EDDS_FILTER_KAISER;
                 input.profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
-                input.profile.tiled_texture = 0;
+                input.profile.tiled_texture   = 0;
             }
             if (mode == 1u && input.format == EDDS_SOURCE_DDS) {
                 input.profile.contains_mips = 1;
@@ -144,7 +144,7 @@ static int every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota(void) 
 }
 
 typedef struct cancelled_batch {
-    unsigned calls;
+    unsigned    calls;
     edds_status result;
 } cancelled_batch;
 
@@ -162,7 +162,7 @@ static edds_status operation_that_must_not_start(void *context, edds_error *erro
 
 static void cancelled_item(void *context, uint32_t index, edds_pool *pool) {
     cancelled_batch *batch = context;
-    edds_error error;
+    edds_error       error;
     (void)index;
     batch->result = edds_pool_execute(pool, 1u, operation_that_must_not_start, batch,
         already_cancelled, NULL, &error);
@@ -170,26 +170,26 @@ static void cancelled_item(void *context, uint32_t index, edds_pool *pool) {
 
 static int cancellation_is_checked_before_an_attempt_starts(void) {
     cancelled_batch batch = { 0, EDDS_OK };
-    edds_error error;
+    edds_error      error;
     CHECK(edds_pool_run(1u, 0u, cancelled_item, &batch, &error) == EDDS_OK);
     CHECK(batch.result == EDDS_CANCELLED && batch.calls == 0u);
     return 1;
 }
 
 static int swizzling_unwinds_partial_buffers_and_rejects_short_channels(void) {
-    test_bytes fixture = fixture_png_flat(32u);
-    size_t count = 0;
+    test_bytes                     fixture  = fixture_png_flat(32u);
+    size_t                         count    = 0;
     const edds_swizzle_capability *mappings = edds_swizzles(&count);
     CHECK(fixture.data != NULL && count == 10u);
     for (size_t at = 0; at < count; ++at) {
         conversion_input input;
-        edds_error error;
+        edds_error       error;
         edds_default_profile(&input.profile);
-        input.source = fixture;
-        input.format = EDDS_SOURCE_PNG;
-        input.profile.swizzling = mappings[at].swizzling;
-        input.profile.remove_mips = 1u;
-        input.profile.normalize = 1;
+        input.source                  = fixture;
+        input.format                  = EDDS_SOURCE_PNG;
+        input.profile.swizzling       = mappings[at].swizzling;
+        input.profile.remove_mips     = 1u;
+        input.profile.normalize       = 1;
         const edds_memory_result full = edds_memory_run(UINT64_MAX, convert_source, &input, &error);
         CHECK(full.status == EDDS_OK && full.required == 0);
         for (uint64_t quota = 1; quota < full.peak; quota *= 2) {

@@ -7,42 +7,42 @@
 #include <string.h>
 
 enum {
-    DDS_HEADER_BYTES = 128,
-    DDS_DX10_HEADER_BYTES = 20,
+    DDS_HEADER_BYTES                 = 128,
+    DDS_DX10_HEADER_BYTES            = 20,
     DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
-    DDSD_CAPS = 0x00000001,
-    DDSD_HEIGHT = 0x00000002,
-    DDSD_WIDTH = 0x00000004,
-    DDSD_PITCH = 0x00000008,
-    DDSD_PIXELFORMAT = 0x00001000,
-    DDSD_MIPMAPCOUNT = 0x00020000,
-    DDSD_LINEARSIZE = 0x00080000,
-    DDPF_ALPHAPIXELS = 0x00000001,
-    DDPF_FOURCC = 0x00000004,
-    DDPF_RGB = 0x00000040,
-    DDSCAPS_COMPLEX = 0x00000008,
-    DDSCAPS_TEXTURE = 0x00001000,
-    DDSCAPS_MIPMAP = 0x00400000,
-    DXGI_FORMAT_R8G8_UNORM = 49,
-    DXGI_FORMAT_R8_UNORM = 61,
-    DXGI_FORMAT_BC4_UNORM = 80,
-    DXGI_FORMAT_BC5_UNORM = 83,
-    DXGI_FORMAT_BC7_UNORM = 98
+    DDSD_CAPS                        = 0x00000001,
+    DDSD_HEIGHT                      = 0x00000002,
+    DDSD_WIDTH                       = 0x00000004,
+    DDSD_PITCH                       = 0x00000008,
+    DDSD_PIXELFORMAT                 = 0x00001000,
+    DDSD_MIPMAPCOUNT                 = 0x00020000,
+    DDSD_LINEARSIZE                  = 0x00080000,
+    DDPF_ALPHAPIXELS                 = 0x00000001,
+    DDPF_FOURCC                      = 0x00000004,
+    DDPF_RGB                         = 0x00000040,
+    DDSCAPS_COMPLEX                  = 0x00000008,
+    DDSCAPS_TEXTURE                  = 0x00001000,
+    DDSCAPS_MIPMAP                   = 0x00400000,
+    DXGI_FORMAT_R8G8_UNORM           = 49,
+    DXGI_FORMAT_R8_UNORM             = 61,
+    DXGI_FORMAT_BC4_UNORM            = 80,
+    DXGI_FORMAT_BC5_UNORM            = 83,
+    DXGI_FORMAT_BC7_UNORM            = 98
 };
 
 typedef struct generated_mip {
-    uint32_t width;
-    uint32_t height;
-    uint32_t bytes;
-    uint8_t *bgra;
+    uint32_t       width;
+    uint32_t       height;
+    uint32_t       bytes;
+    uint8_t       *bgra;
     /** Unquantized filtering state; released as soon as the next level is built. */
-    float *filter_pixels;
+    float         *filter_pixels;
     /** The same mip in the runtime format, which is what the container then compresses. */
-    uint32_t payload_bytes;
-    uint8_t *payload;
+    uint32_t       payload_bytes;
+    uint8_t       *payload;
     edds_container container;
-    uint32_t stored_bytes;
-    uint8_t *stored;
+    uint32_t       stored_bytes;
+    uint8_t       *stored;
 } generated_mip;
 
 static uint32_t mip_count(uint32_t width, uint32_t height, int generate) {
@@ -51,7 +51,7 @@ static uint32_t mip_count(uint32_t width, uint32_t height, int generate) {
         return count;
     }
     while (width > 1 || height > 1) {
-        width = width > 1 ? width / 2u : 1u;
+        width  = width > 1 ? width / 2u : 1u;
         height = height > 1 ? height / 2u : 1u;
         ++count;
     }
@@ -69,7 +69,7 @@ static int mip_bytes(uint32_t width, uint32_t height, uint32_t *bytes) {
 
 static void rgba_mip(const uint8_t *rgba, int has_alpha, generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; at += 4u) {
-        mip->bgra[at] = rgba[at + 2u];
+        mip->bgra[at]      = rgba[at + 2u];
         mip->bgra[at + 1u] = rgba[at + 1u];
         mip->bgra[at + 2u] = rgba[at];
         mip->bgra[at + 3u] = has_alpha ? rgba[at + 3u] : 255u;
@@ -97,10 +97,10 @@ static void box_float_mip(const generated_mip *previous, generated_mip *next) {
         for (uint32_t y = 0; y < h; ++y) {
             for (uint32_t x = 0; x < w; ++x) {
                 const float *src = previous->filter_pixels + ((size_t)y * 2 * sw + x * 2) * 4 + c;
-                float value;
+                float        value;
                 if (sw == 1 || sh == 1) {
                     const uint32_t n = w * h, at = y * w + x;
-                    src = previous->filter_pixels + (size_t)at * 8 + c;
+                    src   = previous->filter_pixels + (size_t)at * 8 + c;
                     value = ((sw * sh) & 1) != 0
                         ? (1.0f / (float)(2 * n + 1)) * ((float)(n - at) * src[0] + (float)n * src[4] + (float)(1 + at) * src[8])
                         : 0.5f * (src[0] + src[4]);
@@ -109,19 +109,19 @@ static void box_float_mip(const generated_mip *previous, generated_mip *next) {
                 } else if ((sw & 1) != 0 && (sh & 1) != 0) {
                     const float wx[3] = { (float)(w - x), (float)w, (float)(1 + x) };
                     const float wy[3] = { (float)(h - y), (float)h, (float)(1 + y) };
-                    value = 0;
+                    value             = 0;
                     for (uint32_t dy = 0; dy < 3; ++dy) {
-                        const float *row = src + dy * sw * 4;
-                        value += wy[dy] * (wx[0] * row[0] + wx[1] * row[4] + wx[2] * row[8]);
+                        const float *row  = src + dy * sw * 4;
+                        value            += wy[dy] * (wx[0] * row[0] + wx[1] * row[4] + wx[2] * row[8]);
                     }
                     value *= 1.0f / (float)(sw * sh);
                 } else if ((sw & 1) != 0) {
-                    value = (float)(w - x) * (src[0] + src[sw * 4]);
+                    value  = (float)(w - x) * (src[0] + src[sw * 4]);
                     value += (float)w * (src[4] + src[sw * 4 + 4]);
                     value += (float)(1 + x) * (src[8] + src[sw * 4 + 8]);
                     value *= 1.0f / (float)(2 * sw);
                 } else {
-                    value = (float)(h - y) * (src[0] + src[4]);
+                    value  = (float)(h - y) * (src[0] + src[4]);
                     value += (float)h * (src[sw * 4] + src[sw * 4 + 4]);
                     value += (float)(1 + y) * (src[sw * 8] + src[sw * 8 + 4]);
                     value *= 1.0f / (float)(2 * sh);
@@ -133,16 +133,16 @@ static void box_float_mip(const generated_mip *previous, generated_mip *next) {
 }
 
 static float bessel_zero(float value) {
-    const float half = 0.5f * value;
-    float sum = 1.0f;
-    float power = 1.0f;
-    float delta = 1.0f;
-    int k = 0;
+    const float half  = 0.5f * value;
+    float       sum   = 1.0f;
+    float       power = 1.0f;
+    float       delta = 1.0f;
+    int         k     = 0;
     while (delta > sum * 1e-6f) {
         ++k;
         power *= half / (float)k;
-        delta = power * power;
-        sum += delta;
+        delta  = power * power;
+        sum   += delta;
     }
     return sum;
 }
@@ -155,8 +155,8 @@ static float sinc_value(float value) {
 }
 
 static float kaiser_value(float position) {
-    const float pi = 3.14159265358979323846f;
-    const float ratio = position / 3.0f;
+    const float pi     = 3.14159265358979323846f;
+    const float ratio  = position / 3.0f;
     const float inside = 1.0f - ratio * ratio;
     return inside < 0.0f
         ? 0.0f
@@ -181,15 +181,15 @@ static int kaiser_weights(
     uint32_t source_length,
     uint32_t destination_length,
     uint32_t destination,
-    int *left,
-    float weights[20]) {
-    const float scale = (float)destination_length / (float)source_length;
+    int     *left,
+    float    weights[20]) {
+    const float scale         = (float)destination_length / (float)source_length;
     const float inverse_scale = 1.0f / scale;
-    const float width = 3.0f * inverse_scale;
-    const int window = (int)ceilf(width * 2.0f) + 1;
-    const float center = (0.5f + (float)destination) * inverse_scale;
-    const int first = (int)floorf(center - width);
-    float total = 0.0f;
+    const float width         = 3.0f * inverse_scale;
+    const int   window        = (int)ceilf(width * 2.0f) + 1;
+    const float center        = (0.5f + (float)destination) * inverse_scale;
+    const int   first         = (int)floorf(center - width);
+    float       total         = 0.0f;
 
     for (int sample = 0; sample < window; ++sample) {
         double integrated = 0.0;
@@ -198,8 +198,8 @@ static int kaiser_weights(
                 ((float)(first + sample) - center + ((float)sub + 0.5f) / 32.0f) * scale;
             integrated += kaiser_value(position);
         }
-        weights[sample] = (float)(integrated / 32.0);
-        total += weights[sample];
+        weights[sample]  = (float)(integrated / 32.0);
+        total           += weights[sample];
     }
     for (int sample = 0; sample < window; ++sample) {
         weights[sample] /= total;
@@ -210,13 +210,13 @@ static int kaiser_weights(
 
 static float kaiser_sample_float(
     const float *source,
-    uint32_t source_length,
-    uint32_t destination_length,
-    uint32_t destination,
-    size_t stride,
-    int tiled) {
-    float weights[20];
-    int left;
+    uint32_t     source_length,
+    uint32_t     destination_length,
+    uint32_t     destination,
+    size_t       stride,
+    int          tiled) {
+    float     weights[20];
+    int       left;
     const int window = kaiser_weights(
         source_length, destination_length, destination, &left, weights);
     float result = 0.0f;
@@ -229,7 +229,7 @@ static float kaiser_sample_float(
 
 static int kaiser_mip(const generated_mip *previous, generated_mip *next, int tiled) {
     const size_t intermediate_count = (size_t)next->width * previous->height;
-    float *intermediate = edds_alloc(intermediate_count * sizeof *intermediate);
+    float       *intermediate       = edds_alloc(intermediate_count * sizeof *intermediate);
     if (intermediate == NULL) {
         return 0;
     }
@@ -250,10 +250,10 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next, int ti
         }
         for (uint32_t y = 0; y < next->height; ++y) {
             for (uint32_t x = 0; x < next->width; ++x) {
-                float value = previous->height == next->height
-                    ? intermediate[(size_t)y * next->width + x]
-                    : kaiser_sample_float(intermediate + x, previous->height, next->height, y,
-                          next->width, tiled);
+                float value                                                       = previous->height == next->height
+                                                                          ? intermediate[(size_t)y * next->width + x]
+                                                                          : kaiser_sample_float(intermediate + x, previous->height, next->height, y,
+                                                                                next->width, tiled);
                 next->filter_pixels[((size_t)y * next->width + x) * 4u + channel] = value;
             }
         }
@@ -264,26 +264,26 @@ static int kaiser_mip(const generated_mip *previous, generated_mip *next, int ti
 
 static void normalize_mip(generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; at += 4u) {
-        float red = mip->bgra[at + 2u] * (2.0f / 255.0f) - 1.0f;
-        float green = mip->bgra[at + 1u] * (2.0f / 255.0f) - 1.0f;
-        float blue = mip->bgra[at] * (2.0f / 255.0f) - 1.0f;
+        float       red    = mip->bgra[at + 2u] * (2.0f / 255.0f) - 1.0f;
+        float       green  = mip->bgra[at + 1u] * (2.0f / 255.0f) - 1.0f;
+        float       blue   = mip->bgra[at] * (2.0f / 255.0f) - 1.0f;
         const float length = sqrtf(red * red + green * green + blue * blue);
         if (length > 1e-8f) {
-            red /= length;
+            red   /= length;
             green /= length;
-            blue /= length;
+            blue  /= length;
         }
         /* DayZ's source normalizer truncates (unit + 1) * 128.5, saturated to a byte. */
         mip->bgra[at + 2u] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (red + 1.0f) * 128.5f));
         mip->bgra[at + 1u] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (green + 1.0f) * 128.5f));
-        mip->bgra[at] = (uint8_t)fminf(255.0f, fmaxf(0.0f, (blue + 1.0f) * 128.5f));
+        mip->bgra[at]      = (uint8_t)fminf(255.0f, fmaxf(0.0f, (blue + 1.0f) * 128.5f));
     }
 }
 
 static void normalize_filtered_mip(generated_mip *mip) {
     for (size_t at = 0; at < mip->bytes; at += 4u) {
-        float *p = mip->filter_pixels + at;
-        float r = p[2] * 2.0f - 1.0f, g = p[1] * 2.0f - 1.0f, b = p[0] * 2.0f - 1.0f;
+        float      *p = mip->filter_pixels + at;
+        float       r = p[2] * 2.0f - 1.0f, g = p[1] * 2.0f - 1.0f, b = p[0] * 2.0f - 1.0f;
         const float length = sqrtf(r * r + g * g + b * b);
         if (length > 0.0f) {
             r /= length;
@@ -309,8 +309,8 @@ static int write_lz4_length(uint8_t *output, size_t capacity, size_t *at, size_t
         if (*at >= capacity) {
             return 0;
         }
-        output[(*at)++] = 255;
-        length -= 255u;
+        output[(*at)++]  = 255;
+        length          -= 255u;
     }
     if (*at >= capacity) {
         return 0;
@@ -321,32 +321,32 @@ static int write_lz4_length(uint8_t *output, size_t capacity, size_t *at, size_t
 
 static int lz4_block(
     const uint8_t *input,
-    size_t size,
-    unsigned search_depth,
-    uint8_t *output,
-    size_t capacity,
-    size_t *written) {
-    int32_t *head = edds_alloc(65536u * sizeof *head);
-    int32_t *previous = edds_alloc((size == 0 ? 1u : size) * sizeof *previous);
-    size_t input_at = 0;
-    size_t anchor = 0;
-    size_t output_at = 0;
-    int ok = 0;
+    size_t         size,
+    unsigned       search_depth,
+    uint8_t       *output,
+    size_t         capacity,
+    size_t        *written) {
+    int32_t *head      = edds_alloc(65536u * sizeof *head);
+    int32_t *previous  = edds_alloc((size == 0 ? 1u : size) * sizeof *previous);
+    size_t   input_at  = 0;
+    size_t   anchor    = 0;
+    size_t   output_at = 0;
+    int      ok        = 0;
     if (head == NULL || previous == NULL) {
         goto done;
     }
     memset(head, 0xff, 65536u * sizeof *head);
     while (input_at + 12u <= size) {
-        const uint32_t hash = lz4_hash(input + input_at);
-        int32_t candidate = head[hash];
-        size_t best_length = 0;
-        size_t best_offset = 0;
-        unsigned searched = 0;
-        previous[input_at] = candidate;
-        head[hash] = (int32_t)input_at;
+        const uint32_t hash        = lz4_hash(input + input_at);
+        int32_t        candidate   = head[hash];
+        size_t         best_length = 0;
+        size_t         best_offset = 0;
+        unsigned       searched    = 0;
+        previous[input_at]         = candidate;
+        head[hash]                 = (int32_t)input_at;
         while (candidate >= 0 && searched++ < search_depth &&
             input_at - (size_t)candidate <= 65535u) {
-            size_t length = 0;
+            size_t       length  = 0;
             const size_t maximum = size - input_at - 5u;
             while (length < maximum && input[(size_t)candidate + length] == input[input_at + length]) {
                 ++length;
@@ -365,9 +365,9 @@ static int lz4_block(
             continue;
         }
         {
-            const size_t literals = input_at - anchor;
+            const size_t literals   = input_at - anchor;
             const size_t match_code = best_length - 4u;
-            const size_t token_at = output_at++;
+            const size_t token_at   = output_at++;
             if (token_at >= capacity) {
                 goto done;
             }
@@ -384,22 +384,22 @@ static int lz4_block(
             if (capacity - output_at < 2u) {
                 goto done;
             }
-            output[output_at++] = (uint8_t)best_offset;
-            output[output_at++] = (uint8_t)(best_offset >> 8);
-            output[token_at] |= (uint8_t)(match_code < 15u ? match_code : 15u);
+            output[output_at++]  = (uint8_t)best_offset;
+            output[output_at++]  = (uint8_t)(best_offset >> 8);
+            output[token_at]    |= (uint8_t)(match_code < 15u ? match_code : 15u);
             if (match_code >= 15u &&
                 !write_lz4_length(output, capacity, &output_at, match_code - 15u)) {
                 goto done;
             }
         }
         for (size_t index = 1; index < best_length && input_at + index + 4u <= size; ++index) {
-            const size_t position = input_at + index;
+            const size_t   position      = input_at + index;
             const uint32_t inserted_hash = lz4_hash(input + position);
-            previous[position] = head[inserted_hash];
-            head[inserted_hash] = (int32_t)position;
+            previous[position]           = head[inserted_hash];
+            head[inserted_hash]          = (int32_t)position;
         }
         input_at += best_length;
-        anchor = input_at;
+        anchor    = input_at;
     }
     {
         const size_t literals = size - anchor;
@@ -419,7 +419,7 @@ static int lz4_block(
         output_at += literals;
     }
     *written = output_at;
-    ok = 1;
+    ok       = 1;
 
 done:
     edds_free(head);
@@ -428,25 +428,25 @@ done:
 }
 
 static uint8_t *lz4_frame(
-    const uint8_t *input,
-    uint32_t size,
+    const uint8_t       *input,
+    uint32_t             size,
     edds_format_compress mode,
-    uint32_t *stored_bytes) {
+    uint32_t            *stored_bytes) {
     const uint32_t block_count = (size + 65535u) / 65536u;
-    const size_t capacity = 4u + (size_t)block_count * (4u + 16u) + size + size / 255u;
-    const unsigned depth = mode == EDDS_COMPRESS_FASTEST ? 1u : (mode == EDDS_COMPRESS_MEDIUM ? 16u : 64u);
-    uint8_t *frame = edds_alloc(capacity);
-    size_t output_at = 4;
-    uint32_t input_at = 0;
+    const size_t   capacity    = 4u + (size_t)block_count * (4u + 16u) + size + size / 255u;
+    const unsigned depth       = mode == EDDS_COMPRESS_FASTEST ? 1u : (mode == EDDS_COMPRESS_MEDIUM ? 16u : 64u);
+    uint8_t       *frame       = edds_alloc(capacity);
+    size_t         output_at   = 4;
+    uint32_t       input_at    = 0;
     if (frame == NULL) {
         return NULL;
     }
     edds_put_u32le(frame, size);
     for (uint32_t block = 0; block < block_count; ++block) {
-        const uint32_t block_bytes = size - input_at > 65536u ? 65536u : size - input_at;
-        const size_t descriptor_at = output_at;
-        size_t compressed_size = 0;
-        output_at += 4;
+        const uint32_t block_bytes      = size - input_at > 65536u ? 65536u : size - input_at;
+        const size_t   descriptor_at    = output_at;
+        size_t         compressed_size  = 0;
+        output_at                      += 4;
         if (!lz4_block(input + input_at, block_bytes, depth, frame + output_at,
                 capacity - output_at, &compressed_size) ||
             compressed_size > UINT32_MAX) {
@@ -455,7 +455,7 @@ static uint8_t *lz4_frame(
         }
         edds_put_u32le(frame + descriptor_at, (block + 1u == block_count ? 0x80000000u : 0u) | (uint32_t)compressed_size);
         output_at += compressed_size;
-        input_at += block_bytes;
+        input_at  += block_bytes;
     }
     if (output_at > UINT32_MAX) {
         edds_free(frame);
@@ -472,32 +472,32 @@ static void report(edds_progress_fn progress, void *context, double value) {
 }
 
 static edds_status prepare_storage(
-    generated_mip *mips,
-    uint32_t count,
+    generated_mip      *mips,
+    uint32_t            count,
     const edds_profile *profile,
-    edds_progress_fn progress,
-    void *progress_context,
-    edds_error *error) {
+    edds_progress_fn    progress,
+    void               *progress_context,
+    edds_error         *error) {
     for (uint32_t at = 0; at < count; ++at) {
         generated_mip *mip = &mips[at];
         /* Container compression is the long part of a conversion, so it moves the row per mip. */
         report(progress, progress_context, 0.45 + 0.45 * ((double)at / (double)count));
-        mip->container = EDDS_CONTAINER_COPY;
+        mip->container    = EDDS_CONTAINER_COPY;
         mip->stored_bytes = mip->payload_bytes;
-        mip->stored = mip->payload;
+        mip->stored       = mip->payload;
         if (profile->format_compress != EDDS_COMPRESS_COPY) {
             uint32_t compressed_bytes = 0;
-            uint8_t *compressed = lz4_frame(mip->payload, mip->payload_bytes,
-                profile->format_compress, &compressed_bytes);
+            uint8_t *compressed       = lz4_frame(mip->payload, mip->payload_bytes,
+                      profile->format_compress, &compressed_bytes);
             if (compressed == NULL) {
                 edds_fail(error, "allocation-failed", "Memory for LZ4 container compression could not be allocated.");
                 return EDDS_INTERNAL_FAILURE;
             }
             if ((uint64_t)compressed_bytes * 100u <=
                 (uint64_t)mip->payload_bytes * profile->compress_threshold) {
-                mip->container = EDDS_CONTAINER_LZ4;
+                mip->container    = EDDS_CONTAINER_LZ4;
                 mip->stored_bytes = compressed_bytes;
-                mip->stored = compressed;
+                mip->stored       = compressed;
             } else {
                 edds_free(compressed);
             }
@@ -515,9 +515,9 @@ static void free_mips(generated_mip *mips, uint32_t count) {
         edds_free(mips[at].bgra);
         edds_free(mips[at].filter_pixels);
         mips[at].filter_pixels = NULL;
-        mips[at].bgra = NULL;
-        mips[at].payload = NULL;
-        mips[at].stored = NULL;
+        mips[at].bgra          = NULL;
+        mips[at].payload       = NULL;
+        mips[at].stored        = NULL;
     }
 }
 
@@ -526,13 +526,13 @@ static void free_mips(generated_mip *mips, uint32_t count) {
  * and over these bytes, so `FormatCompress` cannot change a single decoded pixel of the result.
  */
 static edds_status encode_mips(
-    generated_mip *mips,
-    uint32_t count,
+    generated_mip    *mips,
+    uint32_t          count,
     edds_pixel_format format,
-    uint32_t quality,
+    uint32_t          quality,
     edds_cancelled_fn cancelled,
-    void *context,
-    edds_error *error) {
+    void             *context,
+    edds_error       *error) {
     for (uint32_t at = 0; at < count; ++at) {
         generated_mip *mip = &mips[at];
         mip->payload_bytes = edds_gpu_mip_bytes(format, mip->width, mip->height);
@@ -556,12 +556,12 @@ static edds_status encode_mips(
 
 static edds_status generate_chain(
     const edds_decoded_source *source,
-    const edds_profile *profile,
-    generated_mip *mips,
-    uint32_t *count,
-    edds_cancelled_fn cancelled,
-    void *context,
-    edds_error *error) {
+    const edds_profile        *profile,
+    generated_mip             *mips,
+    uint32_t                  *count,
+    edds_cancelled_fn          cancelled,
+    void                      *context,
+    edds_error                *error) {
     if (profile->contains_mips && source->supplied_mip_count != mip_count(source->width, source->height, 1)) {
         edds_fail(error, "unsupported-dds-mip-layout",
             "ContainsMips=true requires one complete largest-to-smallest DDS mip chain.");
@@ -577,9 +577,9 @@ static edds_status generate_chain(
         return EDDS_INVALID_INPUT;
     }
     const int float_filter = profile->generate_mips;
-    *count = complete_count;
+    *count                 = complete_count;
     memset(mips, 0, sizeof(*mips) * complete_count);
-    mips[0].width = source->width;
+    mips[0].width  = source->width;
     mips[0].height = source->height;
     for (uint32_t at = 0; at < complete_count; ++at) {
         if (cancelled != NULL && cancelled(context)) {
@@ -588,10 +588,10 @@ static edds_status generate_chain(
             return EDDS_CANCELLED;
         }
         if (profile->contains_mips) {
-            mips[at].width = source->supplied_mips[at].width;
+            mips[at].width  = source->supplied_mips[at].width;
             mips[at].height = source->supplied_mips[at].height;
         } else if (at > 0) {
-            mips[at].width = mips[at - 1u].width > 1 ? mips[at - 1u].width / 2u : 1u;
+            mips[at].width  = mips[at - 1u].width > 1 ? mips[at - 1u].width / 2u : 1u;
             mips[at].height = mips[at - 1u].height > 1 ? mips[at - 1u].height / 2u : 1u;
         }
         if (!mip_bytes(mips[at].width, mips[at].height, &mips[at].bytes)) {
@@ -668,14 +668,14 @@ static edds_status generate_chain(
 /** Resampling is in normalized float bytes, with truncation back to a byte. */
 static uint8_t terrain_sample(const generated_mip *source, float x, float y, uint32_t channel) {
     const uint32_t left = (uint32_t)x, top = (uint32_t)y;
-    const uint32_t right = left + 1u < source->width ? left + 1u : left;
+    const uint32_t right  = left + 1u < source->width ? left + 1u : left;
     const uint32_t bottom = top + 1u < source->height ? top + 1u : top;
-    const float fx = x - (float)left, fy = y - (float)top;
-    const float a = source->bgra[((size_t)top * source->width + left) * 4u + channel] * (1.0f / 255.0f);
-    const float b = source->bgra[((size_t)top * source->width + right) * 4u + channel] * (1.0f / 255.0f);
-    const float c = source->bgra[((size_t)bottom * source->width + left) * 4u + channel] * (1.0f / 255.0f);
-    const float d = source->bgra[((size_t)bottom * source->width + right) * 4u + channel] * (1.0f / 255.0f);
-    const float value = ((a * (1.0f - fx) + b * fx) * (1.0f - fy) +
+    const float    fx = x - (float)left, fy = y - (float)top;
+    const float    a     = source->bgra[((size_t)top * source->width + left) * 4u + channel] * (1.0f / 255.0f);
+    const float    b     = source->bgra[((size_t)top * source->width + right) * 4u + channel] * (1.0f / 255.0f);
+    const float    c     = source->bgra[((size_t)bottom * source->width + left) * 4u + channel] * (1.0f / 255.0f);
+    const float    d     = source->bgra[((size_t)bottom * source->width + right) * 4u + channel] * (1.0f / 255.0f);
+    const float    value = ((a * (1.0f - fx) + b * fx) * (1.0f - fy) +
                             (c * (1.0f - fx) + d * fx) * fy) *
         255.0f;
     return (uint8_t)fminf(255.0f, fmaxf(0.0f, value));
@@ -710,11 +710,11 @@ static edds_status generate_mips(
         edds_fail(error, "remove-mips-out-of-range", "RemoveMips would remove the complete mip chain.");
         return EDDS_INVALID_INPUT;
     }
-    edds_decoded_source reduced = { 0 };
-    generated_mip original = { 0 };
-    edds_profile chain_profile = *profile;
-    reduced.width = source->width >> profile->remove_mips;
-    reduced.height = source->height >> profile->remove_mips;
+    edds_decoded_source reduced       = { 0 };
+    generated_mip       original      = { 0 };
+    edds_profile        chain_profile = *profile;
+    reduced.width                     = source->width >> profile->remove_mips;
+    reduced.height                    = source->height >> profile->remove_mips;
     if (reduced.width < 8) {
         reduced.width = 8;
     }
@@ -722,13 +722,13 @@ static edds_status generate_mips(
         reduced.height = 8;
     }
     reduced.has_alpha = source->has_alpha;
-    original.width = source->width;
-    original.height = source->height;
+    original.width    = source->width;
+    original.height   = source->height;
     if (!mip_bytes(original.width, original.height, &original.bytes)) {
         return EDDS_INVALID_INPUT;
     }
     original.bgra = edds_alloc(original.bytes);
-    reduced.rgba = edds_alloc((size_t)reduced.width * reduced.height * 4u);
+    reduced.rgba  = edds_alloc((size_t)reduced.width * reduced.height * 4u);
     if (original.bgra == NULL || reduced.rgba == NULL) {
         edds_free(original.bgra);
         edds_free(reduced.rgba);
@@ -751,7 +751,7 @@ static edds_status generate_mips(
             if (ambient) {
                 const uint32_t sx = source->width / reduced.width, sy = source->height / reduced.height;
                 bgra[0] = bgra[1] = bgra[2] = 255;
-                bgra[3] = 0;
+                bgra[3]                     = 0;
                 for (uint32_t dy = 0; dy < sy; ++dy) {
                     for (uint32_t dx = 0; dx < sx; ++dx) {
                         const uint8_t *p = original.bgra +
@@ -772,7 +772,7 @@ static edds_status generate_mips(
                                                                        : x;
                 const uint32_t iy = y < 3 ? 3 : y >= reduced.height - 3 ? reduced.height - 4
                                                                         : y;
-                float px, py;
+                float          px, py;
                 if (profile->swizzling == EDDS_SWIZZLE_TERRAIN_LAYER) {
                     px = (float)ix * ((float)(source->width - 1) / (float)(reduced.width - 1));
                     py = (float)iy * ((float)(source->height - 1) / (float)(reduced.height - 1));
@@ -795,16 +795,16 @@ static edds_status generate_mips(
                 }
             }
             uint8_t *p = reduced.rgba + ((size_t)y * reduced.width + x) * 4u;
-            p[0] = bgra[2];
-            p[1] = bgra[1];
-            p[2] = bgra[0];
-            p[3] = bgra[3];
+            p[0]       = bgra[2];
+            p[1]       = bgra[1];
+            p[2]       = bgra[0];
+            p[3]       = bgra[3];
         }
     }
     edds_free(original.bgra);
     chain_profile.remove_mips = 0;
-    chain_profile.normalize = 0;
-    const edds_status status = generate_chain(&reduced, &chain_profile, mips, count, cancelled, context, error);
+    chain_profile.normalize   = 0;
+    const edds_status status  = generate_chain(&reduced, &chain_profile, mips, count, cancelled, context, error);
     edds_free(reduced.rgba);
     return status;
 }
@@ -823,12 +823,12 @@ static void free_source(edds_decoded_source *source) {
 /** The DXGI format a DX10 header names, or 0 for a format that has a legacy descriptor. */
 static uint32_t dxgi_format_of(edds_pixel_format format) {
     switch (format) {
-        case EDDS_PIXEL_R8: return DXGI_FORMAT_R8_UNORM;
+        case EDDS_PIXEL_R8:  return DXGI_FORMAT_R8_UNORM;
         case EDDS_PIXEL_RG8: return DXGI_FORMAT_R8G8_UNORM;
         case EDDS_PIXEL_BC4: return DXGI_FORMAT_BC4_UNORM;
         case EDDS_PIXEL_BC5: return DXGI_FORMAT_BC5_UNORM;
         case EDDS_PIXEL_BC7: return DXGI_FORMAT_BC7_UNORM;
-        default: return 0;
+        default:             return 0;
     }
 }
 
@@ -838,14 +838,14 @@ static uint32_t dxgi_format_of(edds_pixel_format format) {
  * keep their legacy descriptors, and everything else names its DXGI format through a DX10 header.
  */
 static uint32_t dds_header(
-    uint8_t header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES],
+    uint8_t           header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES],
     edds_pixel_format format,
-    uint32_t width,
-    uint32_t height,
-    uint32_t count,
-    uint32_t top_mip_bytes) {
+    uint32_t          width,
+    uint32_t          height,
+    uint32_t          count,
+    uint32_t          top_mip_bytes) {
     const uint32_t block = edds_gpu_block_bytes(format);
-    const uint32_t dxgi = dxgi_format_of(format);
+    const uint32_t dxgi  = dxgi_format_of(format);
     const uint32_t flags = DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT |
         DDSD_MIPMAPCOUNT | (block != 0 ? DDSD_LINEARSIZE : DDSD_PITCH);
     memset(header, 0, DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES);
@@ -885,13 +885,13 @@ static uint32_t dds_header(
 }
 
 static edds_status write_edds(
-    FILE *output,
-    edds_pixel_format format,
+    FILE                *output,
+    edds_pixel_format    format,
     const generated_mip *mips,
-    uint32_t count,
-    edds_error *error) {
-    uint8_t header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
-    uint8_t descriptor[8];
+    uint32_t             count,
+    edds_error          *error) {
+    uint8_t        header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
+    uint8_t        descriptor[8];
     const uint32_t header_bytes =
         dds_header(header, format, mips[0].width, mips[0].height, count, mips[0].payload_bytes);
     if (fwrite(header, 1, header_bytes, output) != header_bytes) {
@@ -923,18 +923,18 @@ failure:
 
 void edds_default_profile(edds_profile *profile) {
     if (profile != NULL) {
-        profile->format_compress = EDDS_COMPRESS_FASTEST;
+        profile->format_compress    = EDDS_COMPRESS_FASTEST;
         profile->compress_threshold = 80;
-        profile->conversion = EDDS_CONVERSION_NONE;
-        profile->swizzling = EDDS_SWIZZLE_NONE;
+        profile->conversion         = EDDS_CONVERSION_NONE;
+        profile->swizzling          = EDDS_SWIZZLE_NONE;
         profile->conversion_quality = EDDS_QUALITY_SCALE;
-        profile->remove_mips = 0;
-        profile->contains_mips = 0;
-        profile->generate_mips = 1;
-        profile->normalize = 0;
-        profile->mipmap_function = EDDS_MIPMAP_FILTER;
-        profile->mipmap_filter = EDDS_FILTER_BOX;
-        profile->tiled_texture = 1;
+        profile->remove_mips        = 0;
+        profile->contains_mips      = 0;
+        profile->generate_mips      = 1;
+        profile->normalize          = 0;
+        profile->mipmap_function    = EDDS_MIPMAP_FILTER;
+        profile->mipmap_filter      = EDDS_FILTER_BOX;
+        profile->tiled_texture      = 1;
     }
 }
 
@@ -1054,12 +1054,12 @@ edds_pixel_format edds_profile_pixel_format(const edds_profile *profile, edds_so
             return alpha == EDDS_ALPHA_ABSENT ? EDDS_PIXEL_BGRX8 : EDDS_PIXEL_BGRA8;
         case EDDS_CONVERSION_DXT:
             return alpha == EDDS_ALPHA_USED ? EDDS_PIXEL_DXT5 : EDDS_PIXEL_DXT1;
-        case EDDS_CONVERSION_RED: return EDDS_PIXEL_R8;
-        case EDDS_CONVERSION_RED_HQ: return EDDS_PIXEL_BC4;
-        case EDDS_CONVERSION_RED_GREEN: return EDDS_PIXEL_RG8;
+        case EDDS_CONVERSION_RED:          return EDDS_PIXEL_R8;
+        case EDDS_CONVERSION_RED_HQ:       return EDDS_PIXEL_BC4;
+        case EDDS_CONVERSION_RED_GREEN:    return EDDS_PIXEL_RG8;
         case EDDS_CONVERSION_RED_GREEN_HQ: return EDDS_PIXEL_BC5;
-        case EDDS_CONVERSION_COLOR_HQ: return EDDS_PIXEL_BC7;
-        default: return EDDS_PIXEL_UNKNOWN;
+        case EDDS_CONVERSION_COLOR_HQ:     return EDDS_PIXEL_BC7;
+        default:                           return EDDS_PIXEL_UNKNOWN;
     }
 }
 
@@ -1090,29 +1090,29 @@ static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
 /** Everything after decoding: one source image, whatever produced it, becomes one EDDS. */
 static edds_status encode_image(
     const edds_decoded_source *image,
-    FILE *output,
-    const edds_profile *profile,
-    edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_progress_fn progress,
-    void *progress_context,
-    edds_error *error) {
-    generated_mip mips[EDDS_MAX_MIPS];
+    FILE                      *output,
+    const edds_profile        *profile,
+    edds_cancelled_fn          cancelled,
+    void                      *cancel_context,
+    edds_progress_fn           progress,
+    void                      *progress_context,
+    edds_error                *error) {
+    generated_mip           mips[EDDS_MAX_MIPS];
     const edds_pixel_format format = edds_profile_pixel_format(profile, source_alpha_of(image));
-    uint32_t count = 0;
-    edds_status status;
+    uint32_t                count  = 0;
+    edds_status             status;
     report(progress, progress_context, 0.15);
     status = generate_mips(image, profile, mips, &count, cancelled, cancel_context, error);
     if (status == EDDS_OK) {
         /* Byte-domain swizzling follows filtering/normalization, before pixel encoding. */
         for (uint32_t level = 0; level < count; ++level) {
             for (size_t at = 0; at < mips[level].bytes; at += 4u) {
-                uint8_t *p = mips[level].bgra + at;
+                uint8_t      *p   = mips[level].bgra + at;
                 const uint8_t red = p[2], alpha = p[3];
                 switch (profile->swizzling) {
                     case EDDS_SWIZZLE_ALPHA_TO_RGB:
                         p[0] = p[1] = p[2] = alpha;
-                        p[3] = 255;
+                        p[3]               = 255;
                         break;
                     case EDDS_SWIZZLE_SMDI_TO_GS:
                         p[2] = p[0];
@@ -1124,14 +1124,14 @@ static edds_status encode_image(
                             break;
                         }
                         p[0] = p[2] = 0;
-                        p[3] = (uint8_t)(255u - red);
+                        p[3]        = (uint8_t)(255u - red);
                         break;
                     case EDDS_SWIZZLE_NORMAL_GA:
                         if (profile->conversion != EDDS_CONVERSION_NONE && profile->conversion != EDDS_CONVERSION_DXT) {
                             break;
                         }
                         p[0] = p[2] = 0;
-                        p[3] = red;
+                        p[3]        = red;
                         break;
                     case EDDS_SWIZZLE_TERRAIN_NORMAL:
                         if (profile->conversion != EDDS_CONVERSION_NONE && profile->conversion != EDDS_CONVERSION_DXT) {
@@ -1162,17 +1162,17 @@ static edds_status encode_image(
 }
 
 edds_status edds_encode_rgba(
-    const uint8_t *rgba,
-    uint32_t width,
-    uint32_t height,
-    int has_alpha,
-    FILE *output,
+    const uint8_t      *rgba,
+    uint32_t            width,
+    uint32_t            height,
+    int                 has_alpha,
+    FILE               *output,
     const edds_profile *profile,
-    edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_error *error) {
+    edds_cancelled_fn   cancelled,
+    void               *cancel_context,
+    edds_error         *error) {
     edds_decoded_source image = { 0 };
-    edds_status status;
+    edds_status         status;
     if (rgba == NULL || output == NULL || profile == NULL) {
         edds_fail(error, "invalid-api-argument", "The pixels, output, and profile are required.");
         return EDDS_INTERNAL_FAILURE;
@@ -1195,26 +1195,26 @@ edds_status edds_encode_rgba(
         edds_fail(error, "cancelled", "The conversion was cancelled.");
         return EDDS_CANCELLED;
     }
-    image.width = width;
-    image.height = height;
+    image.width     = width;
+    image.height    = height;
     image.has_alpha = has_alpha != 0;
     /* Read only: the pipeline copies the top level before it changes a sample. */
-    image.rgba = (uint8_t *)(uintptr_t)rgba;
+    image.rgba      = (uint8_t *)(uintptr_t)rgba;
     return encode_image(&image, output, profile, cancelled, cancel_context, NULL, NULL, error);
 }
 
 edds_status edds_convert(
-    FILE *source,
-    edds_source_format source_format,
-    FILE *output,
+    FILE               *source,
+    edds_source_format  source_format,
+    FILE               *output,
     const edds_profile *profile,
-    edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_progress_fn progress,
-    void *progress_context,
-    edds_error *error) {
+    edds_cancelled_fn   cancelled,
+    void               *cancel_context,
+    edds_progress_fn    progress,
+    void               *progress_context,
+    edds_error         *error) {
     edds_decoded_source image = { 0 };
-    edds_status status;
+    edds_status         status;
     if (source == NULL || output == NULL || profile == NULL) {
         edds_fail(error, "invalid-api-argument", "The source, output, and profile are required.");
         return EDDS_INTERNAL_FAILURE;
@@ -1240,11 +1240,11 @@ edds_status edds_convert(
      */
     status = EDDS_UNSUPPORTED_FORMAT;
     switch (source_format) {
-        case EDDS_SOURCE_PNG: status = edds_decode_png(source, &image, error); break;
-        case EDDS_SOURCE_TGA: status = edds_decode_tga(source, &image, error); break;
-        case EDDS_SOURCE_JPG: status = edds_decode_jpeg(source, &image, error); break;
+        case EDDS_SOURCE_PNG:  status = edds_decode_png(source, &image, error); break;
+        case EDDS_SOURCE_TGA:  status = edds_decode_tga(source, &image, error); break;
+        case EDDS_SOURCE_JPG:  status = edds_decode_jpeg(source, &image, error); break;
         case EDDS_SOURCE_TIFF: status = edds_decode_tiff(source, &image, error); break;
-        case EDDS_SOURCE_DDS: status = edds_decode_dds(source, &image, error); break;
+        case EDDS_SOURCE_DDS:  status = edds_decode_dds(source, &image, error); break;
     }
     if (status != EDDS_OK) {
         return status;

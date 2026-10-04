@@ -39,7 +39,7 @@ typedef struct pair_subtable {
     uint32_t first_size;
     uint32_t record_size;
     /* Byte offset of XAdvance inside the first value record, or -1 when it carries none. */
-    int x_advance;
+    int      x_advance;
     uint32_t set_count;
     uint32_t class_first;
     uint32_t class_second;
@@ -49,17 +49,17 @@ typedef struct pair_subtable {
 
 typedef struct gpos_reader {
     const uint8_t *data;
-    uint32_t length;
+    uint32_t       length;
     pair_subtable *subtables;
-    size_t count;
-    size_t capacity;
+    size_t         count;
+    size_t         capacity;
 } gpos_reader;
 
 /** Index of a glyph in a Coverage table, or -1. */
 static int32_t coverage_index(const gpos_reader *gpos, uint32_t coverage, uint32_t glyph) {
-    const uint8_t *table = gpos->data + coverage;
+    const uint8_t *table  = gpos->data + coverage;
     const unsigned format = u16(table);
-    uint32_t low = 0, high = u16(table + 2);
+    uint32_t       low = 0, high = u16(table + 2);
     while (low < high) {
         const uint32_t middle = low + (high - low) / 2u;
         if (format == 1u) {
@@ -112,7 +112,7 @@ static uint32_t class_of(const gpos_reader *gpos, uint32_t class_def, uint32_t g
         uint32_t low = 0, high = u16(table + 2);
         while (low < high) {
             const uint32_t middle = low + (high - low) / 2u;
-            const uint8_t *range = table + 4u + 6u * middle;
+            const uint8_t *range  = table + 4u + 6u * middle;
             if (glyph < u16(range)) {
                 high = middle;
             } else if (glyph > u16(range + 2)) {
@@ -145,20 +145,20 @@ static int valid_class_def(const gpos_reader *gpos, uint32_t class_def) {
 
 static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_t base, edds_error *error) {
     pair_subtable subtable;
-    unsigned first_format, second_format;
+    unsigned      first_format, second_format;
     memset(&subtable, 0, sizeof subtable);
     if (!inside(gpos->length, base, 10u)) {
         return malformed(error, "a PairPos subtable is truncated");
     }
-    subtable.lookup = lookup;
-    subtable.base = base;
-    subtable.format = u16(gpos->data + base);
-    subtable.coverage = base + u16(gpos->data + base + 2);
-    first_format = u16(gpos->data + base + 4) & 0xFFu;
-    second_format = u16(gpos->data + base + 6) & 0xFFu;
-    subtable.first_size = 2u * bits_set(first_format);
+    subtable.lookup      = lookup;
+    subtable.base        = base;
+    subtable.format      = u16(gpos->data + base);
+    subtable.coverage    = base + u16(gpos->data + base + 2);
+    first_format         = u16(gpos->data + base + 4) & 0xFFu;
+    second_format        = u16(gpos->data + base + 6) & 0xFFu;
+    subtable.first_size  = 2u * bits_set(first_format);
     subtable.record_size = subtable.first_size + 2u * bits_set(second_format);
-    subtable.x_advance = (first_format & 0x0004u) != 0 ? (int)(2u * bits_set(first_format & 0x0003u)) : -1;
+    subtable.x_advance   = (first_format & 0x0004u) != 0 ? (int)(2u * bits_set(first_format & 0x0003u)) : -1;
     if (!valid_coverage(gpos, subtable.coverage)) {
         return malformed(error, "a PairPos coverage");
     }
@@ -178,9 +178,9 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
         if (!inside(gpos->length, base, 16u)) {
             return malformed(error, "a class PairPos subtable is truncated");
         }
-        subtable.class_first = u16(gpos->data + base + 8) == 0 ? 0u : base + u16(gpos->data + base + 8);
-        subtable.class_second = u16(gpos->data + base + 10) == 0 ? 0u : base + u16(gpos->data + base + 10);
-        subtable.class_first_count = u16(gpos->data + base + 12);
+        subtable.class_first        = u16(gpos->data + base + 8) == 0 ? 0u : base + u16(gpos->data + base + 8);
+        subtable.class_second       = u16(gpos->data + base + 10) == 0 ? 0u : base + u16(gpos->data + base + 10);
+        subtable.class_first_count  = u16(gpos->data + base + 12);
         subtable.class_second_count = u16(gpos->data + base + 14);
         if (!valid_class_def(gpos, subtable.class_first) || !valid_class_def(gpos, subtable.class_second) ||
             !inside(gpos->length, base + 16u, (uint64_t)subtable.class_first_count * subtable.class_second_count * subtable.record_size)) {
@@ -197,14 +197,14 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
         return EDDS_UNSUPPORTED_FORMAT;
     }
     if (gpos->count == gpos->capacity) {
-        const size_t capacity = gpos->capacity == 0 ? 16u : gpos->capacity * 2u;
-        pair_subtable *grown = realloc(gpos->subtables, capacity * sizeof *grown);
+        const size_t   capacity = gpos->capacity == 0 ? 16u : gpos->capacity * 2u;
+        pair_subtable *grown    = realloc(gpos->subtables, capacity * sizeof *grown);
         if (grown == NULL) {
             font_fail(error, "allocation-failed", "Memory for the kerning lookups could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
         gpos->subtables = grown;
-        gpos->capacity = capacity;
+        gpos->capacity  = capacity;
     }
     gpos->subtables[gpos->count++] = subtable;
     return EDDS_OK;
@@ -217,10 +217,10 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
  */
 static edds_status mark_script_lookups(
     const gpos_reader *gpos,
-    uint32_t script,
-    uint32_t features,
-    uint8_t *marked,
-    edds_error *error) {
+    uint32_t           script,
+    uint32_t           features,
+    uint8_t           *marked,
+    edds_error        *error) {
     uint32_t system, indices, feature_count;
     if (!inside(gpos->length, script, 4u)) {
         return malformed(error, "a script table");
@@ -246,7 +246,7 @@ static edds_status mark_script_lookups(
     for (uint32_t index = 0; index <= indices; ++index) {
         /* The required feature, when there is one, applies like any listed one. */
         const uint32_t feature = index == indices ? u16(gpos->data + system + 2) : u16(gpos->data + system + 6u + 2u * index);
-        uint32_t table, lookups;
+        uint32_t       table, lookups;
         if (feature == 0xFFFFu && index == indices) {
             continue;
         }
@@ -272,15 +272,15 @@ static edds_status mark_script_lookups(
 }
 
 static edds_status read_gpos(gpos_reader *gpos, edds_error *error) {
-    uint32_t scripts, features, lookups, script_count, lookup_count;
-    uint8_t *marked;
+    uint32_t    scripts, features, lookups, script_count, lookup_count;
+    uint8_t    *marked;
     edds_status status = EDDS_OK;
     if (!inside(gpos->length, 0, 10u) || u16(gpos->data) != 1u) {
         return malformed(error, "the GPOS header");
     }
-    scripts = u16(gpos->data + 4);
+    scripts  = u16(gpos->data + 4);
     features = u16(gpos->data + 6);
-    lookups = u16(gpos->data + 8);
+    lookups  = u16(gpos->data + 8);
     if (!inside(gpos->length, scripts, 2u) || !inside(gpos->length, lookups, 2u)) {
         return malformed(error, "the GPOS header");
     }
@@ -313,7 +313,7 @@ static edds_status read_gpos(gpos_reader *gpos, edds_error *error) {
             status = malformed(error, "a lookup table");
             break;
         }
-        type = u16(gpos->data + lookup);
+        type           = u16(gpos->data + lookup);
         subtable_count = u16(gpos->data + lookup + 4);
         if (!inside(gpos->length, lookup + 6u, 2u * (uint64_t)subtable_count)) {
             status = malformed(error, "a lookup table");
@@ -352,7 +352,7 @@ static int pair_value(const gpos_reader *gpos, const pair_subtable *subtable, in
         if ((uint32_t)covered >= subtable->set_count) {
             return 0;
         }
-        set = subtable->base + u16(gpos->data + subtable->base + 10u + 2u * (uint32_t)covered);
+        set  = subtable->base + u16(gpos->data + subtable->base + 10u + 2u * (uint32_t)covered);
         high = u16(gpos->data + set);
         while (low < high) {
             const uint32_t middle = low + (high - low) / 2u;
@@ -368,7 +368,7 @@ static int pair_value(const gpos_reader *gpos, const pair_subtable *subtable, in
         }
         return 0;
     } else {
-        const uint32_t row = class_of(gpos, subtable->class_first, first);
+        const uint32_t row    = class_of(gpos, subtable->class_first, first);
         const uint32_t column = class_of(gpos, subtable->class_second, second);
         const uint8_t *record;
         if (row >= subtable->class_first_count || column >= subtable->class_second_count) {
@@ -387,8 +387,8 @@ typedef struct kern_entry {
     uint32_t left;
     uint32_t right;
     uint32_t order;
-    int32_t value;
-    int replace;
+    int32_t  value;
+    int      replace;
 } kern_entry;
 
 static int entry_order(const void *a, const void *b) {
@@ -430,18 +430,18 @@ static size_t first_slot(const glyph_slot *slots, size_t count, uint32_t glyph) 
 }
 
 static edds_status read_kern(
-    const uint8_t *table,
-    uint32_t length,
+    const uint8_t    *table,
+    uint32_t          length,
     const glyph_slot *slots,
-    size_t slot_count,
-    kern_entry **entries,
-    size_t *entry_count,
-    edds_error *error) {
+    size_t            slot_count,
+    kern_entry      **entries,
+    size_t           *entry_count,
+    edds_error       *error) {
     const int apple = length >= 8u && u32(table) == 0x00010000u;
-    uint32_t tables, at;
-    size_t capacity = 0;
-    *entries = NULL;
-    *entry_count = 0;
+    uint32_t  tables, at;
+    size_t    capacity = 0;
+    *entries           = NULL;
+    *entry_count       = 0;
     if (length < 4u) {
         return malformed(error, "the kern header");
     }
@@ -449,25 +449,25 @@ static edds_status read_kern(
         return malformed(error, "an unknown kern version");
     }
     tables = apple ? u32(table + 4) : u16(table + 2);
-    at = apple ? 8u : 4u;
+    at     = apple ? 8u : 4u;
     for (uint32_t index = 0; index < tables; ++index) {
         uint32_t header = apple ? 8u : 6u, size, format, pairs = 0;
-        int usable, replace;
+        int      usable, replace;
         if (!inside(length, at, header)) {
             return malformed(error, "a kern subtable header");
         }
         if (apple) {
             const unsigned coverage = u16(table + at + 4);
-            size = u32(table + at);
-            format = coverage & 0xFFu;
-            usable = (coverage & 0xE000u) == 0;
-            replace = 0;
+            size                    = u32(table + at);
+            format                  = coverage & 0xFFu;
+            usable                  = (coverage & 0xE000u) == 0;
+            replace                 = 0;
         } else {
             const unsigned coverage = u16(table + at + 4);
-            size = u16(table + at + 2);
-            format = coverage >> 8;
-            usable = (coverage & 0x0007u) == 0x0001u;
-            replace = (coverage & 0x0008u) != 0;
+            size                    = u16(table + at + 2);
+            format                  = coverage >> 8;
+            usable                  = (coverage & 0x0007u) == 0x0001u;
+            replace                 = (coverage & 0x0008u) != 0;
         }
         if (format == 0u) {
             if (!inside(length, at + header, 8u)) {
@@ -475,7 +475,7 @@ static edds_status read_kern(
             }
             pairs = u16(table + at + header);
             /* A large format 0 subtable overflows its 16-bit length; its pair count is authoritative. */
-            size = header + 8u + 6u * pairs;
+            size  = header + 8u + 6u * pairs;
             if (!inside(length, at, size)) {
                 return malformed(error, "a kern pair list");
             }
@@ -487,8 +487,8 @@ static edds_status read_kern(
             const uint8_t *pair = table + at + header + 8u;
             for (uint32_t number = 0; number < pairs; ++number, pair += 6) {
                 const uint32_t left_glyph = u16(pair), right_glyph = u16(pair + 2);
-                const size_t first_left = first_slot(slots, slot_count, left_glyph);
-                const size_t first_right = first_slot(slots, slot_count, right_glyph);
+                const size_t   first_left  = first_slot(slots, slot_count, left_glyph);
+                const size_t   first_right = first_slot(slots, slot_count, right_glyph);
                 for (size_t left = first_left; left < slot_count && slots[left].glyph == left_glyph; ++left) {
                     for (size_t right = first_right; right < slot_count && slots[right].glyph == right_glyph; ++right) {
                         if (*entry_count == capacity) {
@@ -497,17 +497,17 @@ static edds_status read_kern(
                                 return too_many_pairs(error);
                             }
                             capacity = capacity == 0 ? 256u : capacity * 2u;
-                            grown = realloc(*entries, capacity * sizeof *grown);
+                            grown    = realloc(*entries, capacity * sizeof *grown);
                             if (grown == NULL) {
                                 font_fail(error, "allocation-failed", "Memory for the kern pairs could not be allocated.");
                                 return EDDS_INTERNAL_FAILURE;
                             }
                             *entries = grown;
                         }
-                        (*entries)[*entry_count].left = slots[left].index;
-                        (*entries)[*entry_count].right = slots[right].index;
-                        (*entries)[*entry_count].order = index;
-                        (*entries)[*entry_count].value = s16(pair + 4);
+                        (*entries)[*entry_count].left    = slots[left].index;
+                        (*entries)[*entry_count].right   = slots[right].index;
+                        (*entries)[*entry_count].order   = index;
+                        (*entries)[*entry_count].value   = s16(pair + 4);
                         (*entries)[*entry_count].replace = replace;
                         ++*entry_count;
                     }
@@ -523,8 +523,8 @@ static edds_status read_kern(
 
 typedef struct pair_list {
     font_pair *pairs;
-    size_t count;
-    size_t capacity;
+    size_t     count;
+    size_t     capacity;
 } pair_list;
 
 static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, double units, double scale, edds_error *error) {
@@ -538,14 +538,14 @@ static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, dou
             return too_many_pairs(error);
         }
         list->capacity = list->capacity == 0 ? 256u : list->capacity * 2u;
-        grown = realloc(list->pairs, list->capacity * sizeof *grown);
+        grown          = realloc(list->pairs, list->capacity * sizeof *grown);
         if (grown == NULL) {
             font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
         list->pairs = grown;
     }
-    list->pairs[list->count].left = (uint16_t)left;
+    list->pairs[list->count].left  = (uint16_t)left;
     list->pairs[list->count].right = (uint16_t)right;
     list->pairs[list->count].value = (int32_t)rounded;
     ++list->count;
@@ -554,22 +554,22 @@ static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, dou
 
 static edds_status gpos_pairs(
     const font_face *face,
-    const uint32_t *codes,
-    const uint32_t *glyphs,
-    size_t count,
-    double scale,
-    pair_list *list,
-    edds_error *error) {
-    gpos_reader gpos = { face->data + face->gpos.offset, face->gpos.length, NULL, 0, 0 };
-    int64_t *totals = NULL;
+    const uint32_t  *codes,
+    const uint32_t  *glyphs,
+    size_t           count,
+    double           scale,
+    pair_list       *list,
+    edds_error      *error) {
+    gpos_reader gpos   = { face->data + face->gpos.offset, face->gpos.length, NULL, 0, 0 };
+    int64_t    *totals = NULL;
     /* `done[right] == stamp`: the pair was settled by this lookup. A new stamp per lookup clears
      * the whole row at once, where a memset would cost the set's size for every lookup. */
-    uint32_t *done = NULL;
-    uint32_t stamp = 0;
+    uint32_t   *done   = NULL;
+    uint32_t    stamp  = 0;
     edds_status status = read_gpos(&gpos, error);
     if (status == EDDS_OK && gpos.count != 0) {
         totals = malloc(count * sizeof *totals);
-        done = calloc(count == 0 ? 1u : count, sizeof *done);
+        done   = calloc(count == 0 ? 1u : count, sizeof *done);
         if (totals == NULL || done == NULL) {
             font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
             status = EDDS_INTERNAL_FAILURE;
@@ -589,7 +589,7 @@ static edds_status gpos_pairs(
             /* Within one lookup the first subtable that applies to a pair is the only one. */
             for (; at < gpos.count && gpos.subtables[at].lookup == lookup; ++at) {
                 const pair_subtable *subtable = &gpos.subtables[at];
-                const int32_t covered = coverage_index(&gpos, subtable->coverage, glyphs[left]);
+                const int32_t        covered  = coverage_index(&gpos, subtable->coverage, glyphs[left]);
                 if (covered < 0) {
                     continue;
                 }
@@ -600,7 +600,7 @@ static edds_status gpos_pairs(
                     }
                     if (pair_value(&gpos, subtable, covered, glyphs[left], glyphs[right], &value)) {
                         totals[right] += value;
-                        done[right] = stamp;
+                        done[right]    = stamp;
                     }
                 }
             }
@@ -619,15 +619,15 @@ static edds_status gpos_pairs(
 
 static edds_status kern_pairs(
     const font_face *face,
-    const uint32_t *codes,
-    const uint32_t *glyphs,
-    size_t count,
-    double scale,
-    pair_list *list,
-    edds_error *error) {
-    glyph_slot *slots = malloc((count == 0 ? 1u : count) * sizeof *slots);
-    kern_entry *entries = NULL;
-    size_t slot_count = 0, entry_count = 0;
+    const uint32_t  *codes,
+    const uint32_t  *glyphs,
+    size_t           count,
+    double           scale,
+    pair_list       *list,
+    edds_error      *error) {
+    glyph_slot *slots      = malloc((count == 0 ? 1u : count) * sizeof *slots);
+    kern_entry *entries    = NULL;
+    size_t      slot_count = 0, entry_count = 0;
     edds_status status;
     if (slots == NULL) {
         font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
@@ -647,7 +647,7 @@ static edds_status kern_pairs(
     if (status == EDDS_OK) {
         qsort(entries, entry_count, sizeof *entries, entry_order);
         for (size_t at = 0; at < entry_count && status == EDDS_OK;) {
-            int64_t total = 0;
+            int64_t      total = 0;
             const size_t first = at;
             for (; at < entry_count && entries[at].left == entries[first].left &&
                 entries[at].right == entries[first].right;
@@ -664,17 +664,17 @@ static edds_status kern_pairs(
 
 edds_status font_face_kerning(
     const font_face *face,
-    const uint32_t *codes,
-    const uint32_t *glyphs,
-    size_t count,
-    double scale,
-    font_pair **pairs,
-    size_t *pair_count,
-    edds_error *error) {
-    pair_list list = { NULL, 0, 0 };
+    const uint32_t  *codes,
+    const uint32_t  *glyphs,
+    size_t           count,
+    double           scale,
+    font_pair      **pairs,
+    size_t          *pair_count,
+    edds_error      *error) {
+    pair_list   list   = { NULL, 0, 0 };
     edds_status status = EDDS_OK;
-    *pairs = NULL;
-    *pair_count = 0;
+    *pairs             = NULL;
+    *pair_count        = 0;
     /* Codes ascend, and both readers visit them in that order, so the keys already ascend. */
     if (face->gpos.present) {
         status = gpos_pairs(face, codes, glyphs, count, scale, &list, error);
@@ -685,7 +685,7 @@ edds_status font_face_kerning(
         free(list.pairs);
         return status;
     }
-    *pairs = list.pairs;
+    *pairs      = list.pairs;
     *pair_count = list.count;
     return EDDS_OK;
 }

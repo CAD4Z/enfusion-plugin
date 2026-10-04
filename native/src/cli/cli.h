@@ -17,7 +17,7 @@
 #include <process.h>
 #include <wchar.h>
 typedef wchar_t cli_char;
-#define CLI_ENTRY wmain
+#define CLI_ENTRY  wmain
 #define cli_remove _wremove
 #define cli_rename _wrename
 #define cli_strlen wcslen
@@ -27,7 +27,7 @@ typedef wchar_t cli_char;
 #include <sys/stat.h>
 #include <unistd.h>
 typedef char cli_char;
-#define CLI_ENTRY main
+#define CLI_ENTRY  main
 #define cli_remove remove
 #define cli_rename rename
 #define cli_strlen strlen
@@ -82,7 +82,7 @@ int path_exists(const cli_char *path);
 
 /** A file as a caller saw it: whether it was there, its size, and its time in milliseconds. */
 typedef struct file_revision {
-    int exists;
+    int      exists;
     uint64_t size;
     uint64_t modified;
 } file_revision;
@@ -99,10 +99,10 @@ int same_revision(const file_revision *left, const file_revision *right);
  */
 typedef struct cli_artifact {
     const cli_char *target;
-    cli_char *temporary;
-    cli_char *backup;
-    int had_previous;
-    int committed;
+    cli_char       *temporary;
+    cli_char       *backup;
+    int             had_previous;
+    int             committed;
 } cli_artifact;
 
 FILE *create_temporary(cli_artifact *artifact, const char *kind);
@@ -120,7 +120,7 @@ void cleanup_artifact(cli_artifact *artifact, int success);
 typedef struct cli_transaction {
     cli_char *pending;
     cli_char *committed;
-    int started;
+    int       started;
 } cli_transaction;
 
 int begin_transaction(cli_transaction *transaction, const cli_char *output);

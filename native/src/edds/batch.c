@@ -101,12 +101,12 @@ static int string_value(json_scan *scan, char *output, size_t capacity) {
             switch (value) {
                 case '"':
                 case '\\':
-                case '/': break;
-                case 'b': value = '\b'; break;
-                case 'f': value = '\f'; break;
-                case 'n': value = '\n'; break;
-                case 'r': value = '\r'; break;
-                case 't': value = '\t'; break;
+                case '/':  break;
+                case 'b':  value = '\b'; break;
+                case 'f':  value = '\f'; break;
+                case 'n':  value = '\n'; break;
+                case 'r':  value = '\r'; break;
+                case 't':  value = '\t'; break;
                 case 'u':
                     if (scan->end - scan->at < 4) {
                         return 0;
@@ -138,8 +138,8 @@ static int string_value(json_scan *scan, char *output, size_t capacity) {
 }
 
 static int unsigned_value(json_scan *scan, uint32_t *result) {
-    uint64_t value = 0;
-    int digits = 0;
+    uint64_t value  = 0;
+    int      digits = 0;
     space(scan);
     while (scan->at < scan->end && *scan->at >= '0' && *scan->at <= '9') {
         value = value * 10u + (unsigned)(*scan->at++ - '0');
@@ -157,10 +157,10 @@ static int unsigned_value(json_scan *scan, uint32_t *result) {
 
 /** `ConversionQuality` as the protocol sends it: `1`, `0`, or up to three decimals, in thousandths. */
 static int quality_value(json_scan *scan, uint32_t *result) {
-    uint32_t whole = 0;
+    uint32_t whole    = 0;
     uint32_t fraction = 0;
-    unsigned digits = 0;
-    int seen = 0;
+    unsigned digits   = 0;
+    int      seen     = 0;
     space(scan);
     while (scan->at < scan->end && *scan->at >= '0' && *scan->at <= '9') {
         whole = whole * 10u + (uint32_t)(*scan->at++ - '0');
@@ -196,7 +196,7 @@ static int quality_value(json_scan *scan, uint32_t *result) {
 static int skip_value(json_scan *scan, unsigned depth);
 
 static int skip_string(json_scan *scan) {
-    char scratch[2];
+    char        scratch[2];
     const char *start = scan->at;
     if (string_value(scan, scratch, sizeof scratch)) {
         return 1;
@@ -314,9 +314,9 @@ static int skip_value(json_scan *scan, unsigned depth) {
 }
 
 static int discover(const char *line, size_t size, uint32_t *version, char kind[32]) {
-    json_scan scan = { line, line + size };
-    int have_version = 0;
-    int have_kind = 0;
+    json_scan scan         = { line, line + size };
+    int       have_version = 0;
+    int       have_kind    = 0;
     if (!take(&scan, '{')) {
         return 0;
     }
@@ -365,20 +365,20 @@ static int bool_value(json_scan *scan, int *result) {
 }
 
 static int profile_value(
-    json_scan *scan,
+    json_scan    *scan,
     edds_profile *profile,
-    edds_status *profile_status,
-    edds_error *profile_error) {
+    edds_status  *profile_status,
+    edds_error   *profile_error) {
     unsigned fields = 0;
     if (!take(scan, '{')) {
         return 0;
     }
     edds_default_profile(profile);
     for (;;) {
-        char key[64];
-        char value[64];
+        char     key[64];
+        char     value[64];
         uint32_t number;
-        int boolean;
+        int      boolean;
         unsigned bit;
         if (!string_value(scan, key, sizeof key) || !take(scan, ':')) {
             return 0;
@@ -438,7 +438,7 @@ static int profile_value(
             if (!string_value(scan, value, sizeof value)) {
                 return 0;
             }
-            capability = edds_swizzle_of_workbench_name(value);
+            capability         = edds_swizzle_of_workbench_name(value);
             profile->swizzling = capability == NULL ? EDDS_SWIZZLE_UNKNOWN : capability->swizzling;
         } else if (strcmp(key, "ContainsMips") == 0) {
             bit = 1u << 7;
@@ -525,7 +525,7 @@ static int identity_value(json_scan *scan, edds_batch_job *job) {
         return 0;
     }
     for (;;) {
-        char key[64];
+        char     key[64];
         unsigned bit;
         if (!string_value(scan, key, sizeof key) || !take(scan, ':')) {
             return 0;
@@ -572,20 +572,20 @@ static int expected_value(json_scan *scan, edds_batch_job *job) {
     }
     job->has_expected = 1;
     for (;;) {
-        char key[64];
-        char *output;
+        char     key[64];
+        char    *output;
         unsigned bit;
         if (!string_value(scan, key, sizeof key) || !take(scan, ':')) {
             return 0;
         }
         if (strcmp(key, "source") == 0) {
-            bit = 1u;
+            bit    = 1u;
             output = job->expected_source;
         } else if (strcmp(key, "output") == 0) {
-            bit = 2u;
+            bit    = 2u;
             output = job->expected_output;
         } else if (strcmp(key, "metadata") == 0) {
-            bit = 4u;
+            bit    = 4u;
             output = job->expected_metadata;
         } else {
             return 0;
@@ -605,14 +605,14 @@ static int expected_value(json_scan *scan, edds_batch_job *job) {
 }
 
 static int simple_record(const char *line, size_t size, const char *expected_kind, uint32_t *count) {
-    json_scan scan = { line, line + size };
-    unsigned fields = 0;
+    json_scan scan   = { line, line + size };
+    unsigned  fields = 0;
     if (!take(&scan, '{')) {
         return 0;
     }
     for (;;) {
-        char key[64];
-        char value[32];
+        char     key[64];
+        char     value[32];
         uint32_t number;
         unsigned bit;
         if (!string_value(&scan, key, sizeof key) || !take(&scan, ':')) {
@@ -652,20 +652,20 @@ static int simple_record(const char *line, size_t size, const char *expected_kin
 }
 
 static int job_record(
-    const char *line,
-    size_t size,
+    const char     *line,
+    size_t          size,
     edds_batch_job *job,
-    edds_status *profile_status,
-    edds_error *profile_error) {
-    json_scan scan = { line, line + size };
-    unsigned fields = 0;
+    edds_status    *profile_status,
+    edds_error     *profile_error) {
+    json_scan scan   = { line, line + size };
+    unsigned  fields = 0;
     memset(job, 0, sizeof *job);
     if (!take(&scan, '{')) {
         return 0;
     }
     for (;;) {
-        char key[64];
-        char value[32];
+        char     key[64];
+        char     value[32];
         uint32_t number;
         unsigned bit;
         if (!string_value(&scan, key, sizeof key) || !take(&scan, ':')) {
@@ -746,12 +746,12 @@ static int job_record(
 }
 
 edds_status edds_batch_parse_line(
-    const char *line,
-    size_t size,
+    const char        *line,
+    size_t             size,
     edds_batch_record *record,
-    edds_error *error) {
-    uint32_t version = 0;
-    char kind[32] = { 0 };
+    edds_error        *error) {
+    uint32_t    version        = 0;
+    char        kind[32]       = { 0 };
     edds_status profile_status = EDDS_OK;
     if (line == NULL || record == NULL || error == NULL || size == 0u ||
         size > EDDS_BATCH_MAX_LINE_BYTES) {
@@ -803,25 +803,25 @@ void edds_batch_reader_init(edds_batch_reader *reader) {
 static edds_batch_line finish_line(edds_batch_reader *reader, size_t *size) {
     if (reader->overflowed) {
         reader->overflowed = 0;
-        reader->size = 0;
-        *size = 0;
+        reader->size       = 0;
+        *size              = 0;
         return EDDS_BATCH_LINE_OVERFLOW;
     }
     if (reader->size > 0u && reader->line[reader->size - 1u] == '\r') {
         --reader->size;
     }
     reader->line[reader->size] = '\0';
-    *size = reader->size;
-    reader->size = 0;
+    *size                      = reader->size;
+    reader->size               = 0;
     return EDDS_BATCH_LINE_READY;
 }
 
 edds_batch_line edds_batch_reader_push(
     edds_batch_reader *reader,
-    const char *data,
-    size_t data_size,
-    size_t *consumed,
-    size_t *size) {
+    const char        *data,
+    size_t             data_size,
+    size_t            *consumed,
+    size_t            *size) {
     size_t at = 0;
     if (reader == NULL || consumed == NULL || size == NULL || (data == NULL && data_size != 0u)) {
         if (consumed != NULL) {
@@ -842,7 +842,7 @@ edds_batch_line edds_batch_reader_push(
         if (reader->size >= EDDS_BATCH_MAX_LINE_BYTES) {
             /* The rest of an oversized line is swallowed, never framed into half a record. */
             reader->overflowed = 1;
-            reader->size = 0;
+            reader->size       = 0;
             continue;
         }
         if (!reader->overflowed) {
@@ -860,7 +860,7 @@ edds_batch_line edds_batch_reader_finish(edds_batch_reader *reader, size_t *size
     *size = 0;
     if (reader->overflowed) {
         reader->overflowed = 0;
-        reader->size = 0;
+        reader->size       = 0;
         return EDDS_BATCH_LINE_OVERFLOW;
     }
     if (reader->size == 0u) {

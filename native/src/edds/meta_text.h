@@ -23,13 +23,13 @@ typedef enum meta_token_kind {
 
 typedef struct meta_token {
     meta_token_kind kind;
-    char text[EDDS_METADATA_PATH_BYTES];
+    char            text[EDDS_METADATA_PATH_BYTES];
 } meta_token;
 
 typedef struct meta_scanner {
     const char *source;
-    size_t size;
-    size_t at;
+    size_t      size;
+    size_t      at;
 } meta_scanner;
 
 /** The whole file as one NUL-terminated allocation, released with `edds_free`. */
@@ -51,8 +51,8 @@ int meta_valid_guid(const char *text);
  */
 int meta_parse_name(
     const char *value,
-    char guid[EDDS_METADATA_GUID_BYTES],
-    char *name,
-    size_t name_capacity);
+    char        guid[EDDS_METADATA_GUID_BYTES],
+    char       *name,
+    size_t      name_capacity);
 
 #endif

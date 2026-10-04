@@ -25,7 +25,9 @@ static const edds_conversion_capability capabilities[] = {
     { EDDS_CONVERSION_HDR, "HDRCompression", "hdr-compression", 0, 1 }
 };
 
-enum { CAPABILITY_COUNT = sizeof capabilities / sizeof capabilities[0] };
+enum {
+    CAPABILITY_COUNT = sizeof capabilities / sizeof capabilities[0]
+};
 
 const edds_conversion_capability *edds_conversions(size_t *count) {
     if (count != NULL) {

@@ -14,10 +14,10 @@ static void fail(edds_error *error, const char *code, const char *message) {
 }
 
 int meta_read_text(FILE *input, char **source, size_t *size, edds_error *error) {
-    long length;
+    long  length;
     char *allocation;
     *source = NULL;
-    *size = 0;
+    *size   = 0;
     if (fseek(input, 0, SEEK_END) != 0 || (length = ftell(input)) < 0 ||
         fseek(input, 0, SEEK_SET) != 0 || (uint64_t)length > EDDS_MAX_FILE_BYTES) {
         fail(error, "metadata-size-limit", "The metadata could not be measured within the input limit.");
@@ -34,8 +34,8 @@ int meta_read_text(FILE *input, char **source, size_t *size, edds_error *error) 
         return 0;
     }
     allocation[length] = '\0';
-    *source = allocation;
-    *size = (size_t)length;
+    *source            = allocation;
+    *size              = (size_t)length;
     return 1;
 }
 
@@ -70,7 +70,7 @@ static int skip_space(meta_scanner *scan) {
 
 meta_token meta_next_token(meta_scanner *scan) {
     meta_token result;
-    size_t length = 0;
+    size_t     length = 0;
     memset(&result, 0, sizeof result);
     if (!skip_space(scan)) {
         result.kind = META_TOKEN_INVALID;
@@ -172,10 +172,10 @@ int meta_valid_guid(const char *text) {
 
 int meta_parse_name(
     const char *value,
-    char guid[EDDS_METADATA_GUID_BYTES],
-    char *name,
-    size_t name_capacity) {
-    char digits[EDDS_METADATA_GUID_BYTES];
+    char        guid[EDDS_METADATA_GUID_BYTES],
+    char       *name,
+    size_t      name_capacity) {
+    char        digits[EDDS_METADATA_GUID_BYTES];
     const char *close;
     if (value[0] != '{' || (close = strchr(value, '}')) == NULL || close - value != 17 || close[1] == '\0') {
         return 0;

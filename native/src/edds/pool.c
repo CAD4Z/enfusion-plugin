@@ -7,30 +7,30 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-typedef HANDLE pool_thread;
-typedef CRITICAL_SECTION pool_mutex;
+typedef HANDLE             pool_thread;
+typedef CRITICAL_SECTION   pool_mutex;
 typedef CONDITION_VARIABLE pool_signal;
 #else
 #include <pthread.h>
 #include <unistd.h>
-typedef pthread_t pool_thread;
+typedef pthread_t       pool_thread;
 typedef pthread_mutex_t pool_mutex;
-typedef pthread_cond_t pool_signal;
+typedef pthread_cond_t  pool_signal;
 #endif
 
 struct edds_pool {
-    pool_mutex lock;
-    pool_mutex output;
-    pool_signal budget_freed;
-    uint64_t budget;
-    uint64_t held;
+    pool_mutex        lock;
+    pool_mutex        output;
+    pool_signal       budget_freed;
+    uint64_t          budget;
+    uint64_t          held;
     /* Set while an image that needs the whole budget is waiting for the pool to empty. */
-    int draining;
-    uint32_t count;
-    uint32_t next;
-    uint32_t workers;
+    int               draining;
+    uint32_t          count;
+    uint32_t          next;
+    uint32_t          workers;
     edds_pool_task_fn task;
-    void *context;
+    void             *context;
 };
 
 static void mutex_create(pool_mutex *mutex) {
@@ -111,7 +111,7 @@ static uint32_t hardware_workers(void) {
 uint32_t edds_pool_worker_count(uint32_t count) {
     /* A diagnostic and test override only. It is not a protocol field and never a profile one. */
     const char *requested = getenv("EDDS_CONVERT_WORKERS");
-    uint32_t workers = hardware_workers();
+    uint32_t    workers   = hardware_workers();
     if (requested != NULL) {
         const unsigned long asked = strtoul(requested, NULL, 10);
         if (asked >= 1ul && asked <= (unsigned long)EDDS_POOL_MAX_WORKERS) {
@@ -129,7 +129,7 @@ uint32_t edds_pool_worker_count(uint32_t count) {
 
 uint64_t edds_pool_charge_of(uint64_t source_bytes) {
     /* A cheap initial hint. Only the enforced allocation quota can bound compressed sources. */
-    const uint64_t base = (uint64_t)4 * 1024 * 1024;
+    const uint64_t base      = (uint64_t)4 * 1024 * 1024;
     const uint64_t expansion = 8u;
     if (source_bytes > (UINT64_MAX - base) / expansion) {
         return UINT64_MAX;
@@ -168,7 +168,7 @@ void edds_pool_reserve(edds_pool *pool, uint64_t bytes) {
         while (pool->held != 0u) {
             signal_wait(&pool->budget_freed, &pool->lock);
         }
-        pool->held = charged;
+        pool->held     = charged;
         pool->draining = 0;
         signal_wake_all(&pool->budget_freed);
         mutex_unlock(&pool->lock);
@@ -187,7 +187,7 @@ void edds_pool_release(edds_pool *pool, uint64_t bytes) {
         return;
     }
     mutex_lock(&pool->lock);
-    charged = bytes > pool->budget ? pool->budget : bytes;
+    charged    = bytes > pool->budget ? pool->budget : bytes;
     pool->held = charged > pool->held ? 0u : pool->held - charged;
     signal_wake_all(&pool->budget_freed);
     mutex_unlock(&pool->lock);
@@ -202,7 +202,7 @@ edds_status edds_pool_execute(
     }
     for (;;) {
         edds_memory_result result;
-        uint64_t next;
+        uint64_t           next;
         edds_pool_reserve(pool, charge);
         if (cancelled != NULL && cancelled(cancel_context)) {
             edds_pool_release(pool, charge);
@@ -286,14 +286,14 @@ static void thread_join(pool_thread thread) {
 }
 
 edds_status edds_pool_run(
-    uint32_t count,
-    uint64_t memory_budget,
+    uint32_t          count,
+    uint64_t          memory_budget,
     edds_pool_task_fn task,
-    void *context,
-    edds_error *error) {
-    edds_pool pool;
+    void             *context,
+    edds_error       *error) {
+    edds_pool   pool;
     pool_thread threads[EDDS_POOL_MAX_WORKERS];
-    uint32_t started = 0;
+    uint32_t    started = 0;
     if (task == NULL || error == NULL) {
         return EDDS_INTERNAL_FAILURE;
     }
@@ -302,9 +302,9 @@ edds_status edds_pool_run(
     }
 
     memset(&pool, 0, sizeof pool);
-    pool.budget = memory_budget == 0u ? EDDS_POOL_MEMORY_BUDGET : memory_budget;
-    pool.count = count;
-    pool.task = task;
+    pool.budget  = memory_budget == 0u ? EDDS_POOL_MEMORY_BUDGET : memory_budget;
+    pool.count   = count;
+    pool.task    = task;
     pool.context = context;
     pool.workers = edds_pool_worker_count(count);
     mutex_create(&pool.lock);

@@ -9,20 +9,20 @@
 extern "C" {
 #endif
 
-#define EDDS_MAX_FILE_BYTES ((uint64_t)1024 * 1024 * 1024)
-#define EDDS_MAX_DIMENSION 32768u
-#define EDDS_MAX_MIPS 32u
-#define EDDS_MAX_PREVIEW_BYTES ((uint32_t)64 * 1024 * 1024)
-#define EDDS_MAX_LZ4_BLOCKS 1024u
+#define EDDS_MAX_FILE_BYTES       ((uint64_t)1024 * 1024 * 1024)
+#define EDDS_MAX_DIMENSION        32768u
+#define EDDS_MAX_MIPS             32u
+#define EDDS_MAX_PREVIEW_BYTES    ((uint32_t)64 * 1024 * 1024)
+#define EDDS_MAX_LZ4_BLOCKS       1024u
 #define EDDS_MAX_LZ4_STORED_BLOCK ((uint32_t)1024 * 1024)
 
 typedef enum edds_status {
-    EDDS_OK = 0,
+    EDDS_OK                 = 0,
     EDDS_INVALID_INVOCATION = 2,
-    EDDS_INVALID_INPUT = 3,
+    EDDS_INVALID_INPUT      = 3,
     EDDS_UNSUPPORTED_FORMAT = 4,
-    EDDS_CANCELLED = 5,
-    EDDS_INTERNAL_FAILURE = 6
+    EDDS_CANCELLED          = 5,
+    EDDS_INTERNAL_FAILURE   = 6
 } edds_status;
 
 typedef enum edds_container {
@@ -66,9 +66,9 @@ typedef enum edds_source_format {
  */
 typedef struct edds_source_capability {
     edds_source_format format;
-    const char *extension;
-    const char *wire_name;
-    const char *resource_class;
+    const char        *extension;
+    const char        *wire_name;
+    const char        *resource_class;
 } edds_source_capability;
 
 const edds_source_capability *edds_source_capabilities(size_t *count);
@@ -111,10 +111,10 @@ typedef enum edds_conversion {
  */
 typedef struct edds_conversion_capability {
     edds_conversion conversion;
-    const char *workbench_name;
-    const char *wire_name;
-    int supported;
-    int uses_quality;
+    const char     *workbench_name;
+    const char     *wire_name;
+    int             supported;
+    int             uses_quality;
 } edds_conversion_capability;
 
 const edds_conversion_capability *edds_conversions(size_t *count);
@@ -139,9 +139,9 @@ typedef enum edds_swizzling {
 /** Exact Workbench names and stable CLI spellings; no filename inference. */
 typedef struct edds_swizzle_capability {
     edds_swizzling swizzling;
-    const char *workbench_name;
-    const char *wire_name;
-    int writes_alpha;
+    const char    *workbench_name;
+    const char    *wire_name;
+    int            writes_alpha;
 } edds_swizzle_capability;
 
 const edds_swizzle_capability *edds_swizzles(size_t *count);
@@ -163,30 +163,30 @@ typedef enum edds_mipmap_filter {
 /** The exact supported Workbench slice. Values outside it are refused, never substituted. */
 typedef struct edds_profile {
     edds_format_compress format_compress;
-    uint32_t compress_threshold;
-    edds_conversion conversion;
-    edds_swizzling swizzling;
+    uint32_t             compress_threshold;
+    edds_conversion      conversion;
+    edds_swizzling       swizzling;
     /** Thousandths of one, so 1000 is Workbench's default `ConversionQuality 1`. */
-    uint32_t conversion_quality;
+    uint32_t             conversion_quality;
     /** Number of the largest completed levels removed after generation or supplied-mip decode. */
-    uint32_t remove_mips;
-    int contains_mips;
-    int generate_mips;
-    int normalize;
+    uint32_t             remove_mips;
+    int                  contains_mips;
+    int                  generate_mips;
+    int                  normalize;
     edds_mipmap_function mipmap_function;
-    edds_mipmap_filter mipmap_filter;
-    int tiled_texture;
+    edds_mipmap_filter   mipmap_filter;
+    int                  tiled_texture;
 } edds_profile;
 
 #define EDDS_METADATA_GUID_BYTES 17u
 #define EDDS_METADATA_PATH_BYTES 1024u
 
 typedef struct edds_metadata {
-    char guid[EDDS_METADATA_GUID_BYTES];
-    char name[EDDS_METADATA_PATH_BYTES];
-    char source_file[EDDS_METADATA_PATH_BYTES];
+    char               guid[EDDS_METADATA_GUID_BYTES];
+    char               name[EDDS_METADATA_PATH_BYTES];
+    char               source_file[EDDS_METADATA_PATH_BYTES];
     edds_source_format source_format;
-    edds_profile profile;
+    edds_profile       profile;
 } edds_metadata;
 
 typedef struct edds_error {
@@ -195,40 +195,40 @@ typedef struct edds_error {
 } edds_error;
 
 typedef struct edds_mip {
-    uint32_t level;
-    uint32_t width;
-    uint32_t height;
+    uint32_t       level;
+    uint32_t       width;
+    uint32_t       height;
     edds_container container;
-    uint32_t stored_bytes;
-    uint32_t decoded_bytes;
-    uint32_t block_count;
-    uint64_t data_offset;
+    uint32_t       stored_bytes;
+    uint32_t       decoded_bytes;
+    uint32_t       block_count;
+    uint64_t       data_offset;
 } edds_mip;
 
 typedef struct edds_info {
-    uint32_t width;
-    uint32_t height;
-    uint32_t mip_count;
-    uint32_t header_bytes;
-    uint32_t flags;
-    uint32_t pitch_or_linear_size;
-    uint32_t depth;
-    uint32_t pixel_format_flags;
-    char four_cc[5];
-    uint32_t rgb_bit_count;
-    uint32_t r_mask;
-    uint32_t g_mask;
-    uint32_t b_mask;
-    uint32_t a_mask;
-    uint32_t caps;
-    uint32_t caps2;
-    uint32_t dxgi_format;
-    uint32_t resource_dimension;
-    uint32_t array_size;
-    uint32_t misc_flag;
-    int preview_supported;
+    uint32_t          width;
+    uint32_t          height;
+    uint32_t          mip_count;
+    uint32_t          header_bytes;
+    uint32_t          flags;
+    uint32_t          pitch_or_linear_size;
+    uint32_t          depth;
+    uint32_t          pixel_format_flags;
+    char              four_cc[5];
+    uint32_t          rgb_bit_count;
+    uint32_t          r_mask;
+    uint32_t          g_mask;
+    uint32_t          b_mask;
+    uint32_t          a_mask;
+    uint32_t          caps;
+    uint32_t          caps2;
+    uint32_t          dxgi_format;
+    uint32_t          resource_dimension;
+    uint32_t          array_size;
+    uint32_t          misc_flag;
+    int               preview_supported;
     edds_pixel_format pixel_format;
-    edds_mip mips[EDDS_MAX_MIPS];
+    edds_mip          mips[EDDS_MAX_MIPS];
 } edds_info;
 
 typedef int (*edds_cancelled_fn)(void *context);
@@ -240,21 +240,21 @@ typedef int (*edds_cancelled_fn)(void *context);
 typedef void (*edds_progress_fn)(void *context, double progress);
 
 edds_status edds_inspect(
-    FILE *input,
-    edds_info *info,
+    FILE             *input,
+    edds_info        *info,
     edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_error *error);
+    void             *cancel_context,
+    edds_error       *error);
 
 edds_status edds_preview(
-    FILE *input,
-    const edds_info *info,
-    uint32_t level,
+    FILE             *input,
+    const edds_info  *info,
+    uint32_t          level,
     edds_cancelled_fn cancelled,
-    void *cancel_context,
-    uint8_t **rgba,
-    size_t *rgba_size,
-    edds_error *error);
+    void             *cancel_context,
+    uint8_t         **rgba,
+    size_t           *rgba_size,
+    edds_error       *error);
 
 void edds_default_profile(edds_profile *profile);
 
@@ -272,15 +272,15 @@ typedef enum edds_source_alpha {
 edds_pixel_format edds_profile_pixel_format(const edds_profile *profile, edds_source_alpha alpha);
 
 edds_status edds_convert(
-    FILE *source,
-    edds_source_format source_format,
-    FILE *output,
+    FILE               *source,
+    edds_source_format  source_format,
+    FILE               *output,
     const edds_profile *profile,
-    edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_progress_fn progress,
-    void *progress_context,
-    edds_error *error);
+    edds_cancelled_fn   cancelled,
+    void               *cancel_context,
+    edds_progress_fn    progress,
+    void               *progress_context,
+    edds_error         *error);
 
 /**
  * Encodes one top-to-bottom RGBA8 image that already exists in memory — a generated atlas — through
@@ -288,15 +288,15 @@ edds_status edds_convert(
  * `has_alpha` is what the image declares, exactly as a decoder would report it for a file.
  */
 edds_status edds_encode_rgba(
-    const uint8_t *rgba,
-    uint32_t width,
-    uint32_t height,
-    int has_alpha,
-    FILE *output,
+    const uint8_t      *rgba,
+    uint32_t            width,
+    uint32_t            height,
+    int                 has_alpha,
+    FILE               *output,
     const edds_profile *profile,
-    edds_cancelled_fn cancelled,
-    void *cancel_context,
-    edds_error *error);
+    edds_cancelled_fn   cancelled,
+    void               *cancel_context,
+    edds_error         *error);
 
 edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error);
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error);

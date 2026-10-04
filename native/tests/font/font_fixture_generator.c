@@ -31,9 +31,9 @@ static size_t utf8_of(uint32_t code, char out[4]) {
 }
 
 static int write_file(const char *folder, const char *name, const void *data, size_t size) {
-    char path[4096];
+    char  path[4096];
     FILE *file;
-    int ok;
+    int   ok;
     if (snprintf(path, sizeof path, "%s/%s", folder, name) >= (int)sizeof path) {
         return 0;
     }
@@ -53,7 +53,7 @@ static int write_file(const char *folder, const char *name, const void *data, si
 
 static int write_font(const char *folder, const char *name, font_fixture_variant variant) {
     test_bytes font = font_fixture(variant);
-    const int ok = font.data != NULL && write_file(folder, name, font.data, font.size);
+    const int  ok   = font.data != NULL && write_file(folder, name, font.data, font.size);
     fixture_free(font);
     return ok;
 }
@@ -64,9 +64,9 @@ static int write_font(const char *folder, const char *name, font_fixture_variant
  */
 static int write_charset(const char *folder) {
     const uint32_t *codes = NULL;
-    const size_t count = font_fixture_codes(FONT_FIXTURE_GPOS, &codes);
-    char text[1024];
-    size_t size = 0;
+    const size_t    count = font_fixture_codes(FONT_FIXTURE_GPOS, &codes);
+    char            text[1024];
+    size_t          size = 0;
     for (size_t at = 0; at < count; ++at) {
         if (codes[at] == 0x0020u || codes[at] == 0x00A0u) {
             continue;
@@ -80,18 +80,18 @@ static int write_charset(const char *folder) {
     for (size_t at = 0; at < sizeof absent / sizeof absent[0]; ++at) {
         size += utf8_of(absent[at], text + size);
     }
-    text[size++] = '\r';
-    text[size++] = '\n';
+    text[size++]  = '\r';
+    text[size++]  = '\n';
     /* No-break space is a character a text can hold, so it is a member, not a separator. */
-    size += utf8_of(0x00A0u, text + size);
-    text[size++] = '\n';
+    size         += utf8_of(0x00A0u, text + size);
+    text[size++]  = '\n';
     return write_file(folder, "fixture.charset.txt", text, size);
 }
 
 static int write_crowded_charset(const char *folder) {
-    char *text = malloc((size_t)FONT_FIXTURE_CROWDED_COUNT * 3u);
+    char  *text = malloc((size_t)FONT_FIXTURE_CROWDED_COUNT * 3u);
     size_t size = 0;
-    int ok;
+    int    ok;
     if (text == NULL) {
         return 0;
     }

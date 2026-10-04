@@ -1,8 +1,24 @@
-# The C style of the native executable, kept by clang-format 19 rather than by memory.
+# The C style of the native executable. clang-format 20 or newer keeps the layout; the rest is by
+# hand.
 #
-# Every if, else, for, while and do has braces, and every body sits on lines of its own. Line
-# breaks are otherwise the author's (ColumnLimit 0): a continuation is indented once, and a long
-# call is not reflowed to a column.
+# Layout, kept by clang-format: every if, else, for, while and do has braces, and every body sits
+# on lines of its own. Lines that follow one another line up in columns: the names of
+# declarations, the = of assignments (a += among them too), the values of #defines, the statements
+# of short case labels and the comments that end lines. A blank line starts a new group. Line
+# breaks are the author's (ColumnLimit 0): a continuation is indented once, and nothing is
+# reflowed, so a table laid out in rows keeps its rows and a long string stays one literal.
+#
+# By hand, because no tool checks them:
+# - Lines stop at 100 columns. A call that does not fit breaks after its leading arguments; a
+#   condition that does not fit puts each operand of its && or || on a line of its own, and so
+#   does a chain of ?: on each of its conditions.
+# - Blank lines between the steps of a function: after the declarations, around every if, for,
+#   while, do and switch, and before the final return. A long declaration list is split into
+#   groups by what they hold, each under a comment that says it. A group is what lines up, so a
+#   gap that one long name opens in its neighbours is closed by splitting the group, not by
+#   giving up the columns.
+# - A comment over every function, saying what it does and what the caller gets back, and one over
+#   every step whose purpose the code does not say by itself. English only.
 BasedOnStyle: LLVM
 Language: Cpp
 IndentWidth: 4
@@ -16,12 +32,33 @@ AllowShortLoopsOnASingleLine: false
 AllowShortBlocksOnASingleLine: Never
 AllowShortFunctionsOnASingleLine: None
 AllowShortCaseLabelsOnASingleLine: true
-AllowShortEnumsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
 IndentCaseLabels: true
 AlignAfterOpenBracket: DontAlign
 AlignOperands: DontAlign
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
+  AlignCompound: true
+  PadOperators: true
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
+  AlignFunctionDeclarations: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
+  AlignCaseColons: false
 AlignTrailingComments:
-  Kind: Leave
+  Kind: Always
+  OverEmptyLines: 0
 AlignEscapedNewlines: DontAlign
 Cpp11BracedListStyle: false
 PointerAlignment: Right

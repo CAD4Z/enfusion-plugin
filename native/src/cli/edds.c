@@ -15,7 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { EDDS_PROTOCOL_VERSION = 1 };
+enum {
+    EDDS_PROTOCOL_VERSION = 1
+};
 
 #define EDDS_PROTOCOL_TEXT "1"
 
@@ -24,10 +26,10 @@ enum { EDDS_PROTOCOL_VERSION = 1 };
  * Workbench recipe holds — `1`, `0.5`, `0.403` — so a profile can be handed straight across.
  */
 static int quality_argument(const cli_char *text, uint32_t *value) {
-    uint32_t whole = 0;
+    uint32_t whole    = 0;
     uint32_t fraction = 0;
-    unsigned digits = 0;
-    int seen = 0;
+    unsigned digits   = 0;
+    int      seen     = 0;
     while (*text >= (cli_char)'0' && *text <= (cli_char)'9') {
         whole = whole * 10u + (uint32_t)(*text++ - (cli_char)'0');
         if (whole > 1u) {
@@ -104,35 +106,35 @@ static const char *preview_refusal(const edds_info *info) {
 
 static const char *metadata_compress(edds_format_compress compress) {
     switch (compress) {
-        case EDDS_COMPRESS_COPY: return "Copy";
+        case EDDS_COMPRESS_COPY:    return "Copy";
         case EDDS_COMPRESS_FASTEST: return "Fastest";
-        case EDDS_COMPRESS_MEDIUM: return "Medium";
-        case EDDS_COMPRESS_BEST: return "Best";
-        default: return "Unknown";
+        case EDDS_COMPRESS_MEDIUM:  return "Medium";
+        case EDDS_COMPRESS_BEST:    return "Best";
+        default:                    return "Unknown";
     }
 }
 
 static const char *metadata_mipmap_function(edds_mipmap_function function) {
     switch (function) {
-        case EDDS_MIPMAP_FILTER: return "Filter";
-        case EDDS_MIPMAP_NORMALIZE: return "Normalize";
+        case EDDS_MIPMAP_FILTER:      return "Filter";
+        case EDDS_MIPMAP_NORMALIZE:   return "Normalize";
         case EDDS_MIPMAP_COLOR_NOISE: return "ColorNoise";
-        default: return "Unknown";
+        default:                      return "Unknown";
     }
 }
 
 static const char *metadata_mipmap_filter(edds_mipmap_filter filter) {
     switch (filter) {
-        case EDDS_FILTER_BOX: return "Box";
-        case EDDS_FILTER_KAISER: return "Kaiser";
+        case EDDS_FILTER_BOX:      return "Box";
+        case EDDS_FILTER_KAISER:   return "Kaiser";
         case EDDS_FILTER_TRIANGLE: return "Triangle";
-        default: return "Unknown";
+        default:                   return "Unknown";
     }
 }
 
 /** The same shortest exact text the metadata carries, as a JSON number rather than a string. */
 static const char *quality_json(uint32_t value, char buffer[8]) {
-    const uint32_t whole = value / EDDS_QUALITY_SCALE;
+    const uint32_t whole    = value / EDDS_QUALITY_SCALE;
     const uint32_t fraction = value % EDDS_QUALITY_SCALE;
     if (fraction == 0) {
         (void)snprintf(buffer, 8, "%u", whole);
@@ -147,11 +149,11 @@ static const char *quality_json(uint32_t value, char buffer[8]) {
 }
 
 static void write_inspection(
-    const edds_info *info,
+    const edds_info     *info,
     const edds_metadata *metadata,
-    const char *unsupported_metadata_reason) {
-    char format_buffer[32];
-    char quality_buffer[8];
+    const char          *unsupported_metadata_reason) {
+    char        format_buffer[32];
+    char        quality_buffer[8];
     /* The channels a decode of the file carries, which is the runtime fact, not the source's. */
     const char *channels = edds_pixel_format_channels(info->pixel_format);
     (void)printf(
@@ -278,22 +280,22 @@ static void write_preview(const edds_info *info, uint32_t mip, const uint8_t *rg
 }
 
 typedef struct parsed_arguments {
-    int machine;
-    int protocol_seen;
-    uint32_t protocol;
-    int mip_seen;
-    uint32_t mip;
+    int             machine;
+    int             protocol_seen;
+    uint32_t        protocol;
+    int             mip_seen;
+    uint32_t        mip;
     const cli_char *input;
     const cli_char *output;
     const cli_char *target_format;
     const cli_char *format_compress;
-    int threshold_seen;
-    uint32_t compress_threshold;
-    int remove_mips_seen;
-    uint32_t remove_mips;
+    int             threshold_seen;
+    uint32_t        compress_threshold;
+    int             remove_mips_seen;
+    uint32_t        remove_mips;
     const cli_char *conversion;
-    int quality_seen;
-    uint32_t conversion_quality;
+    int             quality_seen;
+    uint32_t        conversion_quality;
     const cli_char *swizzling;
     const cli_char *contains_mips;
     const cli_char *generate_mips;
@@ -309,7 +311,7 @@ typedef struct parsed_arguments {
     const cli_char *expected_output_revision;
     const cli_char *expected_metadata_revision;
     const cli_char *cancel_file;
-    int identity_only;
+    int             identity_only;
 } parsed_arguments;
 
 static int parse_options(int argc, cli_char **argv, int first, parsed_arguments *options) {
@@ -415,8 +417,8 @@ static int has_expected_revisions(const parsed_arguments *options) {
 
 static edds_status profile_of(
     const parsed_arguments *options,
-    edds_profile *profile,
-    edds_error *error) {
+    edds_profile           *profile,
+    edds_error             *error) {
     edds_default_profile(profile);
     if (options->target_format != NULL && !equals(options->target_format, "enfusion-dds")) {
         goto unsupported;
@@ -444,9 +446,9 @@ static edds_status profile_of(
         profile->remove_mips = options->remove_mips;
     }
     if (options->conversion != NULL) {
-        size_t count = 0;
+        size_t                            count        = 0;
         const edds_conversion_capability *capabilities = edds_conversions(&count);
-        const edds_conversion_capability *chosen = NULL;
+        const edds_conversion_capability *chosen       = NULL;
         for (size_t at = 0; at < count; ++at) {
             if (equals(options->conversion, capabilities[at].wire_name)) {
                 chosen = &capabilities[at];
@@ -461,9 +463,9 @@ static edds_status profile_of(
         profile->conversion_quality = options->conversion_quality;
     }
     if (options->swizzling != NULL) {
-        size_t count = 0;
+        size_t                         count        = 0;
         const edds_swizzle_capability *capabilities = edds_swizzles(&count);
-        const edds_swizzle_capability *chosen = NULL;
+        const edds_swizzle_capability *chosen       = NULL;
         for (size_t at = 0; at < count; ++at) {
             if (equals(options->swizzling, capabilities[at].wire_name)) {
                 chosen = &capabilities[at];
@@ -545,13 +547,13 @@ unsupported:
 
 static edds_status validate_revisions(
     const parsed_arguments *options,
-    edds_error *error) {
-    cli_char *metadata_path;
-    file_revision actual;
-    file_revision expected;
+    edds_error             *error) {
+    cli_char       *metadata_path;
+    file_revision   actual;
+    file_revision   expected;
     const cli_char *paths[3];
     const cli_char *values[3];
-    const char *names[3] = { "source", "output", "metadata" };
+    const char     *names[3] = { "source", "output", "metadata" };
     if (!has_expected_revisions(options)) {
         return EDDS_OK;
     }
@@ -562,9 +564,9 @@ static edds_status validate_revisions(
         (void)snprintf(error->message, sizeof error->message, "Memory for the revision check could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
-    paths[0] = options->input;
-    paths[1] = options->output;
-    paths[2] = options->metadata != NULL ? options->metadata : metadata_path;
+    paths[0]  = options->input;
+    paths[1]  = options->output;
+    paths[2]  = options->metadata != NULL ? options->metadata : metadata_path;
     values[0] = options->expected_source_revision;
     values[1] = options->expected_output_revision;
     values[2] = options->expected_metadata_revision;
@@ -599,7 +601,7 @@ static int metadata_text(char *destination, size_t capacity, const char *source)
  */
 static size_t append_message(edds_error *error, size_t at, const char *format, ...) {
     va_list arguments;
-    int written;
+    int     written;
     if (at >= sizeof error->message) {
         return sizeof error->message;
     }
@@ -613,12 +615,12 @@ static size_t append_message(edds_error *error, size_t at, const char *format, .
 }
 
 static edds_status source_format_of(
-    const cli_char *path,
+    const cli_char     *path,
     edds_source_format *format,
-    edds_error *error) {
-    size_t count = 0;
+    edds_error         *error) {
+    size_t                        count        = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
-    size_t written = 0;
+    size_t                        written      = 0;
     for (size_t at = 0; at < count; ++at) {
         if (ends_with(path, capabilities[at].extension)) {
             *format = capabilities[at].format;
@@ -643,13 +645,13 @@ static edds_status source_format_of(
 
 static edds_status metadata_value_of(
     const parsed_arguments *options,
-    edds_source_format format,
-    const edds_profile *profile,
-    edds_metadata *metadata,
-    edds_error *error) {
-    char *name = utf8_of(options->resource_name);
-    char *source = utf8_of(options->source_file);
-    char *guid = utf8_of(options->guid);
+    edds_source_format      format,
+    const edds_profile     *profile,
+    edds_metadata          *metadata,
+    edds_error             *error) {
+    char       *name   = utf8_of(options->resource_name);
+    char       *source = utf8_of(options->source_file);
+    char       *guid   = utf8_of(options->guid);
     edds_status status = EDDS_OK;
     memset(metadata, 0, sizeof *metadata);
     if (name == NULL || source == NULL || guid == NULL ||
@@ -663,7 +665,7 @@ static edds_status metadata_value_of(
         status = EDDS_INVALID_INPUT;
     }
     metadata->source_format = format;
-    metadata->profile = *profile;
+    metadata->profile       = *profile;
     free(name);
     free(source);
     free(guid);
@@ -672,11 +674,11 @@ static edds_status metadata_value_of(
 
 static edds_status validate_previous_metadata(
     const parsed_arguments *options,
-    const edds_metadata *replacement,
-    edds_error *error) {
-    FILE *input;
+    const edds_metadata    *replacement,
+    edds_error             *error) {
+    FILE         *input;
     edds_metadata previous;
-    edds_status status;
+    edds_status   status;
     if (!path_exists(options->metadata)) {
         return EDDS_OK;
     }
@@ -706,23 +708,23 @@ static edds_status validate_previous_metadata(
 
 static edds_status convert_atomically(
     const parsed_arguments *options,
-    const edds_profile *profile,
-    edds_progress_fn progress,
-    void *progress_context,
-    edds_error *error) {
-    FILE *source = NULL;
-    FILE *temporary_output = NULL;
-    FILE *temporary_metadata = NULL;
-    cli_artifact output_artifact = { options->output, NULL, NULL, 0, 0 };
-    cli_artifact metadata_artifact = { options->metadata, NULL, NULL, 0, 0 };
-    cli_transaction transaction = { NULL, NULL, 0 };
-    cli_char *expected_metadata = NULL;
-    edds_metadata metadata;
+    const edds_profile     *profile,
+    edds_progress_fn        progress,
+    void                   *progress_context,
+    edds_error             *error) {
+    FILE              *source             = NULL;
+    FILE              *temporary_output   = NULL;
+    FILE              *temporary_metadata = NULL;
+    cli_artifact       output_artifact    = { options->output, NULL, NULL, 0, 0 };
+    cli_artifact       metadata_artifact  = { options->metadata, NULL, NULL, 0, 0 };
+    cli_transaction    transaction        = { NULL, NULL, 0 };
+    cli_char          *expected_metadata  = NULL;
+    edds_metadata      metadata;
     edds_source_format format;
-    edds_status status;
-    int registered = options->metadata != NULL;
-    int output_backed = 0;
-    int metadata_backed = 0;
+    edds_status        status;
+    int                registered      = options->metadata != NULL;
+    int                output_backed   = 0;
+    int                metadata_backed = 0;
     if (same_path(options->input, options->output)) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "same-input-output");
@@ -873,7 +875,7 @@ static edds_status convert_atomically(
     crash_if_requested("crash-pair-backed-up");
     if (!output_backed || (registered && !metadata_backed)) {
         const int metadata_restored = rollback_artifact(&metadata_artifact);
-        const int output_restored = rollback_artifact(&output_artifact);
+        const int output_restored   = rollback_artifact(&output_artifact);
         cleanup_artifact(&output_artifact, 0);
         cleanup_artifact(&metadata_artifact, 0);
         cleanup_transaction(&transaction, metadata_restored && output_restored);
@@ -896,7 +898,7 @@ static edds_status convert_atomically(
         }
         if (!published) {
             const int metadata_restored = rollback_artifact(&metadata_artifact);
-            const int output_restored = rollback_artifact(&output_artifact);
+            const int output_restored   = rollback_artifact(&output_artifact);
             cleanup_artifact(&output_artifact, 0);
             cleanup_artifact(&metadata_artifact, 0);
             cleanup_transaction(&transaction, metadata_restored && output_restored);
@@ -918,10 +920,10 @@ static edds_status convert_atomically(
 
 static int convert_command(const parsed_arguments *options) {
     edds_profile profile;
-    edds_error error;
-    edds_info info;
-    edds_status status = profile_of(options, &profile, &error);
-    FILE *output;
+    edds_error   error;
+    edds_info    info;
+    edds_status  status = profile_of(options, &profile, &error);
+    FILE        *output;
     if (status != EDDS_OK) {
         return report_failure(status, &error);
     }
@@ -956,19 +958,19 @@ static int convert_command(const parsed_arguments *options) {
 }
 
 typedef struct native_batch_job {
-    char id[EDDS_BATCH_ID_BYTES];
+    char             id[EDDS_BATCH_ID_BYTES];
     parsed_arguments options;
-    edds_profile profile;
-    cli_char *input;
-    cli_char *output;
-    cli_char *metadata;
-    cli_char *resource_name;
-    cli_char *source_file;
-    cli_char *guid;
-    cli_char *expected_source;
-    cli_char *expected_output;
-    cli_char *expected_metadata;
-    int collision;
+    edds_profile     profile;
+    cli_char        *input;
+    cli_char        *output;
+    cli_char        *metadata;
+    cli_char        *resource_name;
+    cli_char        *source_file;
+    cli_char        *guid;
+    cli_char        *expected_source;
+    cli_char        *expected_output;
+    cli_char        *expected_metadata;
+    int              collision;
 } native_batch_job;
 
 static void free_batch_job(native_batch_job *job) {
@@ -988,17 +990,17 @@ static int native_batch_job_of(const edds_batch_job *source, native_batch_job *j
     memset(job, 0, sizeof *job);
     (void)snprintf(job->id, sizeof job->id, "%s", source->id);
     job->profile = source->profile;
-    job->input = cli_of_utf8(source->input);
-    job->output = cli_of_utf8(source->output);
+    job->input   = cli_of_utf8(source->input);
+    job->output  = cli_of_utf8(source->output);
     if (source->has_metadata) {
-        job->metadata = cli_of_utf8(source->metadata);
+        job->metadata      = cli_of_utf8(source->metadata);
         job->resource_name = cli_of_utf8(source->resource_name);
-        job->source_file = cli_of_utf8(source->source_file);
-        job->guid = cli_of_utf8(source->guid);
+        job->source_file   = cli_of_utf8(source->source_file);
+        job->guid          = cli_of_utf8(source->guid);
     }
     if (source->has_expected) {
-        job->expected_source = cli_of_utf8(source->expected_source);
-        job->expected_output = cli_of_utf8(source->expected_output);
+        job->expected_source   = cli_of_utf8(source->expected_source);
+        job->expected_output   = cli_of_utf8(source->expected_output);
         job->expected_metadata = cli_of_utf8(source->expected_metadata);
     }
     if (job->input == NULL || job->output == NULL ||
@@ -1007,14 +1009,14 @@ static int native_batch_job_of(const edds_batch_job *source, native_batch_job *j
         free_batch_job(job);
         return 0;
     }
-    job->options.input = job->input;
-    job->options.output = job->output;
-    job->options.metadata = job->metadata;
-    job->options.resource_name = job->resource_name;
-    job->options.source_file = job->source_file;
-    job->options.guid = job->guid;
-    job->options.expected_source_revision = job->expected_source;
-    job->options.expected_output_revision = job->expected_output;
+    job->options.input                      = job->input;
+    job->options.output                     = job->output;
+    job->options.metadata                   = job->metadata;
+    job->options.resource_name              = job->resource_name;
+    job->options.source_file                = job->source_file;
+    job->options.guid                       = job->guid;
+    job->options.expected_source_revision   = job->expected_source;
+    job->options.expected_output_revision   = job->expected_output;
     job->options.expected_metadata_revision = job->expected_metadata;
     return 1;
 }
@@ -1026,24 +1028,24 @@ static int native_batch_job_of(const edds_batch_job *source, native_batch_job *j
  */
 static struct {
     edds_batch_reader reader;
-    char chunk[8192];
-    size_t size;
-    size_t at;
-    int ended;
+    char              chunk[8192];
+    size_t            size;
+    size_t            at;
+    int               ended;
 } batch_stdin;
 
 static int read_batch_line(char *line, size_t capacity, size_t *size, edds_error *error) {
     for (;;) {
-        edds_batch_line framed = EDDS_BATCH_LINE_PENDING;
-        size_t consumed = 0;
-        size_t length = 0;
+        edds_batch_line framed   = EDDS_BATCH_LINE_PENDING;
+        size_t          consumed = 0;
+        size_t          length   = 0;
         if (batch_stdin.at < batch_stdin.size) {
-            framed = edds_batch_reader_push(&batch_stdin.reader, batch_stdin.chunk + batch_stdin.at,
-                batch_stdin.size - batch_stdin.at, &consumed, &length);
+            framed          = edds_batch_reader_push(&batch_stdin.reader, batch_stdin.chunk + batch_stdin.at,
+                         batch_stdin.size - batch_stdin.at, &consumed, &length);
             batch_stdin.at += consumed;
         } else if (!batch_stdin.ended) {
             batch_stdin.size = fread(batch_stdin.chunk, 1, sizeof batch_stdin.chunk, stdin);
-            batch_stdin.at = 0;
+            batch_stdin.at   = 0;
             if (batch_stdin.size == 0u) {
                 batch_stdin.ended = 1;
             }
@@ -1071,14 +1073,14 @@ static int read_batch_line(char *line, size_t capacity, size_t *size, edds_error
 
 static edds_status read_batch(
     native_batch_job **jobs,
-    uint32_t *count,
-    edds_error *error) {
-    char *line = malloc(EDDS_BATCH_MAX_LINE_BYTES + 1u);
+    uint32_t          *count,
+    edds_error        *error) {
+    char              *line   = malloc(EDDS_BATCH_MAX_LINE_BYTES + 1u);
     edds_batch_record *record = malloc(sizeof *record);
-    native_batch_job *loaded = NULL;
-    size_t size = 0;
-    int read;
-    edds_status status;
+    native_batch_job  *loaded = NULL;
+    size_t             size   = 0;
+    int                read;
+    edds_status        status;
     if (line == NULL || record == NULL) {
         free(line);
         free(record);
@@ -1123,7 +1125,7 @@ static edds_status read_batch(
         return EDDS_INTERNAL_FAILURE;
     }
     for (uint32_t at = 0; at < *count; ++at) {
-        read = read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error);
+        read   = read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error);
         status = read > 0 ? edds_batch_parse_line(line, size, record, error) : EDDS_INVALID_INVOCATION;
         if (read == 0) {
             memset(error, 0, sizeof *error);
@@ -1166,7 +1168,7 @@ static edds_status read_batch(
             }
         }
     }
-    read = read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error);
+    read   = read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error);
     status = read > 0 ? edds_batch_parse_line(line, size, record, error) : EDDS_INVALID_INVOCATION;
     if (read <= 0 || status != EDDS_OK || record->kind != EDDS_BATCH_END ||
         read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error) != 0) {
@@ -1198,7 +1200,7 @@ static edds_status read_batch(
                     ? same_path(loaded[at].output, loaded[other].output)
                     : cli_strcmp(destinations[at], destinations[other]) == 0;
                 if (same) {
-                    loaded[at].collision = 1;
+                    loaded[at].collision    = 1;
                     loaded[other].collision = 1;
                 }
             }
@@ -1234,10 +1236,10 @@ static void write_batch_diagnostic(const char *id, edds_status status, const edd
 }
 
 static void write_batch_failed(
-    const char *id,
-    const char *status,
+    const char       *id,
+    const char       *status,
     const edds_error *error,
-    int retryable) {
+    int               retryable) {
     fputs("{\"protocolVersion\":1,\"kind\":\"result\",\"id\":", stdout);
     json_string(id);
     fputs(",\"status\":", stdout);
@@ -1248,7 +1250,7 @@ static void write_batch_failed(
 }
 
 static edds_status inspect_converted(const native_batch_job *job, edds_info *info, edds_error *error) {
-    FILE *output = open_input(job->options.output);
+    FILE       *output = open_input(job->options.output);
     edds_status status;
     if (output == NULL) {
         memset(error, 0, sizeof *error);
@@ -1282,15 +1284,15 @@ static void write_batch_converted(const native_batch_job *job, const edds_info *
 
 typedef struct batch_run {
     native_batch_job *jobs;
-    uint32_t converted;
-    uint32_t failed;
-    uint32_t cancelled;
+    uint32_t          converted;
+    uint32_t          failed;
+    uint32_t          cancelled;
 } batch_run;
 
 typedef struct batch_reporter {
     const native_batch_job *job;
-    edds_pool *pool;
-    double reported;
+    edds_pool              *pool;
+    double                  reported;
 } batch_reporter;
 
 /**
@@ -1317,15 +1319,15 @@ static edds_status convert_batch_attempt(void *context, edds_error *error) {
 
 /** One image, on whichever worker claimed it. Everything shared is touched under a pool lock. */
 static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
-    batch_run *run = (batch_run *)context;
-    native_batch_job *job = &run->jobs[at];
-    batch_reporter reporter = { NULL, NULL, 0.0 };
-    file_revision source_revision;
-    edds_error error;
-    edds_info info;
-    edds_status status;
-    uint64_t charge;
-    reporter.job = job;
+    batch_run        *run      = (batch_run *)context;
+    native_batch_job *job      = &run->jobs[at];
+    batch_reporter    reporter = { NULL, NULL, 0.0 };
+    file_revision     source_revision;
+    edds_error        error;
+    edds_info         info;
+    edds_status       status;
+    uint64_t          charge;
+    reporter.job  = job;
     reporter.pool = pool;
     /* A failure path that names no error still prints one: an empty one, never stack bytes. */
     memset(&error, 0, sizeof error);
@@ -1392,9 +1394,9 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
 }
 
 static int batch_command(void) {
-    batch_run run = { NULL, 0, 0, 0 };
-    uint32_t count = 0;
-    edds_error error;
+    batch_run   run   = { NULL, 0, 0, 0 };
+    uint32_t    count = 0;
+    edds_error  error;
     edds_status status = read_batch(&run.jobs, &count, &error);
     if (status != EDDS_OK) {
         return report_failure(status, &error);
@@ -1424,17 +1426,17 @@ static int batch_command(void) {
 
 int edds_command(int argc, cli_char **argv) {
     parsed_arguments options;
-    FILE *input;
-    edds_info info;
-    edds_error error;
-    edds_metadata metadata;
-    edds_metadata *inspected_metadata = NULL;
-    char unsupported_metadata_reason[sizeof error.message] = { 0 };
-    edds_status status;
-    int preview_command;
-    int convert;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    FILE            *input;
+    edds_info        info;
+    edds_error       error;
+    edds_metadata    metadata;
+    edds_metadata   *inspected_metadata                                = NULL;
+    char             unsupported_metadata_reason[sizeof error.message] = { 0 };
+    edds_status      status;
+    int              preview_command;
+    int              convert;
+    uint8_t         *rgba      = NULL;
+    size_t           rgba_size = 0;
 
     cli_catch_interrupts();
     if ((argc == 5 || argc == 7) && equals(argv[1], "batch") &&
@@ -1451,7 +1453,7 @@ int edds_command(int argc, cli_char **argv) {
         return invalid_invocation("invalid-command", "Expected inspect, preview, convert, or batch.");
     }
     preview_command = equals(argv[1], "preview");
-    convert = equals(argv[1], "convert");
+    convert         = equals(argv[1], "convert");
     if (!parse_options(argc, argv, 2, &options) || !options.machine ||
         !options.protocol_seen || options.protocol != EDDS_PROTOCOL_VERSION || options.input == NULL ||
         (preview_command && (!options.mip_seen || has_profile_options(&options))) ||

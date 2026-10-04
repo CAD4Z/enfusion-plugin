@@ -10,8 +10,8 @@
  * glyphs name their components the way `glyf` does, transform included.
  */
 
-#define P(x, y) { (x), (y), 1 }
-#define Q(x, y) { (x), (y), 0 }
+#define P(x, y)              { (x), (y), 1 }
+#define Q(x, y)              { (x), (y), 0 }
 /* Clockwise, the way TrueType writes an outer contour. */
 #define RECT(x0, y0, x1, y1) P(x0, y0), P(x0, y1), P(x1, y1), P(x1, y0)
 /* Counter-clockwise: a hole. */
@@ -41,103 +41,103 @@ enum {
 };
 
 enum {
-    ARG_1_AND_2_ARE_WORDS = 0x0001,
-    ARGS_ARE_XY_VALUES = 0x0002,
-    WE_HAVE_A_SCALE = 0x0008,
-    MORE_COMPONENTS = 0x0020,
+    ARG_1_AND_2_ARE_WORDS    = 0x0001,
+    ARGS_ARE_XY_VALUES       = 0x0002,
+    WE_HAVE_A_SCALE          = 0x0008,
+    MORE_COMPONENTS          = 0x0020,
     WE_HAVE_AN_X_AND_Y_SCALE = 0x0040,
-    WE_HAVE_A_TWO_BY_TWO = 0x0080,
-    USE_MY_METRICS = 0x0200
+    WE_HAVE_A_TWO_BY_TWO     = 0x0080,
+    USE_MY_METRICS           = 0x0200
 };
 
 typedef struct simple_glyph {
     const font_fixture_point *points;
-    size_t point_count;
-    const size_t *ends;
-    size_t contour_count;
+    size_t                    point_count;
+    const size_t             *ends;
+    size_t                    contour_count;
 } simple_glyph;
 
 typedef struct component {
     uint16_t glyph;
     /* ARG_1_AND_2_ARE_WORDS, ARGS_ARE_XY_VALUES, USE_MY_METRICS and the transform flag. */
     uint16_t flags;
-    int arg1;
-    int arg2;
+    int      arg1;
+    int      arg2;
     /* x' = a·x + c·y + dx, y' = b·x + d·y + dy */
-    double a, b, c, d;
+    double   a, b, c, d;
 } component;
 
 typedef struct glyph_def {
-    int advance;
+    int                 advance;
     const simple_glyph *simple;
-    const component *components;
-    size_t component_count;
+    const component    *components;
+    size_t              component_count;
 } glyph_def;
 
 /* Taller than the other capitals, so a cap height taken from H differs from the 0.7 em fallback. */
 static const font_fixture_point h_points[] = {
     RECT(80, 0, 180, 720), RECT(520, 0, 620, 720), RECT(100, 300, 600, 400)
 };
-static const size_t h_ends[] = { 4, 8, 12 };
-static const simple_glyph h_glyph = { h_points, 12, h_ends, 3 };
+static const size_t       h_ends[] = { 4, 8, 12 };
+static const simple_glyph h_glyph  = { h_points, 12, h_ends, 3 };
 
 /* Cyrillic Tse (U+0426) as type designers build it: stems, foot and tail overlap, not join. */
 static const font_fixture_point tse_points[] = {
     RECT(80, 0, 180, 700), RECT(520, 0, 620, 700), RECT(80, 0, 680, 100), RECT(600, -180, 680, 100)
 };
-static const size_t tse_ends[] = { 4, 8, 12, 16 };
-static const simple_glyph tse_glyph = { tse_points, 16, tse_ends, 4 };
+static const size_t       tse_ends[] = { 4, 8, 12, 16 };
+static const simple_glyph tse_glyph  = { tse_points, 16, tse_ends, 4 };
 
 /* An outer contour of off-curve points only, around a hole of alternating points. */
 static const font_fixture_point o_points[] = {
     Q(350, 670), Q(576, 576), Q(670, 350), Q(576, 124), Q(350, 30), Q(124, 124), Q(30, 350), Q(124, 576),
     P(520, 350), Q(520, 520), P(350, 520), Q(180, 520), P(180, 350), Q(180, 180), P(350, 180), Q(520, 180)
 };
-static const size_t o_ends[] = { 8, 16 };
-static const simple_glyph o_glyph = { o_points, 16, o_ends, 2 };
+static const size_t       o_ends[] = { 8, 16 };
+static const simple_glyph o_glyph  = { o_points, 16, o_ends, 2 };
 
 static const font_fixture_point a_points[] = {
     P(0, 0), P(250, 700), P(350, 700), P(600, 0), P(480, 0), P(300, 560), P(120, 0)
 };
-static const size_t a_ends[] = { 7 };
-static const simple_glyph a_glyph = { a_points, 7, a_ends, 1 };
+static const size_t       a_ends[] = { 7 };
+static const simple_glyph a_glyph  = { a_points, 7, a_ends, 1 };
 
 static const font_fixture_point v_points[] = {
     P(0, 700), P(120, 700), P(300, 140), P(480, 700), P(600, 700), P(350, 0), P(250, 0)
 };
-static const size_t v_ends[] = { 7 };
-static const simple_glyph v_glyph = { v_points, 7, v_ends, 1 };
+static const size_t       v_ends[] = { 7 };
+static const simple_glyph v_glyph  = { v_points, 7, v_ends, 1 };
 
 static const font_fixture_point t_points[] = { RECT(0, 600, 600, 700), RECT(250, 0, 350, 700) };
-static const size_t t_ends[] = { 4, 8 };
-static const simple_glyph t_glyph = { t_points, 8, t_ends, 2 };
+static const size_t             t_ends[]   = { 4, 8 };
+static const simple_glyph       t_glyph    = { t_points, 8, t_ends, 2 };
 
 static const font_fixture_point o_small_points[] = {
     P(250, 500), Q(500, 500), P(500, 250), Q(500, 0), P(250, 0), Q(0, 0), P(0, 250), Q(0, 500),
     P(380, 250), Q(380, 380), P(250, 380), Q(120, 380), P(120, 250), Q(120, 120), P(250, 120), Q(380, 120)
 };
-static const size_t o_small_ends[] = { 8, 16 };
-static const simple_glyph o_small_glyph = { o_small_points, 16, o_small_ends, 2 };
+static const size_t       o_small_ends[] = { 8, 16 };
+static const simple_glyph o_small_glyph  = { o_small_points, 16, o_small_ends, 2 };
 
 static const font_fixture_point a_small_points[] = { RECT(50, 0, 450, 500), HOLE(150, 100, 350, 400) };
-static const size_t a_small_ends[] = { 4, 8 };
-static const simple_glyph a_small_glyph = { a_small_points, 8, a_small_ends, 2 };
+static const size_t             a_small_ends[]   = { 4, 8 };
+static const simple_glyph       a_small_glyph    = { a_small_points, 8, a_small_ends, 2 };
 
 static const font_fixture_point dieresis_points[] = { RECT(100, 800, 200, 900), RECT(400, 800, 500, 900) };
-static const size_t dieresis_ends[] = { 4, 8 };
-static const simple_glyph dieresis_glyph = { dieresis_points, 8, dieresis_ends, 2 };
+static const size_t             dieresis_ends[]   = { 4, 8 };
+static const simple_glyph       dieresis_glyph    = { dieresis_points, 8, dieresis_ends, 2 };
 
 static const font_fixture_point macron_points[] = { RECT(100, 1000, 500, 1060) };
-static const size_t macron_ends[] = { 4 };
-static const simple_glyph macron_glyph = { macron_points, 4, macron_ends, 1 };
+static const size_t             macron_ends[]   = { 4 };
+static const simple_glyph       macron_glyph    = { macron_points, 4, macron_ends, 1 };
 
 static const font_fixture_point emoji_points[] = { RECT(100, 100, 400, 400) };
-static const size_t emoji_ends[] = { 4 };
-static const simple_glyph emoji_glyph = { emoji_points, 4, emoji_ends, 1 };
+static const size_t             emoji_ends[]   = { 4 };
+static const simple_glyph       emoji_glyph    = { emoji_points, 4, emoji_ends, 1 };
 
 static const font_fixture_point ring_points[] = { RECT(0, 0, 100, 100), HOLE(25, 25, 75, 75) };
-static const size_t ring_ends[] = { 4, 8 };
-static const simple_glyph ring_glyph = { ring_points, 8, ring_ends, 2 };
+static const size_t             ring_ends[]   = { 4, 8 };
+static const simple_glyph       ring_glyph    = { ring_points, 8, ring_ends, 2 };
 
 /* Ä takes its advance from A through USE_MY_METRICS; its own hmtx entry says something else. */
 static const component a_dieresis_components[] = {
@@ -164,25 +164,25 @@ static const component a_ring_components[] = {
 };
 
 static const glyph_def glyphs[GID_COUNT] = {
-    [GID_NOTDEF] = { 500, NULL, NULL, 0 },
-    [GID_SPACE] = { 250, NULL, NULL, 0 },
-    [GID_H] = { 700, &h_glyph, NULL, 0 },
-    [GID_TSE] = { 720, &tse_glyph, NULL, 0 },
-    [GID_O] = { 700, &o_glyph, NULL, 0 },
-    [GID_A] = { 600, &a_glyph, NULL, 0 },
-    [GID_V] = { 600, &v_glyph, NULL, 0 },
-    [GID_T] = { 600, &t_glyph, NULL, 0 },
-    [GID_O_SMALL] = { 500, &o_small_glyph, NULL, 0 },
-    [GID_A_SMALL] = { 500, &a_small_glyph, NULL, 0 },
-    [GID_DIERESIS] = { 600, &dieresis_glyph, NULL, 0 },
-    [GID_A_DIERESIS] = { 999, NULL, a_dieresis_components, 2 },
-    [GID_ORDINAL] = { 300, NULL, ordinal_components, 1 },
-    [GID_TURNED_A] = { 600, NULL, turned_a_components, 1 },
+    [GID_NOTDEF]            = { 500, NULL, NULL, 0 },
+    [GID_SPACE]             = { 250, NULL, NULL, 0 },
+    [GID_H]                 = { 700, &h_glyph, NULL, 0 },
+    [GID_TSE]               = { 720, &tse_glyph, NULL, 0 },
+    [GID_O]                 = { 700, &o_glyph, NULL, 0 },
+    [GID_A]                 = { 600, &a_glyph, NULL, 0 },
+    [GID_V]                 = { 600, &v_glyph, NULL, 0 },
+    [GID_T]                 = { 600, &t_glyph, NULL, 0 },
+    [GID_O_SMALL]           = { 500, &o_small_glyph, NULL, 0 },
+    [GID_A_SMALL]           = { 500, &a_small_glyph, NULL, 0 },
+    [GID_DIERESIS]          = { 600, &dieresis_glyph, NULL, 0 },
+    [GID_A_DIERESIS]        = { 999, NULL, a_dieresis_components, 2 },
+    [GID_ORDINAL]           = { 300, NULL, ordinal_components, 1 },
+    [GID_TURNED_A]          = { 600, NULL, turned_a_components, 1 },
     [GID_A_DIERESIS_MACRON] = { 600, NULL, a_dieresis_macron_components, 2 },
-    [GID_MACRON] = { 600, &macron_glyph, NULL, 0 },
-    [GID_EMOJI] = { 500, &emoji_glyph, NULL, 0 },
-    [GID_A_RING] = { 999, NULL, a_ring_components, 2 },
-    [GID_RING] = { 100, &ring_glyph, NULL, 0 }
+    [GID_MACRON]            = { 600, &macron_glyph, NULL, 0 },
+    [GID_EMOJI]             = { 500, &emoji_glyph, NULL, 0 },
+    [GID_A_RING]            = { 999, NULL, a_ring_components, 2 },
+    [GID_RING]              = { 100, &ring_glyph, NULL, 0 }
 };
 
 typedef struct mapping {
@@ -223,9 +223,9 @@ static const font_fixture_pair kern_pairs[] = {
 
 typedef struct buffer {
     uint8_t *data;
-    size_t size;
-    size_t capacity;
-    int failed;
+    size_t   size;
+    size_t   capacity;
+    int      failed;
 } buffer;
 
 static void put_bytes(buffer *out, const void *bytes, size_t size) {
@@ -233,7 +233,7 @@ static void put_bytes(buffer *out, const void *bytes, size_t size) {
         return;
     }
     if (out->size + size > out->capacity) {
-        size_t capacity = out->capacity == 0 ? 256u : out->capacity;
+        size_t   capacity = out->capacity == 0 ? 256u : out->capacity;
         uint8_t *grown;
         while (capacity < out->size + size) {
             capacity *= 2u;
@@ -243,7 +243,7 @@ static void put_bytes(buffer *out, const void *bytes, size_t size) {
             out->failed = 1;
             return;
         }
-        out->data = grown;
+        out->data     = grown;
         out->capacity = capacity;
     }
     if (size != 0) {
@@ -291,7 +291,7 @@ static void patch16(buffer *out, size_t at, size_t value) {
         out->failed = 1;
         return;
     }
-    out->data[at] = (uint8_t)(value >> 8);
+    out->data[at]      = (uint8_t)(value >> 8);
     out->data[at + 1u] = (uint8_t)value;
 }
 
@@ -300,7 +300,7 @@ static void patch32(buffer *out, size_t at, uint32_t value) {
         out->failed = 1;
         return;
     }
-    out->data[at] = (uint8_t)(value >> 24);
+    out->data[at]      = (uint8_t)(value >> 24);
     out->data[at + 1u] = (uint8_t)(value >> 16);
     out->data[at + 2u] = (uint8_t)(value >> 8);
     out->data[at + 3u] = (uint8_t)value;
@@ -317,12 +317,12 @@ static void release(buffer *out) {
 
 typedef struct points {
     font_fixture_point *items;
-    size_t count;
-    size_t capacity;
-    size_t *ends;
-    size_t contour_count;
-    size_t contour_capacity;
-    int failed;
+    size_t              count;
+    size_t              capacity;
+    size_t             *ends;
+    size_t              contour_count;
+    size_t              contour_capacity;
+    int                 failed;
 } points;
 
 static void add_point(points *out, font_fixture_point point) {
@@ -330,13 +330,13 @@ static void add_point(points *out, font_fixture_point point) {
         return;
     }
     if (out->count == out->capacity) {
-        const size_t capacity = out->capacity == 0 ? 32u : out->capacity * 2u;
-        font_fixture_point *grown = realloc(out->items, capacity * sizeof *grown);
+        const size_t        capacity = out->capacity == 0 ? 32u : out->capacity * 2u;
+        font_fixture_point *grown    = realloc(out->items, capacity * sizeof *grown);
         if (grown == NULL) {
             out->failed = 1;
             return;
         }
-        out->items = grown;
+        out->items    = grown;
         out->capacity = capacity;
     }
     out->items[out->count++] = point;
@@ -348,12 +348,12 @@ static void add_end(points *out, size_t end) {
     }
     if (out->contour_count == out->contour_capacity) {
         const size_t capacity = out->contour_capacity == 0 ? 8u : out->contour_capacity * 2u;
-        size_t *grown = realloc(out->ends, capacity * sizeof *grown);
+        size_t      *grown    = realloc(out->ends, capacity * sizeof *grown);
         if (grown == NULL) {
             out->failed = 1;
             return;
         }
-        out->ends = grown;
+        out->ends             = grown;
         out->contour_capacity = capacity;
     }
     out->ends[out->contour_count++] = end;
@@ -366,7 +366,7 @@ static void end_contour(points *out) {
 /* Returns the advance after USE_MY_METRICS, which the hmtx entry of a composite does not have. */
 static int compose(uint16_t glyph, points *out) {
     const glyph_def *definition = &glyphs[glyph];
-    int advance = definition->advance;
+    int              advance    = definition->advance;
     if (definition->simple != NULL) {
         size_t at = 0;
         for (size_t contour = 0; contour < definition->simple->contour_count; ++contour) {
@@ -378,27 +378,27 @@ static int compose(uint16_t glyph, points *out) {
         return advance;
     }
     for (size_t at = 0; at < definition->component_count; ++at) {
-        const component *part = &definition->components[at];
-        points child = { 0 };
-        const int child_advance = compose(part->glyph, &child);
-        double dx = part->arg1;
-        double dy = part->arg2;
+        const component *part          = &definition->components[at];
+        points           child         = { 0 };
+        const int        child_advance = compose(part->glyph, &child);
+        double           dx            = part->arg1;
+        double           dy            = part->arg2;
         if (child.failed) {
             out->failed = 1;
         }
         if ((part->flags & ARGS_ARE_XY_VALUES) == 0) {
             const font_fixture_point parent = out->items[part->arg1];
-            const font_fixture_point own = child.items[part->arg2];
-            dx = parent.x - (part->a * own.x + part->c * own.y);
-            dy = parent.y - (part->b * own.x + part->d * own.y);
+            const font_fixture_point own    = child.items[part->arg2];
+            dx                              = parent.x - (part->a * own.x + part->c * own.y);
+            dy                              = parent.y - (part->b * own.x + part->d * own.y);
         }
         {
             const size_t base = out->count;
             for (size_t point = 0; point < child.count; ++point) {
                 const font_fixture_point source = child.items[point];
-                font_fixture_point moved;
-                moved.x = part->a * source.x + part->c * source.y + dx;
-                moved.y = part->b * source.x + part->d * source.y + dy;
+                font_fixture_point       moved;
+                moved.x        = part->a * source.x + part->c * source.y + dx;
+                moved.y        = part->b * source.x + part->d * source.y + dy;
                 moved.on_curve = source.on_curve;
                 add_point(out, moved);
             }
@@ -445,10 +445,10 @@ static void bounds_of(const points *outline, int box[4]) {
  * ---------------------------------------------------------------------------------------------- */
 
 static void simple_glyph_data(const simple_glyph *glyph, buffer *out) {
-    points outline = { 0 };
-    int box[4];
+    points  outline = { 0 };
+    int     box[4];
     uint8_t flags[64];
-    int previous_x = 0, previous_y = 0;
+    int     previous_x = 0, previous_y = 0;
     for (size_t at = 0; at < glyph->point_count; ++at) {
         add_point(&outline, glyph->points[at]);
     }
@@ -463,9 +463,9 @@ static void simple_glyph_data(const simple_glyph *glyph, buffer *out) {
     }
     put16(out, 0);
     for (size_t at = 0; at < glyph->point_count; ++at) {
-        const int dx = (int)glyph->points[at].x - previous_x;
-        const int dy = (int)glyph->points[at].y - previous_y;
-        uint8_t flag = glyph->points[at].on_curve ? 0x01u : 0x00u;
+        const int dx   = (int)glyph->points[at].x - previous_x;
+        const int dy   = (int)glyph->points[at].y - previous_y;
+        uint8_t   flag = glyph->points[at].on_curve ? 0x01u : 0x00u;
         if (dx == 0) {
             flag |= 0x10u;
         } else if (dx >= -255 && dx <= 255) {
@@ -476,7 +476,7 @@ static void simple_glyph_data(const simple_glyph *glyph, buffer *out) {
         } else if (dy >= -255 && dy <= 255) {
             flag |= (uint8_t)(0x04u | (dy > 0 ? 0x20u : 0u));
         }
-        flags[at] = flag;
+        flags[at]  = flag;
         previous_x = (int)glyph->points[at].x;
         previous_y = (int)glyph->points[at].y;
     }
@@ -523,8 +523,8 @@ static int f2dot14(double value) {
 
 static void composite_glyph_data(uint16_t glyph, buffer *out) {
     const glyph_def *definition = &glyphs[glyph];
-    points outline = { 0 };
-    int box[4];
+    points           outline    = { 0 };
+    int              box[4];
     (void)compose(glyph, &outline);
     bounds_of(&outline, box);
     free(outline.items);
@@ -535,7 +535,7 @@ static void composite_glyph_data(uint16_t glyph, buffer *out) {
     }
     for (size_t at = 0; at < definition->component_count; ++at) {
         const component *part = &definition->components[at];
-        const uint16_t more = at + 1u < definition->component_count ? MORE_COMPONENTS : 0u;
+        const uint16_t   more = at + 1u < definition->component_count ? MORE_COMPONENTS : 0u;
         put16(out, part->flags | more);
         put16(out, part->glyph);
         if ((part->flags & ARG_1_AND_2_ARE_WORDS) != 0) {
@@ -562,7 +562,7 @@ static void composite_glyph_data(uint16_t glyph, buffer *out) {
 /* What hmtx records as the left side bearing: the xMin `glyf` records, as in any real font. */
 static int glyph_x_min(uint16_t glyph) {
     points outline = { 0 };
-    int box[4];
+    int    box[4];
     (void)compose(glyph, &outline);
     bounds_of(&outline, box);
     free(outline.items);
@@ -579,12 +579,12 @@ static void glyph_data(uint16_t glyph, buffer *out) {
 }
 
 typedef struct table {
-    char tag[5];
+    char   tag[5];
     buffer data;
 } table;
 
 typedef struct font_builder {
-    table tables[16];
+    table  tables[16];
     size_t count;
 } font_builder;
 
@@ -695,7 +695,7 @@ static void post_table(buffer *out) {
 }
 
 typedef struct name_record {
-    int id;
+    int         id;
     const char *text;
 } name_record;
 
@@ -723,10 +723,10 @@ static void name_table(buffer *out, const name_record *records, size_t count) {
 /* Segments of one code each, plus one run kept by idRangeOffset so both lookups are exercised. */
 static void cmap_format4(buffer *out) {
     uint32_t starts[32], ends[32];
-    int deltas[32];
-    int ranged[32] = { 0 };
-    size_t segments = 0;
-    buffer glyph_ids = { 0 };
+    int      deltas[32];
+    int      ranged[32] = { 0 };
+    size_t   segments   = 0;
+    buffer   glyph_ids  = { 0 };
     for (size_t at = 0; at < MAPPING_COUNT; ++at) {
         if (mappings[at].code > 0xFFFFu) {
             continue;
@@ -734,7 +734,7 @@ static void cmap_format4(buffer *out) {
         if (mappings[at].code == 0x00A8u) {
             /* U+00A8..U+00AF through glyphIdArray, with unmapped holes inside the run. */
             starts[segments] = 0x00A8u;
-            ends[segments] = 0x00AFu;
+            ends[segments]   = 0x00AFu;
             deltas[segments] = 0;
             ranged[segments] = 1;
             ++segments;
@@ -744,15 +744,15 @@ static void cmap_format4(buffer *out) {
             continue;
         }
         starts[segments] = ends[segments] = mappings[at].code;
-        deltas[segments] = (int)mappings[at].glyph - (int)mappings[at].code;
+        deltas[segments]                  = (int)mappings[at].glyph - (int)mappings[at].code;
         ++segments;
     }
     starts[segments] = ends[segments] = 0xFFFFu;
-    deltas[segments] = 1;
+    deltas[segments]                  = 1;
     ++segments;
     {
         const size_t header = 14u, arrays = 8u * segments + 2u;
-        unsigned search = 1, selector = 0;
+        unsigned     search = 1, selector = 0;
         while (search * 2u <= segments) {
             search *= 2u;
             ++selector;
@@ -822,12 +822,12 @@ static void cmap_format12(buffer *out, uint32_t first, uint32_t count, uint16_t 
 }
 
 static void cmap_table(buffer *out, font_fixture_variant variant) {
-    buffer format4 = { 0 }, format12 = { 0 };
-    const int crowded = variant == FONT_FIXTURE_CROWDED;
-    const int with12 = variant != FONT_FIXTURE_KERN;
-    const int with4 = !crowded;
-    const unsigned count = (unsigned)with4 + (unsigned)with12;
-    size_t offset = 4u + 8u * count;
+    buffer         format4 = { 0 }, format12 = { 0 };
+    const int      crowded = variant == FONT_FIXTURE_CROWDED;
+    const int      with12  = variant != FONT_FIXTURE_KERN;
+    const int      with4   = !crowded;
+    const unsigned count   = (unsigned)with4 + (unsigned)with12;
+    size_t         offset  = 4u + 8u * count;
     if (with4) {
         cmap_format4(&format4);
     }
@@ -874,15 +874,15 @@ static void coverage_range(buffer *out, uint16_t first, uint16_t last) {
 
 typedef struct pair_value {
     uint16_t second;
-    int x_advance;
+    int      x_advance;
 } pair_value;
 
 /* PairPos format 1 with XAdvance on the first glyph only. */
 static void pair_list(buffer *out, const uint16_t *firsts, size_t first_count,
     const pair_value *const *sets, const size_t *set_sizes) {
-    buffer coverage = { 0 }, body = { 0 };
+    buffer       coverage = { 0 }, body = { 0 };
     const size_t header = 10u + 2u * first_count;
-    size_t at;
+    size_t       at;
     coverage_list(&coverage, firsts, first_count);
     put16(out, 1);
     put16(out, 0);
@@ -909,7 +909,7 @@ static void pair_list(buffer *out, const uint16_t *firsts, size_t first_count,
  * XAdvance and the second glyph has a value of its own, so record sizes and field offsets matter.
  */
 static void pair_classes(buffer *out) {
-    buffer coverage = { 0 }, first_classes = { 0 }, second_classes = { 0 };
+    buffer           coverage = { 0 }, first_classes = { 0 }, second_classes = { 0 };
     static const int records[2][3][3] = {
         { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
         { { 0, 0, 0 }, { 7, -120, 5 }, { 0, -60, 0 } }
@@ -961,7 +961,7 @@ static void extension(buffer *out, const buffer *inner) {
 
 static void lookup(buffer *out, int type, buffer *subtables, size_t count) {
     const size_t header = 6u + 2u * count;
-    size_t offset = header;
+    size_t       offset = header;
     put16(out, type);
     put16(out, 0);
     put16(out, (int)count);
@@ -976,7 +976,7 @@ static void lookup(buffer *out, int type, buffer *subtables, size_t count) {
 
 static void offset_list(buffer *out, buffer *items, size_t count) {
     const size_t header = 2u + 2u * count;
-    size_t offset = header;
+    size_t       offset = header;
     put16(out, (int)count);
     for (size_t at = 0; at < count; ++at) {
         put16(out, (int)offset);
@@ -1001,35 +1001,35 @@ static void gpos_table(buffer *out) {
      * Features sorted by tag: 0 'dist', 1 'kern' (DFLT, latn, cyrl), 2 'kern' (grek only), 3 'kern'
      * (latn's Turkish only: a language a font may tailor, not what text without one gets).
      */
-    static const uint16_t kern_feature[] = { 1 };
-    static const uint16_t latin_features[] = { 1, 0 };
-    static const uint16_t greek_feature[] = { 2 };
-    static const uint16_t turkish_features[] = { 1, 3 };
-    static const uint16_t first_glyphs[] = { GID_H, GID_A, GID_V };
-    static const pair_value h_set[] = { { GID_H, 3 } };
-    static const pair_value a_set[] = { { GID_O, 0 }, { GID_V, -80 }, { GID_EMOJI, -50 } };
-    static const pair_value v_set[] = { { GID_A, -80 } };
-    static const pair_value *const sets[] = { h_set, a_set, v_set };
-    static const size_t set_sizes[] = { 1, 3, 1 };
-    static const uint16_t t_first[] = { GID_T };
-    static const pair_value t_late[] = { { GID_O_SMALL, -999 } };
-    static const pair_value *const late_sets[] = { t_late };
-    static const size_t late_sizes[] = { 1 };
-    static const uint16_t a_only[] = { GID_A };
-    static const pair_value a_greek[] = { { GID_A, -500 } };
-    static const pair_value *const greek_sets[] = { a_greek };
-    static const uint16_t v_only[] = { GID_V };
-    static const pair_value v_distance[] = { { GID_V, -300 } };
-    static const pair_value *const distance_sets[] = { v_distance };
-    static const uint16_t o_only[] = { GID_O };
-    static const pair_value o_turkish[] = { { GID_O, -400 } };
-    static const pair_value *const turkish_sets[] = { o_turkish };
-    static const size_t one[] = { 1 };
-    buffer scripts[4] = { { 0 } }, features[4] = { { 0 } }, lookups[5] = { { 0 } };
-    buffer script_list = { 0 }, feature_list = { 0 }, lookup_list = { 0 };
-    buffer subtables[2] = { { 0 } }, inner = { 0 };
-    static const char *const script_tags[] = { "DFLT", "cyrl", "grek", "latn" };
-    static const char *const feature_tags[] = { "dist", "kern", "kern", "kern" };
+    static const uint16_t          kern_feature[]     = { 1 };
+    static const uint16_t          latin_features[]   = { 1, 0 };
+    static const uint16_t          greek_feature[]    = { 2 };
+    static const uint16_t          turkish_features[] = { 1, 3 };
+    static const uint16_t          first_glyphs[]     = { GID_H, GID_A, GID_V };
+    static const pair_value        h_set[]            = { { GID_H, 3 } };
+    static const pair_value        a_set[]            = { { GID_O, 0 }, { GID_V, -80 }, { GID_EMOJI, -50 } };
+    static const pair_value        v_set[]            = { { GID_A, -80 } };
+    static const pair_value *const sets[]             = { h_set, a_set, v_set };
+    static const size_t            set_sizes[]        = { 1, 3, 1 };
+    static const uint16_t          t_first[]          = { GID_T };
+    static const pair_value        t_late[]           = { { GID_O_SMALL, -999 } };
+    static const pair_value *const late_sets[]        = { t_late };
+    static const size_t            late_sizes[]       = { 1 };
+    static const uint16_t          a_only[]           = { GID_A };
+    static const pair_value        a_greek[]          = { { GID_A, -500 } };
+    static const pair_value *const greek_sets[]       = { a_greek };
+    static const uint16_t          v_only[]           = { GID_V };
+    static const pair_value        v_distance[]       = { { GID_V, -300 } };
+    static const pair_value *const distance_sets[]    = { v_distance };
+    static const uint16_t          o_only[]           = { GID_O };
+    static const pair_value        o_turkish[]        = { { GID_O, -400 } };
+    static const pair_value *const turkish_sets[]     = { o_turkish };
+    static const size_t            one[]              = { 1 };
+    buffer                         scripts[4] = { { 0 } }, features[4] = { { 0 } }, lookups[5] = { { 0 } };
+    buffer                         script_list = { 0 }, feature_list = { 0 }, lookup_list = { 0 };
+    buffer                         subtables[2] = { { 0 } }, inner = { 0 };
+    static const char *const       script_tags[]  = { "DFLT", "cyrl", "grek", "latn" };
+    static const char *const       feature_tags[] = { "dist", "kern", "kern", "kern" };
 
     /* DFLT and cyrl: the kern feature only; grek: the other kern feature; latn: kern, dist, TRK. */
     for (int at = 0; at < 4; ++at) {
@@ -1070,8 +1070,8 @@ static void gpos_table(buffer *out) {
     }
     {
         static const uint16_t feature_lookups[4][2] = { { 3, 0 }, { 0, 1 }, { 2, 0 }, { 4, 0 } };
-        static const size_t feature_sizes[4] = { 1, 2, 1, 1 };
-        size_t offset = 2u + 6u * 4u;
+        static const size_t   feature_sizes[4]      = { 1, 2, 1, 1 };
+        size_t                offset                = 2u + 6u * 4u;
         for (int at = 0; at < 4; ++at) {
             put16(&features[at], 0);
             put16(&features[at], (int)feature_sizes[at]);
@@ -1157,10 +1157,10 @@ static void kern_subtable(buffer *out, int coverage, const uint16_t (*pairs)[2],
 }
 
 static void kern_table(buffer *out) {
-    static const uint16_t pairs[3][2] = { { GID_A, GID_V }, { GID_V, GID_A }, { GID_T, GID_O_SMALL } };
-    static const int values[3] = { -80, -80, -120 };
+    static const uint16_t pairs[3][2]         = { { GID_A, GID_V }, { GID_V, GID_A }, { GID_T, GID_O_SMALL } };
+    static const int      values[3]           = { -80, -80, -120 };
     static const uint16_t minimum_pairs[1][2] = { { GID_A, GID_A } };
-    static const int minimum_values[1] = { -400 };
+    static const int      minimum_values[1]   = { -400 };
     put16(out, 0);
     put16(out, 2);
     kern_subtable(out, 0x0001, pairs, values, 3);
@@ -1185,12 +1185,12 @@ static int compare_tables(const void *left, const void *right) {
 }
 
 static test_bytes assemble(font_builder *font, uint32_t version) {
-    buffer out = { 0 };
-    test_bytes result = { NULL, 0 };
-    size_t offset = 12u + 16u * font->count;
-    size_t head_at = 0;
-    unsigned search = 1, selector = 0;
-    int failed = 0;
+    buffer     out     = { 0 };
+    test_bytes result  = { NULL, 0 };
+    size_t     offset  = 12u + 16u * font->count;
+    size_t     head_at = 0;
+    unsigned   search = 1, selector = 0;
+    int        failed = 0;
     qsort(font->tables, font->count, sizeof font->tables[0], compare_tables);
     while (search * 2u <= font->count) {
         search *= 2u;
@@ -1202,8 +1202,8 @@ static test_bytes assemble(font_builder *font, uint32_t version) {
     put16(&out, (int)selector);
     put16(&out, (int)(font->count * 16u - search * 16u));
     for (size_t at = 0; at < font->count; ++at) {
-        buffer *data = &font->tables[at].data;
-        failed |= data->failed;
+        buffer *data  = &font->tables[at].data;
+        failed       |= data->failed;
         put_tag(&out, font->tables[at].tag);
         put32(&out, checksum(data->data, data->size));
         put32(&out, (uint32_t)offset);
@@ -1231,20 +1231,20 @@ static test_bytes assemble(font_builder *font, uint32_t version) {
 }
 
 static test_bytes truetype(font_fixture_variant variant) {
-    font_builder font = { 0 };
-    buffer glyf = { 0 }, loca = { 0 };
-    const int crowded = variant == FONT_FIXTURE_CROWDED;
-    const int long_offsets = variant != FONT_FIXTURE_KERN;
-    const unsigned glyph_count = crowded ? FONT_FIXTURE_CROWDED_COUNT + 1u : GID_COUNT;
-    const unsigned metrics = variant == FONT_FIXTURE_KERN ? GID_EMOJI + 1u : (crowded ? 2u : GID_COUNT);
-    const int box[4] = { -200, -200, 1100, 1100 };
-    buffer *table;
+    font_builder   font = { 0 };
+    buffer         glyf = { 0 }, loca = { 0 };
+    const int      crowded      = variant == FONT_FIXTURE_CROWDED;
+    const int      long_offsets = variant != FONT_FIXTURE_KERN;
+    const unsigned glyph_count  = crowded ? FONT_FIXTURE_CROWDED_COUNT + 1u : GID_COUNT;
+    const unsigned metrics      = variant == FONT_FIXTURE_KERN ? GID_EMOJI + 1u : (crowded ? 2u : GID_COUNT);
+    const int      box[4]       = { -200, -200, 1100, 1100 };
+    buffer        *table;
 
     if (crowded) {
         static const font_fixture_point em_points[] = { RECT(0, 0, 1000, 1000) };
-        static const size_t em_ends[] = { 4 };
-        static const simple_glyph em_glyph = { em_points, 4, em_ends, 1 };
-        buffer em = { 0 };
+        static const size_t             em_ends[]   = { 4 };
+        static const simple_glyph       em_glyph    = { em_points, 4, em_ends, 1 };
+        buffer                          em          = { 0 };
         simple_glyph_data(&em_glyph, &em);
         pad_to(&em, 4);
         /* An empty .notdef, then the em square once per glyph: loca cannot share one range. */
@@ -1347,8 +1347,8 @@ static test_bytes truetype(font_fixture_variant variant) {
 
 test_bytes font_fixture(font_fixture_variant variant) {
     if (variant == FONT_FIXTURE_CFF) {
-        font_builder font = { 0 };
-        buffer *table = new_table(&font, "CFF ");
+        font_builder font  = { 0 };
+        buffer      *table = new_table(&font, "CFF ");
         put8(table, 1);
         put8(table, 0);
         put8(table, 4);
@@ -1379,11 +1379,11 @@ size_t font_fixture_codes(font_fixture_variant variant, const uint32_t **codes) 
 }
 
 int font_fixture_outline_of(font_fixture_variant variant, uint32_t code, font_fixture_outline *outline) {
-    const uint32_t *codes = NULL;
-    const size_t count = font_fixture_codes(variant, &codes);
-    points composed = { 0 };
-    uint16_t glyph = 0;
-    int known = 0;
+    const uint32_t *codes    = NULL;
+    const size_t    count    = font_fixture_codes(variant, &codes);
+    points          composed = { 0 };
+    uint16_t        glyph    = 0;
+    int             known    = 0;
     memset(outline, 0, sizeof *outline);
     for (size_t at = 0; at < count; ++at) {
         known |= codes[at] == code;
@@ -1406,9 +1406,9 @@ int font_fixture_outline_of(font_fixture_variant variant, uint32_t code, font_fi
     if (variant == FONT_FIXTURE_KERN && glyph > GID_EMOJI && glyphs[glyph].simple != NULL) {
         outline->advance = glyphs[GID_EMOJI].advance;
     }
-    outline->points = composed.items;
-    outline->point_count = composed.count;
-    outline->contour_ends = composed.ends;
+    outline->points        = composed.items;
+    outline->point_count   = composed.count;
+    outline->contour_ends  = composed.ends;
     outline->contour_count = composed.contour_count;
     return 1;
 }

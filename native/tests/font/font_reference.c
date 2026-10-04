@@ -13,14 +13,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FIELD_RANGE 8.4852813742385702
-#define SUPERSAMPLE 4
+#define FIELD_RANGE    8.4852813742385702
+#define SUPERSAMPLE    4
 /* A mismatch closer than this many 4× pixels to the true outline is antialiasing, not a fault. */
 #define BOUNDARY_NOISE 2
 
 typedef struct blob {
     uint8_t *data;
-    size_t size;
+    size_t   size;
 } blob;
 
 static int failures = 0;
@@ -33,7 +33,7 @@ static void fail(const char *format, const char *detail, long value) {
 
 static int load(const char *path, blob *out) {
     FILE *file;
-    long size;
+    long  size;
     out->data = NULL;
     out->size = 0;
 #ifdef _WIN32
@@ -75,7 +75,7 @@ static uint16_t le16(const uint8_t *at) {
 
 static float le_float(const uint8_t *at) {
     const uint32_t raw = le32(at);
-    float value;
+    float          value;
     memcpy(&value, &raw, sizeof value);
     return value;
 }
@@ -85,31 +85,31 @@ static float le_float(const uint8_t *at) {
 typedef struct glyph_box {
     uint32_t code;
     uint16_t x, y, w, h;
-    int16_t bx, by, advance;
+    int16_t  bx, by, advance;
 } glyph_box;
 
 typedef struct kern_pair {
     uint16_t left, right;
-    int32_t value;
+    int32_t  value;
 } kern_pair;
 
 typedef struct fnt {
-    char name[256];
-    int32_t size, zero, cell;
-    uint8_t type, bold, italic;
-    float a, b, c;
-    int16_t r;
+    char       name[256];
+    int32_t    size, zero, cell;
+    uint8_t    type, bold, italic;
+    float      a, b, c;
+    int16_t    r;
     glyph_box *glyphs;
-    uint32_t glyph_count;
+    uint32_t   glyph_count;
     kern_pair *pairs;
-    uint32_t pair_count;
+    uint32_t   pair_count;
 } fnt;
 
 static int read_fnt(const blob *file, fnt *out) {
-    size_t at = 12;
+    size_t         at   = 12;
     const uint8_t *glps = NULL, *tcrd = NULL;
-    uint32_t glps_size = 0, tcrd_size = 0;
-    int head = 0;
+    uint32_t       glps_size = 0, tcrd_size = 0;
+    int            head = 0;
     memset(out, 0, sizeof *out);
     if (file->size < 12 || memcmp(file->data, "FORM", 4) != 0 || memcmp(file->data + 8, "FNT5", 4) != 0 ||
         be32(file->data + 4) + 8u != file->size) {
@@ -117,45 +117,45 @@ static int read_fnt(const blob *file, fnt *out) {
     }
     while (at + 8u <= file->size) {
         const uint8_t *chunk = file->data + at + 8u;
-        const uint32_t size = be32(file->data + at + 4u);
+        const uint32_t size  = be32(file->data + at + 4u);
         if (size > file->size - at - 8u) {
             return 0;
         }
         if (memcmp(file->data + at, "HEAD", 4) == 0) {
-            const uint32_t name = le32(chunk);
+            const uint32_t name  = le32(chunk);
             const uint8_t *field = chunk + 4u + name;
             if (name == 0 || name > 255u || size != 4u + name + 29u || chunk[4u + name - 1u] != 0) {
                 return 0;
             }
             memcpy(out->name, chunk + 4, name);
-            out->size = (int32_t)le32(field);
-            out->zero = (int32_t)le32(field + 4);
-            out->type = field[8];
-            out->cell = (int32_t)le32(field + 9);
-            out->a = le_float(field + 13);
-            out->b = le_float(field + 17);
-            out->r = (int16_t)le16(field + 21);
-            out->bold = field[23];
+            out->size   = (int32_t)le32(field);
+            out->zero   = (int32_t)le32(field + 4);
+            out->type   = field[8];
+            out->cell   = (int32_t)le32(field + 9);
+            out->a      = le_float(field + 13);
+            out->b      = le_float(field + 17);
+            out->r      = (int16_t)le16(field + 21);
+            out->bold   = field[23];
             out->italic = field[24];
-            out->c = le_float(field + 25);
-            head = 1;
+            out->c      = le_float(field + 25);
+            head        = 1;
         } else if (memcmp(file->data + at, "GLPS", 4) == 0) {
-            glps = chunk;
+            glps      = chunk;
             glps_size = size;
         } else if (memcmp(file->data + at, "TCRD", 4) == 0) {
-            tcrd = chunk;
+            tcrd      = chunk;
             tcrd_size = size;
         } else if (memcmp(file->data + at, "KERN", 4) == 0) {
             if (size % 8u != 0) {
                 return 0;
             }
             out->pair_count = size / 8u;
-            out->pairs = malloc((out->pair_count + 1u) * sizeof *out->pairs);
+            out->pairs      = malloc((out->pair_count + 1u) * sizeof *out->pairs);
             if (out->pairs == NULL) {
                 return 0;
             }
             for (uint32_t pair = 0; pair < out->pair_count; ++pair) {
-                out->pairs[pair].left = le16(chunk + 8u * pair);
+                out->pairs[pair].left  = le16(chunk + 8u * pair);
                 out->pairs[pair].right = le16(chunk + 8u * pair + 2u);
                 out->pairs[pair].value = (int32_t)le32(chunk + 8u * pair + 4u);
             }
@@ -169,17 +169,17 @@ static int read_fnt(const blob *file, fnt *out) {
     }
     {
         const uint32_t count = le32(glps + 8), ranges = le32(glps + 12);
-        uint32_t index = 0;
+        uint32_t       index = 0;
         if (glps_size != 16u + 8u * ranges || tcrd_size != 14u * count) {
             return 0;
         }
         out->glyph_count = count;
-        out->glyphs = malloc((count + 1u) * sizeof *out->glyphs);
+        out->glyphs      = malloc((count + 1u) * sizeof *out->glyphs);
         if (out->glyphs == NULL) {
             return 0;
         }
         for (uint32_t range = 0; range < ranges; ++range) {
-            const uint32_t first = le32(glps + 16u + 8u * range);
+            const uint32_t first  = le32(glps + 16u + 8u * range);
             const uint32_t length = le16(glps + 20u + 8u * range);
             if (le16(glps + 22u + 8u * range) != 0) {
                 return 0;
@@ -189,13 +189,13 @@ static int read_fnt(const blob *file, fnt *out) {
                 if (index >= count) {
                     return 0;
                 }
-                out->glyphs[index].code = first + step;
-                out->glyphs[index].x = le16(box);
-                out->glyphs[index].y = le16(box + 2);
-                out->glyphs[index].w = le16(box + 4);
-                out->glyphs[index].h = le16(box + 6);
-                out->glyphs[index].bx = (int16_t)le16(box + 8);
-                out->glyphs[index].by = (int16_t)le16(box + 10);
+                out->glyphs[index].code    = first + step;
+                out->glyphs[index].x       = le16(box);
+                out->glyphs[index].y       = le16(box + 2);
+                out->glyphs[index].w       = le16(box + 4);
+                out->glyphs[index].h       = le16(box + 6);
+                out->glyphs[index].bx      = (int16_t)le16(box + 8);
+                out->glyphs[index].by      = (int16_t)le16(box + 10);
                 out->glyphs[index].advance = (int16_t)le16(box + 12);
                 ++index;
             }
@@ -212,15 +212,15 @@ static int read_fnt(const blob *file, fnt *out) {
 static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t capacity, size_t *written) {
     size_t in = 0, out = *written;
     while (in < size) {
-        const uint8_t token = input[in++];
-        size_t literals = token >> 4, match;
+        const uint8_t token    = input[in++];
+        size_t        literals = token >> 4, match;
         if (literals == 15u) {
             uint8_t more;
             do {
                 if (in >= size) {
                     return 0;
                 }
-                more = input[in++];
+                more      = input[in++];
                 literals += more;
             } while (more == 255u);
         }
@@ -228,7 +228,7 @@ static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t 
             return 0;
         }
         memcpy(output + out, input + in, literals);
-        in += literals;
+        in  += literals;
         out += literals;
         if (in == size) {
             break;
@@ -237,16 +237,16 @@ static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t 
             return 0;
         }
         {
-            const size_t offset = (size_t)input[in] | ((size_t)input[in + 1u] << 8);
-            in += 2u;
-            match = (token & 15u) + 4u;
+            const size_t offset  = (size_t)input[in] | ((size_t)input[in + 1u] << 8);
+            in                  += 2u;
+            match                = (token & 15u) + 4u;
             if ((token & 15u) == 15u) {
                 uint8_t more;
                 do {
                     if (in >= size) {
                         return 0;
                     }
-                    more = input[in++];
+                    more   = input[in++];
                     match += more;
                 } while (more == 255u);
             }
@@ -264,25 +264,25 @@ static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t 
 
 static int read_atlas(const blob *file, uint32_t *width, uint32_t *height, uint8_t **bgra) {
     const uint8_t *data = file->data;
-    uint32_t stored, decoded;
+    uint32_t       stored, decoded;
     const uint8_t *payload;
     if (file->size < 136u || memcmp(data, "DDS ", 4) != 0 || memcmp(data + 36, "ENF1", 4) != 0) {
         return 0;
     }
     *height = le32(data + 12);
-    *width = le32(data + 16);
+    *width  = le32(data + 16);
     /* One level, 32-bit with alpha, masks of BGRA. */
     if (le32(data + 28) != 1u || le32(data + 80) != 0x41u || le32(data + 88) != 32u ||
         le32(data + 92) != 0x00FF0000u || le32(data + 104) != 0xFF000000u) {
         return 0;
     }
-    stored = le32(data + 132);
+    stored  = le32(data + 132);
     payload = data + 136;
     if (stored != file->size - 136u) {
         return 0;
     }
     decoded = *width * *height * 4u;
-    *bgra = malloc(decoded);
+    *bgra   = malloc(decoded);
     if (*bgra == NULL) {
         return 0;
     }
@@ -303,9 +303,9 @@ static int read_atlas(const blob *file, uint32_t *width, uint32_t *height, uint8
             if (stored - at < 4u) {
                 return 0;
             }
-            descriptor = le32(payload + at);
-            block = descriptor & 0x7FFFFFFFu;
-            at += 4u;
+            descriptor  = le32(payload + at);
+            block       = descriptor & 0x7FFFFFFFu;
+            at         += 4u;
             if (block > stored - at || !lz4_block(payload + at, block, *bgra, decoded, &written)) {
                 return 0;
             }
@@ -326,10 +326,10 @@ typedef struct segment {
 
 typedef struct polygon {
     segment *segments;
-    size_t count;
-    size_t capacity;
-    double box[4];
-    int empty;
+    size_t   count;
+    size_t   capacity;
+    double   box[4];
+    int      empty;
 } polygon;
 
 static void add_segment(polygon *out, double x0, double y0, double x1, double y1) {
@@ -351,7 +351,7 @@ static void include(polygon *out, double x, double y) {
     if (out->empty) {
         out->box[0] = out->box[2] = x;
         out->box[1] = out->box[3] = y;
-        out->empty = 0;
+        out->empty                = 0;
         return;
     }
     if (x < out->box[0]) {
@@ -408,20 +408,20 @@ static void flatten(const font_fixture_outline *outline, double scale, polygon *
     out->empty = 1;
     for (size_t contour = 0; contour < outline->contour_count; ++contour) {
         const size_t end = outline->contour_ends[contour], count = end - start;
-        double points[128][2];
-        int on[128];
-        size_t total = 0;
+        double       points[128][2];
+        int          on[128];
+        size_t       total = 0;
         /* Spell the implied on-curve points out, so every curve is on-off-on. */
         for (size_t at = 0; at < count; ++at) {
             const font_fixture_point *here = &outline->points[start + at];
             const font_fixture_point *next = &outline->points[start + (at + 1u) % count];
-            points[total][0] = here->x * scale;
-            points[total][1] = here->y * scale;
-            on[total++] = here->on_curve;
+            points[total][0]               = here->x * scale;
+            points[total][1]               = here->y * scale;
+            on[total++]                    = here->on_curve;
             if (!here->on_curve && !next->on_curve) {
                 points[total][0] = (here->x + next->x) * 0.5 * scale;
                 points[total][1] = (here->y + next->y) * 0.5 * scale;
-                on[total++] = 1;
+                on[total++]      = 1;
             }
         }
         {
@@ -481,9 +481,9 @@ static double median3(double a, double b, double c) {
 /** The shader: bilinear between texel centres, median of three, ink from half up. */
 static int inked(const uint8_t *bgra, uint32_t width, uint32_t height, double u, double v) {
     const double x = u - 0.5, y = v - 0.5;
-    const int x0 = (int)floor(x), y0 = (int)floor(y);
+    const int    x0 = (int)floor(x), y0 = (int)floor(y);
     const double fx = x - x0, fy = y - y0;
-    double channel[3];
+    double       channel[3];
     for (int c = 0; c < 3; ++c) {
         double corners[4];
         for (int corner = 0; corner < 4; ++corner) {
@@ -514,11 +514,11 @@ static int inked(const uint8_t *bgra, uint32_t width, uint32_t height, double u,
  */
 static long compare_glyph(const polygon *truth, const glyph_box *box, int32_t cell,
     const uint8_t *bgra, uint32_t width, uint32_t height, long *ink) {
-    const double box_left = box->x + (cell - box->w) * 0.5, box_top = box->y + (cell - box->h) * 0.5;
-    const int across = (box->w + 10) * SUPERSAMPLE, down = (box->h + 10) * SUPERSAMPLE;
+    const double   box_left = box->x + (cell - box->w) * 0.5, box_top = box->y + (cell - box->h) * 0.5;
+    const int      across = (box->w + 10) * SUPERSAMPLE, down = (box->h + 10) * SUPERSAMPLE;
     unsigned char *reference = malloc((size_t)across * down), *rebuilt = malloc((size_t)across * down);
-    long faults = 0;
-    *ink = 0;
+    long           faults = 0;
+    *ink                  = 0;
     if (reference == NULL || rebuilt == NULL) {
         exit(3);
     }
@@ -527,9 +527,9 @@ static long compare_glyph(const polygon *truth, const glyph_box *box, int32_t ce
             const double gx = box->bx - 5.0 + (column + 0.5) / SUPERSAMPLE;
             const double gy = box->by + 5.0 - (row + 0.5) / SUPERSAMPLE;
             const double u = box_left + (gx - box->bx), v = box_top + (box->by - gy);
-            reference[row * across + column] = (unsigned char)filled(truth, gx, gy);
-            rebuilt[row * across + column] = (unsigned char)inked(bgra, width, height, u, v);
-            *ink += reference[row * across + column];
+            reference[row * across + column]  = (unsigned char)filled(truth, gx, gy);
+            rebuilt[row * across + column]    = (unsigned char)inked(bgra, width, height, u, v);
+            *ink                             += reference[row * across + column];
         }
     }
     for (int row = 0; row < down; ++row) {
@@ -566,7 +566,7 @@ static int smallest_atlas(uint32_t cells, int32_t cell, uint32_t *width, uint32_
                 break;
             }
             if ((uint64_t)(((1u << wide) + 1u) / (uint32_t)(cell + 1)) * (((1u << high) + 1u) / (uint32_t)(cell + 1)) >= cells) {
-                *width = 1u << wide;
+                *width  = 1u << wide;
                 *height = 1u << high;
                 return 1;
             }
@@ -577,26 +577,26 @@ static int smallest_atlas(uint32_t cells, int32_t cell, uint32_t *width, uint32_
 
 /** `{"pairs": [[left, right, value], ...]}`: every integer after "pairs", three at a time. */
 static int matches_golden(const char *path, const fnt *font) {
-    blob golden;
+    blob        golden;
     const char *at;
-    uint32_t index = 0;
+    uint32_t    index = 0;
     if (!load(path, &golden)) {
         return 0;
     }
     golden.data[golden.size] = 0;
-    at = strstr((const char *)golden.data, "\"pairs\"");
+    at                       = strstr((const char *)golden.data, "\"pairs\"");
     if (at == NULL) {
         free(golden.data);
         return 0;
     }
     for (;;) {
         long values[3];
-        int found = 0;
+        int  found = 0;
         for (; found < 3 && *at != 0; ++at) {
             if (*at == '-' || (*at >= '0' && *at <= '9')) {
                 char *end;
                 values[found++] = strtol(at, &end, 10);
-                at = end - 1;
+                at              = end - 1;
             }
         }
         if (found == 0) {
@@ -614,25 +614,25 @@ static int matches_golden(const char *path, const fnt *font) {
 }
 
 int main(int argc, char **argv) {
-    font_fixture_variant variant;
-    const uint32_t *codes = NULL;
-    size_t code_count;
+    font_fixture_variant     variant;
+    const uint32_t          *codes = NULL;
+    size_t                   code_count;
     const font_fixture_pair *planted = NULL;
-    size_t planted_count;
-    blob font_file, atlas_file;
-    fnt font;
-    uint32_t width = 0, height = 0, unique_cells = 0, expected_width, expected_height;
-    uint8_t *bgra = NULL;
-    double size, scale;
-    int32_t largest = 0;
+    size_t                   planted_count;
+    blob                     font_file, atlas_file;
+    fnt                      font;
+    uint32_t                 width = 0, height = 0, unique_cells = 0, expected_width, expected_height;
+    uint8_t                 *bgra = NULL;
+    double                   size, scale;
+    int32_t                  largest = 0;
     if ((argc != 5 && argc != 6) || (strcmp(argv[1], "gpos") != 0 && strcmp(argv[1], "kern") != 0)) {
         fputs("usage: enfusion-font-reference gpos|kern SIZE FONT.fnt ATLAS.edds [GOLDEN_PAIRS.json]\n", stderr);
         return 2;
     }
-    variant = strcmp(argv[1], "gpos") == 0 ? FONT_FIXTURE_GPOS : FONT_FIXTURE_KERN;
-    size = atof(argv[2]);
-    scale = size / FONT_FIXTURE_UNITS_PER_EM;
-    code_count = font_fixture_codes(variant, &codes);
+    variant       = strcmp(argv[1], "gpos") == 0 ? FONT_FIXTURE_GPOS : FONT_FIXTURE_KERN;
+    size          = atof(argv[2]);
+    scale         = size / FONT_FIXTURE_UNITS_PER_EM;
+    code_count    = font_fixture_codes(variant, &codes);
     planted_count = font_fixture_pairs(variant, &planted);
     if (!load(argv[3], &font_file) || !read_fnt(&font_file, &font)) {
         fputs("the FNT file is not a well-formed FNT5\n", stderr);
@@ -657,12 +657,12 @@ int main(int argc, char **argv) {
         fail("%s %ld", "HEAD B and C are not the size", (long)font.b);
     }
     {
-        const int cap = font_fixture_cap_height(variant);
-        double expected = cap * scale;
+        const int cap      = font_fixture_cap_height(variant);
+        double    expected = cap * scale;
         if (cap < 0) {
             /* Without OS/2 cap height, the top of the planted H, whether or not the set holds it. */
             font_fixture_outline outline;
-            polygon truth;
+            polygon              truth;
             if (!font_fixture_outline_of(variant, 0x48u, &outline)) {
                 fail("%s %ld", "no truth for H", 0);
             } else {
@@ -681,9 +681,9 @@ int main(int argc, char **argv) {
     {
         uint32_t expected = 0;
         for (size_t at = 0; at < code_count; ++at) {
-            const glyph_box *box = box_of(&font, codes[at]);
+            const glyph_box     *box = box_of(&font, codes[at]);
             font_fixture_outline outline;
-            polygon truth;
+            polygon              truth;
             ++expected;
             if (box == NULL) {
                 fail("%s U+%04lX", "missing glyph", (long)codes[at]);
@@ -726,8 +726,8 @@ int main(int argc, char **argv) {
 
     /* Cells: one per glyph, inside the atlas, none overlapping, the size the largest box asks for. */
     for (uint32_t at = 0; at < font.glyph_count; ++at) {
-        const glyph_box *box = &font.glyphs[at];
-        int shared = 0;
+        const glyph_box *box    = &font.glyphs[at];
+        int              shared = 0;
         if (box->w > largest) {
             largest = box->w;
         }
@@ -736,8 +736,8 @@ int main(int argc, char **argv) {
         }
         for (uint32_t other = 0; other < at; ++other) {
             const glyph_box *before = &font.glyphs[other];
-            const int same = before->x == box->x && before->y == box->y;
-            const int apart = before->x + font.cell + 1 <= box->x || box->x + font.cell + 1 <= before->x ||
+            const int        same   = before->x == box->x && before->y == box->y;
+            const int        apart  = before->x + font.cell + 1 <= box->x || box->x + font.cell + 1 <= before->x ||
                 before->y + font.cell + 1 <= box->y || box->y + font.cell + 1 <= before->y;
             if (same) {
                 shared = 1;
@@ -763,8 +763,8 @@ int main(int argc, char **argv) {
     /* Alpha 255 everywhere; zeros everywhere outside the cells. */
     for (uint32_t y = 0; y < height; ++y) {
         for (uint32_t x = 0; x < width; ++x) {
-            const uint8_t *pixel = bgra + ((size_t)y * width + x) * 4u;
-            int in_cell = 0;
+            const uint8_t *pixel   = bgra + ((size_t)y * width + x) * 4u;
+            int            in_cell = 0;
             for (uint32_t at = 0; at < font.glyph_count && !in_cell; ++at) {
                 in_cell = x >= font.glyphs[at].x && x < (uint32_t)(font.glyphs[at].x + font.cell) &&
                     y >= font.glyphs[at].y && y < (uint32_t)(font.glyphs[at].y + font.cell);
@@ -786,26 +786,26 @@ int main(int argc, char **argv) {
     {
         const font_fixture_frame frame = font_fixture_missing_box();
         for (uint32_t at = 0; at < font.glyph_count; ++at) {
-            const glyph_box *box = &font.glyphs[at];
+            const glyph_box     *box = &font.glyphs[at];
             font_fixture_outline outline;
-            polygon truth;
-            long faults, ink;
+            polygon              truth;
+            long                 faults, ink;
             if (box->code == 0x25A1u) {
                 /* The drawn box: what the generator's frame is specified to be. */
-                static size_t frame_ends[2] = { 4, 8 };
-                const double e = FONT_FIXTURE_UNITS_PER_EM;
-                const double x0 = frame.left * e, y0 = frame.bottom * e;
-                const double x1 = (frame.left + frame.side) * e, y1 = (frame.bottom + frame.side) * e;
-                const double t = frame.stroke * e;
+                static size_t      frame_ends[2] = { 4, 8 };
+                const double       e             = FONT_FIXTURE_UNITS_PER_EM;
+                const double       x0 = frame.left * e, y0 = frame.bottom * e;
+                const double       x1 = (frame.left + frame.side) * e, y1 = (frame.bottom + frame.side) * e;
+                const double       t               = frame.stroke * e;
                 font_fixture_point frame_points[8] = {
                     { x0, y0, 1 }, { x0, y1, 1 }, { x1, y1, 1 }, { x1, y0, 1 },
                     { x0 + t, y0 + t, 1 }, { x1 - t, y0 + t, 1 }, { x1 - t, y1 - t, 1 }, { x0 + t, y1 - t, 1 }
                 };
-                outline.points = frame_points;
-                outline.point_count = 8;
-                outline.contour_ends = frame_ends;
+                outline.points        = frame_points;
+                outline.point_count   = 8;
+                outline.contour_ends  = frame_ends;
                 outline.contour_count = 2;
-                outline.advance = (int)round_half_away(frame.advance * e);
+                outline.advance       = (int)round_half_away(frame.advance * e);
                 flatten(&outline, scale, &truth);
                 if (box->advance != (int16_t)round_half_away(frame.advance * size)) {
                     fail("%s %ld", "drawn box advance", box->advance);
@@ -830,14 +830,14 @@ int main(int argc, char **argv) {
     /* The field runs 0..1 over 1.5 × R / √2 atlas pixels: the commonest median step says how far. */
     {
         long histogram[256] = { 0 };
-        long best = 0;
-        int mode = 0;
+        long best           = 0;
+        int  mode           = 0;
         for (uint32_t at = 0; at < font.glyph_count; ++at) {
             const glyph_box *box = &font.glyphs[at];
             for (int y = box->y; y < box->y + font.cell; ++y) {
                 for (int x = box->x; x + 1 < box->x + font.cell; ++x) {
                     const uint8_t *a = bgra + ((size_t)y * width + (size_t)x) * 4u, *b = a + 4;
-                    const int ma = (int)median3(a[0], a[1], a[2]), mb = (int)median3(b[0], b[1], b[2]);
+                    const int      ma = (int)median3(a[0], a[1], a[2]), mb = (int)median3(b[0], b[1], b[2]);
                     if (ma > 8 && ma < 247 && mb > 8 && mb < 247 && ma != mb) {
                         ++histogram[abs(ma - mb)];
                     }
@@ -860,13 +860,13 @@ int main(int argc, char **argv) {
     /* KERN: the planted pairs, in whole atlas pixels, BMP only, no zeros, by (left << 16) | right. */
     {
         kern_pair expected[64];
-        uint32_t expected_count = 0;
+        uint32_t  expected_count = 0;
         for (size_t at = 0; at < planted_count; ++at) {
             const double value = round_half_away(planted[at].value * scale);
             if (value == 0 || planted[at].left > 0xFFFFu || planted[at].right > 0xFFFFu) {
                 continue;
             }
-            expected[expected_count].left = (uint16_t)planted[at].left;
+            expected[expected_count].left  = (uint16_t)planted[at].left;
             expected[expected_count].right = (uint16_t)planted[at].right;
             expected[expected_count].value = (int32_t)value;
             ++expected_count;

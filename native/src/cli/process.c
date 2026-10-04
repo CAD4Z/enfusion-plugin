@@ -94,7 +94,7 @@ int unsigned_argument(const cli_char *text, uint32_t *value) {
         if (*text < (cli_char)'0' || *text > (cli_char)'9') {
             return 0;
         }
-        digit = (unsigned)(*text - (cli_char)'0');
+        digit  = (unsigned)(*text - (cli_char)'0');
         parsed = parsed * 10u + digit;
         if (parsed > UINT32_MAX) {
             return 0;
@@ -110,7 +110,7 @@ void json_string(const char *text) {
     putchar('"');
     while (*at != 0) {
         switch (*at) {
-            case '"': fputs("\\\"", stdout); break;
+            case '"':  fputs("\\\"", stdout); break;
             case '\\': fputs("\\\\", stdout); break;
             case '\b': fputs("\\b", stdout); break;
             case '\f': fputs("\\f", stdout); break;
@@ -132,10 +132,10 @@ void json_string(const char *text) {
 
 int report_failure(edds_status status, const edds_error *error) {
     const char *category = edds_status_category(status);
-    const char *code = error != NULL && error->code[0] != '\0' ? error->code : "unspecified";
-    const char *message = error != NULL && error->message[0] != '\0'
-        ? error->message
-        : "The EDDS operation failed.";
+    const char *code     = error != NULL && error->code[0] != '\0' ? error->code : "unspecified";
+    const char *message  = error != NULL && error->message[0] != '\0'
+         ? error->message
+         : "The EDDS operation failed.";
     (void)fprintf(stderr, "enfusion: %s: %s\n", category, message);
     fputs("{\"protocolVersion\":1,\"kind\":\"error\",\"error\":{\"category\":", stdout);
     json_string(category);
@@ -151,7 +151,7 @@ char *utf8_of(const cli_char *value) {
 #ifdef _WIN32
     const int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
         NULL, 0, NULL, NULL);
-    char *result;
+    char     *result;
     if (needed <= 0) {
         return NULL;
     }
@@ -166,8 +166,8 @@ char *utf8_of(const cli_char *value) {
     }
     return result;
 #else
-    const size_t size = strlen(value);
-    char *result = malloc(size + 1u);
+    const size_t size   = strlen(value);
+    char        *result = malloc(size + 1u);
     if (result != NULL) {
         memcpy(result, value, size + 1u);
     }
@@ -177,7 +177,7 @@ char *utf8_of(const cli_char *value) {
 
 cli_char *cli_of_utf8(const char *value) {
 #ifdef _WIN32
-    int needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, NULL, 0);
+    int       needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, NULL, 0);
     cli_char *result;
     if (needed <= 0) {
         return NULL;
@@ -192,8 +192,8 @@ cli_char *cli_of_utf8(const char *value) {
     }
     return result;
 #else
-    const size_t size = strlen(value);
-    cli_char *result = malloc(size + 1u);
+    const size_t size   = strlen(value);
+    cli_char    *result = malloc(size + 1u);
     if (result != NULL) {
         memcpy(result, value, size + 1u);
     }

@@ -11,7 +11,7 @@
  */
 
 /* Below this, two parameters or two points are the same one. */
-#define SAME 1e-9
+#define SAME           1e-9
 /* A piece shorter than this changes no pixel of any field and is dropped. */
 #define SHORTEST_PIECE 1e-7
 /* A pair of curves that cross more often than this is two copies of one curve. */
@@ -33,11 +33,11 @@ void font_shape_free(font_shape *shape) {
 int font_shape_push(font_shape *shape, const font_edge *edge) {
     if (shape->count == shape->capacity) {
         const size_t capacity = shape->capacity == 0 ? 32u : shape->capacity * 2u;
-        font_edge *grown = realloc(shape->edges, capacity * sizeof *grown);
+        font_edge   *grown    = realloc(shape->edges, capacity * sizeof *grown);
         if (grown == NULL) {
             return 0;
         }
-        shape->edges = grown;
+        shape->edges    = grown;
         shape->capacity = capacity;
     }
     shape->edges[shape->count++] = *edge;
@@ -52,11 +52,11 @@ static int end_loop(font_shape *shape) {
     }
     if (shape->loop_count == shape->loop_capacity) {
         const size_t capacity = shape->loop_capacity == 0 ? 8u : shape->loop_capacity * 2u;
-        size_t *grown = realloc(shape->loop_ends, capacity * sizeof *grown);
+        size_t      *grown    = realloc(shape->loop_ends, capacity * sizeof *grown);
         if (grown == NULL) {
             return 0;
         }
-        shape->loop_ends = grown;
+        shape->loop_ends     = grown;
         shape->loop_capacity = capacity;
     }
     shape->loop_ends[shape->loop_count++] = shape->count;
@@ -76,10 +76,10 @@ static int emit(font_shape *shape, font_vec from, const font_vec *control, font_
     edge.p[2] = to;
     edge.p[1] = vec_middle(from, to);
     if (control != NULL) {
-        const font_vec chord = vec_minus(to, from);
-        const double chord_length = vec_length(chord);
-        const font_vec offset = vec_minus(*control, from);
-        const double along = chord_length == 0 ? -1.0 : vec_dot(offset, chord) / (chord_length * chord_length);
+        const font_vec chord        = vec_minus(to, from);
+        const double   chord_length = vec_length(chord);
+        const font_vec offset       = vec_minus(*control, from);
+        const double   along        = chord_length == 0 ? -1.0 : vec_dot(offset, chord) / (chord_length * chord_length);
         if (chord_length == 0 && same_point(*control, from)) {
             return 1;
         }
@@ -96,17 +96,17 @@ static int emit(font_shape *shape, font_vec from, const font_vec *control, font_
 
 edds_status font_shape_of_contours(
     const font_contours *contours,
-    double scale,
-    font_shape *shape,
-    edds_error *error) {
+    double               scale,
+    font_shape          *shape,
+    edds_error          *error) {
     size_t start = 0;
     memset(shape, 0, sizeof *shape);
     for (size_t contour = 0; contour < contours->contour_count; ++contour) {
-        const size_t end = contours->ends[contour];
+        const size_t end   = contours->ends[contour];
         const size_t count = end - start;
-        size_t first = count;
-        font_vec current, opening, control = vec_of(0, 0);
-        int pending = 0;
+        size_t       first = count;
+        font_vec     current, opening, control = vec_of(0, 0);
+        int          pending = 0;
         for (size_t at = 0; at < count; ++at) {
             if (contours->points[start + at].on_curve) {
                 first = at;
@@ -138,7 +138,7 @@ edds_status font_shape_of_contours(
             opening = POINT(first);
             current = opening;
             for (size_t step = 1; step < count; ++step) {
-                const size_t at = (first + step) % count;
+                const size_t   at   = (first + step) % count;
                 const font_vec next = POINT(at);
                 if (contours->points[start + at].on_curve) {
                     if (!emit(shape, current, pending ? &control : NULL, next)) {
@@ -175,10 +175,10 @@ static double monotonic_root(const font_edge *edge, double y, double from, doubl
     const double a = edge->p[0].y - 2.0 * edge->p[1].y + edge->p[2].y;
     const double b = 2.0 * (edge->p[1].y - edge->p[0].y);
     const double c = edge->p[0].y - y;
-    double roots[2];
-    int count = 0;
-    double best = from;
-    double best_miss = HUGE_VAL;
+    double       roots[2];
+    int          count     = 0;
+    double       best      = from;
+    double       best_miss = HUGE_VAL;
     if (fabs(a) < 1e-12) {
         if (b != 0) {
             roots[count++] = -c / b;
@@ -201,7 +201,7 @@ static double monotonic_root(const font_edge *edge, double y, double from, doubl
         const double miss = roots[at] < from ? from - roots[at] : (roots[at] > to ? roots[at] - to : 0.0);
         if (miss < best_miss) {
             best_miss = miss;
-            best = roots[at] < from ? from : (roots[at] > to ? to : roots[at]);
+            best      = roots[at] < from ? from : (roots[at] > to ? to : roots[at]);
         }
     }
     return best;
@@ -221,14 +221,14 @@ static int crossings(const font_edge *edge, font_vec point) {
         return total;
     }
     {
-        double cuts[3] = { 0.0, 1.0, 1.0 };
-        int pieces = 1;
+        double       cuts[3]     = { 0.0, 1.0, 1.0 };
+        int          pieces      = 1;
         const double denominator = edge->p[0].y - 2.0 * edge->p[1].y + edge->p[2].y;
         if (denominator != 0) {
             const double extreme = (edge->p[0].y - edge->p[1].y) / denominator;
             if (extreme > 0 && extreme < 1) {
                 cuts[1] = extreme;
-                pieces = 2;
+                pieces  = 2;
             }
         }
         for (int piece = 0; piece < pieces; ++piece) {
@@ -250,8 +250,8 @@ int font_shape_winding(const font_shape *shape, font_vec point) {
     int winding = 0;
     for (size_t at = 0; at < shape->count; ++at) {
         const font_edge *edge = &shape->edges[at];
-        const double low = fmin(fmin(edge->p[0].y, edge->p[1].y), edge->p[2].y);
-        const double high = fmax(fmax(edge->p[0].y, edge->p[1].y), edge->p[2].y);
+        const double     low  = fmin(fmin(edge->p[0].y, edge->p[1].y), edge->p[2].y);
+        const double     high = fmax(fmax(edge->p[0].y, edge->p[1].y), edge->p[2].y);
         if (point.y < low || point.y >= high) {
             continue;
         }
@@ -268,10 +268,10 @@ int font_shape_bounds(const font_shape *shape, double box[4]) {
     box[1] = box[3] = shape->edges[0].p[0].y;
     for (size_t at = 0; at < shape->count; ++at) {
         const font_edge *edge = &shape->edges[at];
-        font_vec points[4];
-        int count = 2;
-        points[0] = edge->p[0];
-        points[1] = edge->p[2];
+        font_vec         points[4];
+        int              count = 2;
+        points[0]              = edge->p[0];
+        points[1]              = edge->p[2];
         if (edge->quad) {
             const double dx = edge->p[0].x - 2.0 * edge->p[1].x + edge->p[2].x;
             const double dy = edge->p[0].y - 2.0 * edge->p[1].y + edge->p[2].y;
@@ -309,19 +309,19 @@ int font_shape_bounds(const font_shape *shape, double box[4]) {
 /* --- Intersections ---------------------------------------------------------------------------- */
 
 typedef struct cut {
-    double t;
+    double   t;
     font_vec at;
 } cut;
 
 typedef struct cut_list {
-    cut *items;
+    cut   *items;
     size_t count;
     size_t capacity;
 } cut_list;
 
 typedef struct union_state {
     cut_list *cuts;
-    int failed;
+    int       failed;
 } union_state;
 
 static void add_cut(union_state *state, size_t edge, double t, font_vec at) {
@@ -331,15 +331,15 @@ static void add_cut(union_state *state, size_t edge, double t, font_vec at) {
     }
     if (list->count == list->capacity) {
         const size_t capacity = list->capacity == 0 ? 4u : list->capacity * 2u;
-        cut *grown = realloc(list->items, capacity * sizeof *grown);
+        cut         *grown    = realloc(list->items, capacity * sizeof *grown);
         if (grown == NULL) {
             state->failed = 1;
             return;
         }
-        list->items = grown;
+        list->items    = grown;
         list->capacity = capacity;
     }
-    list->items[list->count].t = t;
+    list->items[list->count].t  = t;
     list->items[list->count].at = at;
     ++list->count;
 }
@@ -354,10 +354,10 @@ static double clamp01(double t) {
 
 static void line_line(union_state *state, const font_shape *shape, size_t first, size_t second) {
     const font_edge *a = &shape->edges[first], *b = &shape->edges[second];
-    const font_vec da = vec_minus(a->p[2], a->p[0]), db = vec_minus(b->p[2], b->p[0]);
-    const font_vec gap = vec_minus(b->p[0], a->p[0]);
-    const double la = vec_length(da), lb = vec_length(db);
-    const double denominator = vec_cross(da, db);
+    const font_vec   da = vec_minus(a->p[2], a->p[0]), db = vec_minus(b->p[2], b->p[0]);
+    const font_vec   gap = vec_minus(b->p[0], a->p[0]);
+    const double     la = vec_length(da), lb = vec_length(db);
+    const double     denominator = vec_cross(da, db);
     if (fabs(denominator) > 1e-12 * la * lb) {
         const double t = vec_cross(gap, db) / denominator;
         const double u = vec_cross(gap, da) / denominator;
@@ -380,18 +380,18 @@ static void line_line(union_state *state, const font_shape *shape, size_t first,
 
 static void line_quad(union_state *state, const font_shape *shape, size_t line, size_t curve) {
     const font_edge *a = &shape->edges[line], *b = &shape->edges[curve];
-    const font_vec direction = vec_minus(a->p[2], a->p[0]);
-    const double squared = vec_dot(direction, direction);
-    const double c0 = vec_cross(direction, vec_minus(b->p[0], a->p[0]));
-    const double c1 = vec_cross(direction, vec_minus(b->p[1], a->p[0]));
-    const double c2 = vec_cross(direction, vec_minus(b->p[2], a->p[0]));
-    double roots[2];
-    const int count = quadratic_roots(roots, c0 - 2.0 * c1 + c2, 2.0 * (c1 - c0), c0);
+    const font_vec   direction = vec_minus(a->p[2], a->p[0]);
+    const double     squared   = vec_dot(direction, direction);
+    const double     c0        = vec_cross(direction, vec_minus(b->p[0], a->p[0]));
+    const double     c1        = vec_cross(direction, vec_minus(b->p[1], a->p[0]));
+    const double     c2        = vec_cross(direction, vec_minus(b->p[2], a->p[0]));
+    double           roots[2];
+    const int        count = quadratic_roots(roots, c0 - 2.0 * c1 + c2, 2.0 * (c1 - c0), c0);
     for (int at = 0; at < count; ++at) {
         if (within(roots[at])) {
-            const double u = clamp01(roots[at]);
+            const double   u     = clamp01(roots[at]);
             const font_vec point = edge_point(b, u);
-            const double t = vec_dot(vec_minus(point, a->p[0]), direction) / squared;
+            const double   t     = vec_dot(vec_minus(point, a->p[0]), direction) / squared;
             if (within(t)) {
                 add_cut(state, line, t, point);
                 add_cut(state, curve, u, point);
@@ -402,25 +402,25 @@ static void line_quad(union_state *state, const font_shape *shape, size_t line, 
 
 typedef struct piece {
     font_vec p[3];
-    double from;
-    double to;
+    double   from;
+    double   to;
 } piece;
 
 static void split_piece(const piece *whole, piece *left, piece *right) {
-    const font_vec a = vec_middle(whole->p[0], whole->p[1]);
-    const font_vec b = vec_middle(whole->p[1], whole->p[2]);
+    const font_vec a      = vec_middle(whole->p[0], whole->p[1]);
+    const font_vec b      = vec_middle(whole->p[1], whole->p[2]);
     const font_vec middle = vec_middle(a, b);
-    const double half = 0.5 * (whole->from + whole->to);
-    left->p[0] = whole->p[0];
-    left->p[1] = a;
-    left->p[2] = middle;
-    left->from = whole->from;
-    left->to = half;
-    right->p[0] = middle;
-    right->p[1] = b;
-    right->p[2] = whole->p[2];
-    right->from = half;
-    right->to = whole->to;
+    const double   half   = 0.5 * (whole->from + whole->to);
+    left->p[0]            = whole->p[0];
+    left->p[1]            = a;
+    left->p[2]            = middle;
+    left->from            = whole->from;
+    left->to              = half;
+    right->p[0]           = middle;
+    right->p[1]           = b;
+    right->p[2]           = whole->p[2];
+    right->from           = half;
+    right->to             = whole->to;
 }
 
 static int boxes_meet(const piece *a, const piece *b) {
@@ -436,9 +436,9 @@ static int boxes_meet(const piece *a, const piece *b) {
 }
 
 static double flatness(const piece *part) {
-    const font_vec chord = vec_minus(part->p[2], part->p[0]);
-    const double chord_length = vec_length(chord);
-    const font_vec offset = vec_minus(part->p[1], part->p[0]);
+    const font_vec chord        = vec_minus(part->p[2], part->p[0]);
+    const double   chord_length = vec_length(chord);
+    const font_vec offset       = vec_minus(part->p[1], part->p[0]);
     return chord_length == 0 ? vec_length(offset) : fabs(vec_cross(chord, offset)) / chord_length;
 }
 
@@ -446,14 +446,14 @@ static double flatness(const piece *part) {
 #define MOST_SEARCH_STEPS 4096
 
 typedef struct quad_search {
-    union_state *state;
+    union_state     *state;
     const font_edge *a;
     const font_edge *b;
-    size_t first;
-    size_t second;
-    double found[MOST_CROSSINGS];
-    int found_count;
-    int steps;
+    size_t           first;
+    size_t           second;
+    double           found[MOST_CROSSINGS];
+    int              found_count;
+    int              steps;
 } quad_search;
 
 /** Newton on A(t) = B(u) from the chord estimate; keeps the estimate if it does not converge. */
@@ -462,14 +462,14 @@ static void refine(const font_edge *a, const font_edge *b, double *t, double *u)
     for (int step = 0; step < 8; ++step) {
         const font_vec gap = vec_minus(edge_point(a, t1), edge_point(b, u1));
         const font_vec da = vec_times(edge_direction(a, t1), 2.0), db = vec_times(edge_direction(b, u1), 2.0);
-        const double determinant = vec_cross(da, vec_times(db, -1.0));
-        double dt, du;
+        const double   determinant = vec_cross(da, vec_times(db, -1.0));
+        double         dt, du;
         if (fabs(determinant) < 1e-18) {
             return;
         }
         /* [da -db] [dt du]^T = -gap */
-        dt = vec_cross(vec_times(gap, -1.0), vec_times(db, -1.0)) / determinant;
-        du = vec_cross(da, vec_times(gap, -1.0)) / determinant;
+        dt  = vec_cross(vec_times(gap, -1.0), vec_times(db, -1.0)) / determinant;
+        du  = vec_cross(da, vec_times(gap, -1.0)) / determinant;
         t1 += dt;
         u1 += du;
         if (!within(t1) || !within(u1)) {
@@ -492,13 +492,13 @@ static void quad_quad_search(quad_search *search, const piece *a, const piece *b
     }
     if ((flatness(a) < 1e-7 && flatness(b) < 1e-7) || depth >= 48) {
         const font_vec da = vec_minus(a->p[2], a->p[0]), db = vec_minus(b->p[2], b->p[0]);
-        const double denominator = vec_cross(da, db);
+        const double   denominator = vec_cross(da, db);
         if (fabs(denominator) > 1e-18) {
             const font_vec gap = vec_minus(b->p[0], a->p[0]);
-            const double s = vec_cross(gap, db) / denominator, v = vec_cross(gap, da) / denominator;
+            const double   s = vec_cross(gap, db) / denominator, v = vec_cross(gap, da) / denominator;
             if (s >= -1e-6 && s <= 1 + 1e-6 && v >= -1e-6 && v <= 1 + 1e-6) {
-                double t = a->from + clamp01(s) * (a->to - a->from);
-                double u = b->from + clamp01(v) * (b->to - b->from);
+                double   t = a->from + clamp01(s) * (a->to - a->from);
+                double   u = b->from + clamp01(v) * (b->to - b->from);
                 font_vec at;
                 refine(search->a, search->b, &t, &u);
                 at = vec_middle(edge_point(search->a, t), edge_point(search->b, u));
@@ -532,16 +532,16 @@ static int same_curve(const font_edge *a, const font_edge *b) {
 
 static void quad_quad(union_state *state, const font_shape *shape, size_t first, size_t second) {
     const font_edge *a = &shape->edges[first], *b = &shape->edges[second];
-    quad_search search;
-    piece whole_a, whole_b;
+    quad_search      search;
+    piece            whole_a, whole_b;
     if (same_curve(a, b)) {
         return;
     }
     memset(&search, 0, sizeof search);
-    search.state = state;
-    search.a = a;
-    search.b = b;
-    search.first = first;
+    search.state  = state;
+    search.a      = a;
+    search.b      = b;
+    search.first  = first;
     search.second = second;
     memcpy(whole_a.p, a->p, sizeof whole_a.p);
     memcpy(whole_b.p, b->p, sizeof whole_b.p);
@@ -567,8 +567,8 @@ static int ascending_cut(const void *left, const void *right) {
 /** The part of `edge` between parameters `from` and `to`, ending exactly at the given points. */
 static font_edge sub_edge(const font_edge *edge, double from, double to, font_vec start, font_vec end) {
     font_edge result = edge_part(edge, from, to);
-    result.p[0] = start;
-    result.p[2] = end;
+    result.p[0]      = start;
+    result.p[2]      = end;
     if (!result.quad) {
         result.p[1] = vec_middle(start, end);
     }
@@ -577,8 +577,8 @@ static font_edge sub_edge(const font_edge *edge, double from, double to, font_ve
 
 static void reverse(font_edge *edge) {
     const font_vec start = edge->p[0];
-    edge->p[0] = edge->p[2];
-    edge->p[2] = start;
+    edge->p[0]           = edge->p[2];
+    edge->p[2]           = start;
 }
 
 static double rough_length(const font_edge *edge) {
@@ -590,17 +590,17 @@ static double rough_length(const font_edge *edge) {
 
 /** Filled on exactly one side: a piece of the union's boundary, turned so the fill is on its right. */
 static int keep_as_boundary(const font_shape *shape, font_edge *edge) {
-    const font_vec middle = edge_point(edge, 0.5);
-    font_vec tangent = edge_direction(edge, 0.5);
-    double size = vec_length(tangent);
-    double step = rough_length(edge) * 1e-3;
-    font_vec right;
-    int filled_right, filled_left;
+    const font_vec middle  = edge_point(edge, 0.5);
+    font_vec       tangent = edge_direction(edge, 0.5);
+    double         size    = vec_length(tangent);
+    double         step    = rough_length(edge) * 1e-3;
+    font_vec       right;
+    int            filled_right, filled_left;
     if (size == 0) {
         return 0;
     }
     tangent = vec_times(tangent, 1.0 / size);
-    right = vec_of(tangent.y, -tangent.x);
+    right   = vec_of(tangent.y, -tangent.x);
     if (step > 1e-4) {
         step = 1e-4;
     }
@@ -608,7 +608,7 @@ static int keep_as_boundary(const font_shape *shape, font_edge *edge) {
         step = 1e-8;
     }
     filled_right = font_shape_winding(shape, vec_plus(middle, vec_times(right, step))) != 0;
-    filled_left = font_shape_winding(shape, vec_minus(middle, vec_times(right, step))) != 0;
+    filled_left  = font_shape_winding(shape, vec_minus(middle, vec_times(right, step))) != 0;
     if (filled_right == filled_left) {
         return 0;
     }
@@ -653,18 +653,18 @@ static size_t first_from(const start_key *keys, size_t count, double x) {
 }
 
 edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds_error *error) {
-    union_state state = { NULL, 0 };
-    font_shape pieces = { 0 };
-    double(*boxes)[4] = NULL;
-    unsigned char *used = NULL;
-    start_key *order = NULL;
-    edds_status status = EDDS_OK;
+    union_state state     = { NULL, 0 };
+    font_shape  pieces    = { 0 };
+    double (*boxes)[4]    = NULL;
+    unsigned char *used   = NULL;
+    start_key     *order  = NULL;
+    edds_status    status = EDDS_OK;
     memset(boundary, 0, sizeof *boundary);
     if (shape->count == 0) {
         return EDDS_OK;
     }
     state.cuts = calloc(shape->count, sizeof *state.cuts);
-    boxes = malloc(shape->count * sizeof *boxes);
+    boxes      = malloc(shape->count * sizeof *boxes);
     if (state.cuts == NULL || boxes == NULL) {
         status = out_of_memory(error);
         goto done;
@@ -697,20 +697,20 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
 
     /* Cut every edge into pieces and keep the ones on the boundary of the filled area. */
     for (size_t at = 0; at < shape->count; ++at) {
-        const font_edge *edge = &shape->edges[at];
-        cut_list *list = &state.cuts[at];
-        double from = 0;
-        font_vec start = edge->p[0];
+        const font_edge *edge  = &shape->edges[at];
+        cut_list        *list  = &state.cuts[at];
+        double           from  = 0;
+        font_vec         start = edge->p[0];
         qsort(list->items, list->count, sizeof *list->items, ascending_cut);
         for (size_t index = 0; index <= list->count; ++index) {
-            const double to = index == list->count ? 1.0 : list->items[index].t;
+            const double   to  = index == list->count ? 1.0 : list->items[index].t;
             const font_vec end = index == list->count ? edge->p[2] : list->items[index].at;
-            font_edge part;
+            font_edge      part;
             if (to - from <= SAME) {
                 continue;
             }
-            part = sub_edge(edge, from, to, start, end);
-            from = to;
+            part  = sub_edge(edge, from, to, start, end);
+            from  = to;
             start = end;
             if (rough_length(&part) <= SHORTEST_PIECE || !keep_as_boundary(shape, &part)) {
                 continue;
@@ -726,14 +726,14 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
     }
 
     order = malloc(pieces.count * sizeof *order);
-    used = calloc(pieces.count, 1);
+    used  = calloc(pieces.count, 1);
     if (order == NULL || used == NULL) {
         status = out_of_memory(error);
         goto done;
     }
     for (size_t at = 0; at < pieces.count; ++at) {
-        order[at].x = pieces.edges[at].p[0].x;
-        order[at].y = pieces.edges[at].p[0].y;
+        order[at].x     = pieces.edges[at].p[0].x;
+        order[at].y     = pieces.edges[at].p[0].y;
         order[at].index = at;
     }
     qsort(order, pieces.count, sizeof *order, by_start);
@@ -753,16 +753,16 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
 
     /* Chain the pieces end to start into closed loops. */
     for (size_t seed = 0; seed < pieces.count; ++seed) {
-        size_t current = seed;
+        size_t         current = seed;
         const font_vec opening = pieces.edges[seed].p[0];
         if (used[seed]) {
             continue;
         }
         for (;;) {
-            font_edge edge = pieces.edges[current];
-            size_t next = pieces.count;
-            double nearest = 1e-6;
-            used[current] = 1;
+            font_edge edge    = pieces.edges[current];
+            size_t    next    = pieces.count;
+            double    nearest = 1e-6;
+            used[current]     = 1;
             if (current != seed) {
                 edge.p[0] = boundary->edges[boundary->count - 1u].p[2];
             }
@@ -778,7 +778,7 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
                 const double distance = vec_length(vec_minus(pieces.edges[order[at].index].p[0], edge.p[2]));
                 if (!used[order[at].index] && distance < nearest) {
                     nearest = distance;
-                    next = order[at].index;
+                    next    = order[at].index;
                 }
             }
             if (next == pieces.count) {

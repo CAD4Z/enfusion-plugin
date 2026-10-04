@@ -175,7 +175,7 @@ static const uint8_t anchor_third_of_three[64] = {
     15, 15, 15, 15, 3, 15, 15, 8
 };
 
-static const uint8_t weights_two[4] = { 0, 21, 43, 64 };
+static const uint8_t weights_two[4]   = { 0, 21, 43, 64 };
 static const uint8_t weights_three[8] = { 0, 9, 18, 27, 37, 46, 55, 64 };
 static const uint8_t weights_four[16] = {
     0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 56, 60, 64
@@ -207,14 +207,14 @@ static const mode_layout modes[8] = {
 
 typedef struct bit_cursor {
     const uint8_t *data;
-    unsigned at;
+    unsigned       at;
 } bit_cursor;
 
 static uint32_t take_bits(bit_cursor *cursor, unsigned count) {
     uint32_t value = 0;
     for (unsigned bit = 0; bit < count; ++bit) {
-        const unsigned position = cursor->at + bit;
-        value |= (uint32_t)((cursor->data[position >> 3] >> (position & 7u)) & 1u) << bit;
+        const unsigned position  = cursor->at + bit;
+        value                   |= (uint32_t)((cursor->data[position >> 3] >> (position & 7u)) & 1u) << bit;
     }
     cursor->at += count;
     return value;
@@ -265,20 +265,20 @@ static int is_anchor(const mode_layout *layout, uint32_t partition, unsigned pix
 }
 
 void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
-    bit_cursor cursor = { block, 0 };
+    bit_cursor         cursor = { block, 0 };
     const mode_layout *layout;
-    uint8_t endpoints[6][4];
-    uint8_t indices[16];
-    uint8_t indices_two[16];
-    uint32_t partition = 0;
-    uint32_t rotation = 0;
-    uint32_t selection = 0;
-    unsigned mode = 0;
-    unsigned endpoint_count;
-    unsigned colour_precision;
-    unsigned alpha_precision;
-    uint32_t raw[6][4];
-    uint32_t p_bits[6] = { 0, 0, 0, 0, 0, 0 };
+    uint8_t            endpoints[6][4];
+    uint8_t            indices[16];
+    uint8_t            indices_two[16];
+    uint32_t           partition = 0;
+    uint32_t           rotation  = 0;
+    uint32_t           selection = 0;
+    unsigned           mode      = 0;
+    unsigned           endpoint_count;
+    unsigned           colour_precision;
+    unsigned           alpha_precision;
+    uint32_t           raw[6][4];
+    uint32_t           p_bits[6] = { 0, 0, 0, 0, 0, 0 };
 
     memset(rgba, 0, 64);
     while (mode < 8 && take_bits(&cursor, 1) == 0) {
@@ -288,11 +288,11 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
     if (mode >= 8) {
         return;
     }
-    layout = &modes[mode];
+    layout         = &modes[mode];
     endpoint_count = (unsigned)layout->subsets * 2u;
-    partition = take_bits(&cursor, layout->partition_bits);
-    rotation = take_bits(&cursor, layout->rotation_bits);
-    selection = take_bits(&cursor, layout->selection_bits);
+    partition      = take_bits(&cursor, layout->partition_bits);
+    rotation       = take_bits(&cursor, layout->rotation_bits);
+    selection      = take_bits(&cursor, layout->selection_bits);
 
     for (unsigned channel = 0; channel < 3; ++channel) {
         for (unsigned endpoint = 0; endpoint < endpoint_count; ++endpoint) {
@@ -310,8 +310,8 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
         }
     } else if (layout->shared_p_bits != 0) {
         for (unsigned subset = 0; subset < layout->subsets; ++subset) {
-            const uint32_t shared = take_bits(&cursor, 1);
-            p_bits[subset * 2u] = shared;
+            const uint32_t shared    = take_bits(&cursor, 1);
+            p_bits[subset * 2u]      = shared;
             p_bits[subset * 2u + 1u] = shared;
         }
     }
@@ -346,28 +346,28 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
     if (layout->index_bits_two != 0) {
         for (unsigned pixel = 0; pixel < 16; ++pixel) {
             const unsigned bits = (unsigned)layout->index_bits_two - (pixel == 0 ? 1u : 0u);
-            indices_two[pixel] = (uint8_t)take_bits(&cursor, bits);
+            indices_two[pixel]  = (uint8_t)take_bits(&cursor, bits);
         }
     } else {
         memcpy(indices_two, indices, sizeof indices_two);
     }
 
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
-        const unsigned subset = subset_of(layout, partition, pixel);
-        const uint8_t *low = endpoints[subset * 2u];
-        const uint8_t *high = endpoints[subset * 2u + 1u];
+        const unsigned subset         = subset_of(layout, partition, pixel);
+        const uint8_t *low            = endpoints[subset * 2u];
+        const uint8_t *high           = endpoints[subset * 2u + 1u];
         const uint8_t *colour_weights = layout->index_bits == 2 ? weights_two : (layout->index_bits == 3 ? weights_three : weights_four);
-        const uint8_t *alpha_weights = layout->index_bits_two == 0 ? colour_weights : (layout->index_bits_two == 2 ? weights_two : weights_three);
-        uint8_t colour_index = indices[pixel];
-        uint8_t alpha_index = indices_two[pixel];
-        uint8_t out[4];
+        const uint8_t *alpha_weights  = layout->index_bits_two == 0 ? colour_weights : (layout->index_bits_two == 2 ? weights_two : weights_three);
+        uint8_t        colour_index   = indices[pixel];
+        uint8_t        alpha_index    = indices_two[pixel];
+        uint8_t        out[4];
         if (layout->index_bits_two != 0 && selection != 0) {
             const uint8_t *swap_weights = colour_weights;
-            const uint8_t swap_index = colour_index;
-            colour_weights = alpha_weights;
-            alpha_weights = swap_weights;
-            colour_index = alpha_index;
-            alpha_index = swap_index;
+            const uint8_t  swap_index   = colour_index;
+            colour_weights              = alpha_weights;
+            alpha_weights               = swap_weights;
+            colour_index                = alpha_index;
+            alpha_index                 = swap_index;
         }
         for (unsigned channel = 0; channel < 3; ++channel) {
             out[channel] = interpolate(low[channel], high[channel], colour_weights[colour_index]);
@@ -377,16 +377,16 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
             : interpolate(low[3], high[3], alpha_weights[alpha_index]);
         if (rotation == 1) {
             const uint8_t kept = out[3];
-            out[3] = out[0];
-            out[0] = kept;
+            out[3]             = out[0];
+            out[0]             = kept;
         } else if (rotation == 2) {
             const uint8_t kept = out[3];
-            out[3] = out[1];
-            out[1] = kept;
+            out[3]             = out[1];
+            out[1]             = kept;
         } else if (rotation == 3) {
             const uint8_t kept = out[3];
-            out[3] = out[2];
-            out[2] = kept;
+            out[3]             = out[2];
+            out[2]             = kept;
         }
         memcpy(rgba + pixel * 4u, out, 4);
     }
@@ -394,7 +394,9 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
 
 /* ---- Mode 6 encoder: one subset, seven-bit endpoints with a P-bit each, four-bit indices. ---- */
 
-enum { MODE_SIX_BITS = 7 };
+enum {
+    MODE_SIX_BITS = 7
+};
 
 static uint8_t clamp_byte(int value) {
     return value < 0 ? 0u : (value > 255 ? 255u : (uint8_t)value);
@@ -415,7 +417,7 @@ static uint8_t quantize_with_p(int value, unsigned p) {
 static void mode_six_palette(
     const uint8_t low[4],
     const uint8_t high[4],
-    uint8_t palette[16][4]) {
+    uint8_t       palette[16][4]) {
     for (unsigned entry = 0; entry < 16; ++entry) {
         for (unsigned channel = 0; channel < 4; ++channel) {
             palette[entry][channel] = interpolate(low[channel], high[channel], weights_four[entry]);
@@ -426,24 +428,24 @@ static void mode_six_palette(
 static uint64_t assign_indices(
     const uint8_t pixels[16][4],
     const uint8_t palette[16][4],
-    uint8_t indices[16]) {
+    uint8_t       indices[16]) {
     uint64_t total = 0;
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
-        uint32_t best = 0xffffffffu;
-        uint8_t chosen = 0;
+        uint32_t best   = 0xffffffffu;
+        uint8_t  chosen = 0;
         for (unsigned entry = 0; entry < 16; ++entry) {
             uint32_t error = 0;
             for (unsigned channel = 0; channel < 4; ++channel) {
-                const int difference = (int)pixels[pixel][channel] - (int)palette[entry][channel];
-                error += (uint32_t)(difference * difference);
+                const int difference  = (int)pixels[pixel][channel] - (int)palette[entry][channel];
+                error                += (uint32_t)(difference * difference);
             }
             if (error < best) {
-                best = error;
+                best   = error;
                 chosen = (uint8_t)entry;
             }
         }
-        indices[pixel] = chosen;
-        total += best;
+        indices[pixel]  = chosen;
+        total          += best;
     }
     return total;
 }
@@ -456,16 +458,16 @@ static uint64_t assign_indices(
 static void refit_endpoints(
     const uint8_t pixels[16][4],
     const uint8_t indices[16],
-    int low[4],
-    int high[4]) {
+    int           low[4],
+    int           high[4]) {
     double a = 0;
     double b = 0;
     double c = 0;
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
-        const double weight = (double)weights_four[indices[pixel]] / 64.0;
-        a += (1.0 - weight) * (1.0 - weight);
-        b += (1.0 - weight) * weight;
-        c += weight * weight;
+        const double weight  = (double)weights_four[indices[pixel]] / 64.0;
+        a                   += (1.0 - weight) * (1.0 - weight);
+        b                   += (1.0 - weight) * weight;
+        c                   += weight * weight;
     }
     {
         const double determinant = a * c - b * b;
@@ -473,15 +475,15 @@ static void refit_endpoints(
             return;
         }
         for (unsigned channel = 0; channel < 4; ++channel) {
-            double low_sum = 0;
+            double low_sum  = 0;
             double high_sum = 0;
             for (unsigned pixel = 0; pixel < 16; ++pixel) {
-                const double weight = (double)weights_four[indices[pixel]] / 64.0;
-                const double sample = (double)pixels[pixel][channel];
-                low_sum += (1.0 - weight) * sample;
-                high_sum += weight * sample;
+                const double weight  = (double)weights_four[indices[pixel]] / 64.0;
+                const double sample  = (double)pixels[pixel][channel];
+                low_sum             += (1.0 - weight) * sample;
+                high_sum            += weight * sample;
             }
-            low[channel] = (int)((low_sum * c - high_sum * b) / determinant + 0.5);
+            low[channel]  = (int)((low_sum * c - high_sum * b) / determinant + 0.5);
             high[channel] = (int)((high_sum * a - low_sum * b) / determinant + 0.5);
         }
     }
@@ -495,31 +497,31 @@ static void refit_endpoints(
  * P-bit of its own per endpoint. Everything else about fitting them is the same.
  */
 typedef struct subset_layout {
-    unsigned mode;
-    unsigned channels;
-    unsigned bits;
+    unsigned       mode;
+    unsigned       channels;
+    unsigned       bits;
     const uint8_t *weights;
-    unsigned weight_count;
-    unsigned index_bits;
-    int shared_p;
+    unsigned       weight_count;
+    unsigned       index_bits;
+    int            shared_p;
 } subset_layout;
 
-static const subset_layout layout_mode_one = { 1, 3, 6, weights_three, 8, 3, 1 };
+static const subset_layout layout_mode_one   = { 1, 3, 6, weights_three, 8, 3, 1 };
 static const subset_layout layout_mode_seven = { 7, 4, 5, weights_two, 4, 2, 0 };
 
 typedef struct subset_fit {
     unsigned quantized[2][4];
     unsigned p[2];
-    uint8_t indices[16];
+    uint8_t  indices[16];
     uint64_t error;
 } subset_fit;
 
 /** The closest value this many bits plus that P-bit can name, as the raw field the block holds. */
 static unsigned quantize_at(int value, unsigned p, unsigned bits) {
     const unsigned precision = bits + 1u;
-    const int most = (int)((1u << precision) - 1u);
-    const int scaled = (value * most + 127) / 255;
-    int quantized = (scaled - (int)p + 1) / 2;
+    const int      most      = (int)((1u << precision) - 1u);
+    const int      scaled    = (value * most + 127) / 255;
+    int            quantized = (scaled - (int)p + 1) / 2;
     if (quantized < 0) {
         quantized = 0;
     }
@@ -539,16 +541,16 @@ static uint8_t endpoint_of(unsigned quantized, unsigned p, unsigned bits) {
  * a partitioned mode beats a single line through the block.
  */
 static void fit_subset(
-    const uint8_t pixels[16][4],
-    const uint8_t membership[16],
-    uint8_t subset,
+    const uint8_t        pixels[16][4],
+    const uint8_t        membership[16],
+    uint8_t              subset,
     const subset_layout *layout,
-    unsigned refits,
-    subset_fit *fit) {
-    int low[4] = { 255, 255, 255, 255 };
-    int high[4] = { 0, 0, 0, 0 };
-    unsigned count = 0;
-    fit->error = ~(uint64_t)0;
+    unsigned             refits,
+    subset_fit          *fit) {
+    int      low[4]  = { 255, 255, 255, 255 };
+    int      high[4] = { 0, 0, 0, 0 };
+    unsigned count   = 0;
+    fit->error       = ~(uint64_t)0;
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
         if (membership[pixel] != subset) {
             continue;
@@ -566,7 +568,7 @@ static void fit_subset(
     }
     if (count == 0) {
         for (unsigned channel = 0; channel < 4; ++channel) {
-            low[channel] = 0;
+            low[channel]  = 0;
             high[channel] = 0;
         }
     }
@@ -575,8 +577,8 @@ static void fit_subset(
         for (unsigned first = 0; first < 2; ++first) {
             for (unsigned second = 0; second < 2; ++second) {
                 unsigned quantized[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
-                uint8_t endpoints[2][4];
-                uint8_t indices[16];
+                uint8_t  endpoints[2][4];
+                uint8_t  indices[16];
                 uint64_t error = 0;
                 /* A shared P-bit is one bit for the subset, so only the matching pair exists. */
                 if (layout->shared_p && first != second) {
@@ -603,7 +605,7 @@ static void fit_subset(
                             candidate += (uint32_t)(difference * difference);
                         }
                         if (candidate < best) {
-                            best = candidate;
+                            best           = candidate;
                             indices[pixel] = (uint8_t)entry;
                         }
                     }
@@ -611,8 +613,8 @@ static void fit_subset(
                 }
                 if (error < fit->error) {
                     fit->error = error;
-                    fit->p[0] = first;
-                    fit->p[1] = second;
+                    fit->p[0]  = first;
+                    fit->p[1]  = second;
                     memcpy(fit->quantized, quantized, sizeof fit->quantized);
                     memcpy(fit->indices, indices, sizeof fit->indices);
                 }
@@ -628,28 +630,28 @@ static void fit_subset(
                 if (membership[pixel] != subset) {
                     continue;
                 }
-                weight = (double)layout->weights[fit->indices[pixel]] / 64.0;
-                a += (1.0 - weight) * (1.0 - weight);
-                b += (1.0 - weight) * weight;
-                c += weight * weight;
+                weight  = (double)layout->weights[fit->indices[pixel]] / 64.0;
+                a      += (1.0 - weight) * (1.0 - weight);
+                b      += (1.0 - weight) * weight;
+                c      += weight * weight;
             }
             determinant = a * c - b * b;
             if (determinant <= 1e-9 && determinant >= -1e-9) {
                 continue;
             }
             for (unsigned channel = 0; channel < layout->channels; ++channel) {
-                double low_sum = 0;
+                double low_sum  = 0;
                 double high_sum = 0;
                 for (unsigned pixel = 0; pixel < 16; ++pixel) {
                     double weight;
                     if (membership[pixel] != subset) {
                         continue;
                     }
-                    weight = (double)layout->weights[fit->indices[pixel]] / 64.0;
-                    low_sum += (1.0 - weight) * (double)pixels[pixel][channel];
+                    weight    = (double)layout->weights[fit->indices[pixel]] / 64.0;
+                    low_sum  += (1.0 - weight) * (double)pixels[pixel][channel];
                     high_sum += weight * (double)pixels[pixel][channel];
                 }
-                low[channel] = clamp_byte((int)((low_sum * c - high_sum * b) / determinant + 0.5));
+                low[channel]  = clamp_byte((int)((low_sum * c - high_sum * b) / determinant + 0.5));
                 high[channel] = clamp_byte((int)((high_sum * a - low_sum * b) / determinant + 0.5));
             }
         }
@@ -664,17 +666,17 @@ static void fit_subset(
 static uint64_t partition_score(
     const uint8_t pixels[16][4],
     const uint8_t membership[16],
-    unsigned channels) {
-    uint32_t sums[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
+    unsigned      channels) {
+    uint32_t sums[2][4]    = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
     uint32_t squares[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
-    uint32_t counts[2] = { 0, 0 };
-    uint64_t total = 0;
+    uint32_t counts[2]     = { 0, 0 };
+    uint64_t total         = 0;
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
         const unsigned subset = membership[pixel];
         ++counts[subset];
         for (unsigned channel = 0; channel < channels; ++channel) {
-            const uint32_t sample = pixels[pixel][channel];
-            sums[subset][channel] += sample;
+            const uint32_t sample     = pixels[pixel][channel];
+            sums[subset][channel]    += sample;
             squares[subset][channel] += sample * sample;
         }
     }
@@ -696,19 +698,19 @@ static uint64_t partition_score(
  */
 static void write_two_subset(
     const subset_layout *layout,
-    uint32_t partition,
-    subset_fit fits[2],
-    uint8_t block[16]) {
+    uint32_t             partition,
+    subset_fit           fits[2],
+    uint8_t              block[16]) {
     const uint8_t *membership = partitions_two[partition];
-    const unsigned anchor = anchor_second_of_two[partition];
-    const unsigned mirror = layout->weight_count - 1u;
-    unsigned at = 0;
-    uint8_t indices[16];
+    const unsigned anchor     = anchor_second_of_two[partition];
+    const unsigned mirror     = layout->weight_count - 1u;
+    unsigned       at         = 0;
+    uint8_t        indices[16];
 
     for (unsigned subset = 0; subset < 2; ++subset) {
         const unsigned subset_anchor = subset == 0 ? 0u : anchor;
         if (fits[subset].indices[subset_anchor] > mirror / 2u) {
-            unsigned swapped[4];
+            unsigned       swapped[4];
             const unsigned kept = fits[subset].p[0];
             memcpy(swapped, fits[subset].quantized[0], sizeof swapped);
             memcpy(fits[subset].quantized[0], fits[subset].quantized[1], sizeof swapped);
@@ -755,17 +757,17 @@ static void write_two_subset(
  * sixty-four are fitted properly and kept if any of them wins.
  */
 static int better_two_subset_block(
-    const uint8_t pixels[16][4],
+    const uint8_t        pixels[16][4],
     const subset_layout *layout,
-    unsigned refits,
-    uint64_t *error,
-    uint8_t block[16]) {
-    uint64_t ranked[4] = { ~(uint64_t)0, ~(uint64_t)0, ~(uint64_t)0, ~(uint64_t)0 };
-    uint32_t candidates[4] = { 0, 0, 0, 0 };
-    const unsigned wanted = refits > 4u ? 4u : refits;
-    subset_fit best_fits[2];
-    uint32_t best_partition = 0;
-    int found = 0;
+    unsigned             refits,
+    uint64_t            *error,
+    uint8_t              block[16]) {
+    uint64_t       ranked[4]     = { ~(uint64_t)0, ~(uint64_t)0, ~(uint64_t)0, ~(uint64_t)0 };
+    uint32_t       candidates[4] = { 0, 0, 0, 0 };
+    const unsigned wanted        = refits > 4u ? 4u : refits;
+    subset_fit     best_fits[2];
+    uint32_t       best_partition = 0;
+    int            found          = 0;
 
     if (wanted == 0) {
         return 0;
@@ -775,10 +777,10 @@ static int better_two_subset_block(
         for (unsigned slot = 0; slot < wanted; ++slot) {
             if (score < ranked[slot]) {
                 for (unsigned move = wanted - 1u; move > slot; --move) {
-                    ranked[move] = ranked[move - 1u];
+                    ranked[move]     = ranked[move - 1u];
                     candidates[move] = candidates[move - 1u];
                 }
-                ranked[slot] = score;
+                ranked[slot]     = score;
                 candidates[slot] = partition;
                 break;
             }
@@ -786,7 +788,7 @@ static int better_two_subset_block(
     }
     for (unsigned slot = 0; slot < wanted; ++slot) {
         subset_fit fits[2];
-        uint64_t candidate;
+        uint64_t   candidate;
         if (ranked[slot] == ~(uint64_t)0) {
             break;
         }
@@ -794,7 +796,7 @@ static int better_two_subset_block(
         fit_subset(pixels, partitions_two[candidates[slot]], 1, layout, refits, &fits[1]);
         candidate = fits[0].error + fits[1].error;
         if (candidate < *error) {
-            *error = candidate;
+            *error         = candidate;
             best_partition = candidates[slot];
             memcpy(best_fits, fits, sizeof best_fits);
             found = 1;
@@ -807,15 +809,15 @@ static int better_two_subset_block(
 }
 
 void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t block[16]) {
-    uint8_t pixels[16][4];
-    int low[4];
-    int high[4];
-    uint8_t best_low[4] = { 0, 0, 0, 0 };
-    uint8_t best_high[4] = { 0, 0, 0, 0 };
-    uint8_t best_indices[16] = { 0 };
-    unsigned best_p[2] = { 0, 0 };
-    uint64_t best_error = ~(uint64_t)0;
-    unsigned at = 0;
+    uint8_t  pixels[16][4];
+    int      low[4];
+    int      high[4];
+    uint8_t  best_low[4]      = { 0, 0, 0, 0 };
+    uint8_t  best_high[4]     = { 0, 0, 0, 0 };
+    uint8_t  best_indices[16] = { 0 };
+    unsigned best_p[2]        = { 0, 0 };
+    uint64_t best_error       = ~(uint64_t)0;
+    unsigned at               = 0;
 
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
         pixels[pixel][0] = bgra[pixel * 4u + 2u];
@@ -824,7 +826,7 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
         pixels[pixel][3] = bgra[pixel * 4u + 3u];
     }
     for (unsigned channel = 0; channel < 4; ++channel) {
-        low[channel] = 255;
+        low[channel]  = 255;
         high[channel] = 0;
         for (unsigned pixel = 0; pixel < 16; ++pixel) {
             const int sample = pixels[pixel][channel];
@@ -840,16 +842,16 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
     for (unsigned pass = 0; pass <= refits; ++pass) {
         for (unsigned p0 = 0; p0 < 2; ++p0) {
             for (unsigned p1 = 0; p1 < 2; ++p1) {
-                uint8_t candidate_low[4];
-                uint8_t candidate_high[4];
-                uint8_t palette[16][4];
-                uint8_t indices[16];
+                uint8_t  candidate_low[4];
+                uint8_t  candidate_high[4];
+                uint8_t  palette[16][4];
+                uint8_t  indices[16];
                 uint64_t error;
                 for (unsigned channel = 0; channel < 4; ++channel) {
-                    const uint8_t seven_low = quantize_with_p(low[channel], p0);
+                    const uint8_t seven_low  = quantize_with_p(low[channel], p0);
                     const uint8_t seven_high = quantize_with_p(high[channel], p1);
-                    candidate_low[channel] = (uint8_t)((seven_low << 1) | p0);
-                    candidate_high[channel] = (uint8_t)((seven_high << 1) | p1);
+                    candidate_low[channel]   = (uint8_t)((seven_low << 1) | p0);
+                    candidate_high[channel]  = (uint8_t)((seven_high << 1) | p1);
                 }
                 mode_six_palette(candidate_low, candidate_high, palette);
                 error = assign_indices(pixels, palette, indices);
@@ -866,7 +868,7 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
         if (pass < refits) {
             refit_endpoints(pixels, best_indices, low, high);
             for (unsigned channel = 0; channel < 4; ++channel) {
-                low[channel] = clamp_byte(low[channel]);
+                low[channel]  = clamp_byte(low[channel]);
                 high[channel] = clamp_byte(high[channel]);
             }
         }
@@ -883,7 +885,7 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
      */
     {
         uint64_t contested = best_error;
-        int opaque = 1;
+        int      opaque    = 1;
         for (unsigned pixel = 0; pixel < 16 && opaque; ++pixel) {
             opaque = pixels[pixel][3] == 255u;
         }
@@ -895,7 +897,7 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
 
     /* The first index carries one bit fewer, so the endpoints are ordered to leave its top bit 0. */
     if (best_indices[0] >= 8) {
-        uint8_t swapped[4];
+        uint8_t        swapped[4];
         const unsigned kept = best_p[0];
         memcpy(swapped, best_low, sizeof swapped);
         memcpy(best_low, best_high, sizeof best_low);

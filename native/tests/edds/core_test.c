@@ -48,12 +48,12 @@ static int always_cancelled(void *context) {
 }
 
 static int copy_inspection_and_preview(void) {
-    test_bytes fixture = fixture_copy_bgra();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    test_bytes           fixture = fixture_copy_bgra();
+    FILE                *file    = stream_of(fixture.data, fixture.size);
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba                 = NULL;
+    size_t               size                 = 0;
     static const uint8_t expected_first_two[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 
     CHECK(fixture.data != NULL && file != NULL);
@@ -74,12 +74,12 @@ static int copy_inspection_and_preview(void) {
 }
 
 static int lz4_preview_and_bgrx_alpha(void) {
-    test_bytes fixture = fixture_lz4_bgrx();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    test_bytes           fixture = fixture_lz4_bgrx();
+    FILE                *file    = stream_of(fixture.data, fixture.size);
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba       = NULL;
+    size_t               size       = 0;
     static const uint8_t expected[] = { 1, 2, 3, 255, 4, 5, 6, 255 };
 
     CHECK(fixture.data != NULL && file != NULL);
@@ -97,11 +97,11 @@ static int lz4_preview_and_bgrx_alpha(void) {
 
 static int lz4_stream_keeps_the_previous_dictionary(void) {
     test_bytes fixture = fixture_lz4_streaming_bgrx();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
+    FILE      *file    = stream_of(fixture.data, fixture.size);
+    edds_info  info;
     edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    uint8_t   *rgba = NULL;
+    size_t     size = 0;
 
     CHECK(fixture.data != NULL && file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
@@ -118,12 +118,12 @@ static int lz4_stream_keeps_the_previous_dictionary(void) {
 }
 
 static int dx10_bgrx_is_a_single_surface_preview(void) {
-    test_bytes fixture = fixture_dx10_bgrx();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    test_bytes           fixture = fixture_dx10_bgrx();
+    FILE                *file    = stream_of(fixture.data, fixture.size);
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba       = NULL;
+    size_t               size       = 0;
     static const uint8_t expected[] = { 10, 20, 30, 255, 40, 50, 60, 255 };
 
     CHECK(fixture.data != NULL && file != NULL);
@@ -142,11 +142,11 @@ static int dx10_bgrx_is_a_single_surface_preview(void) {
 
 static int unsupported_pixels_keep_the_inspection(void) {
     test_bytes fixture = fixture_odd_fourcc();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
+    FILE      *file    = stream_of(fixture.data, fixture.size);
+    edds_info  info;
     edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    uint8_t   *rgba = NULL;
+    size_t     size = 0;
 
     CHECK(fixture.data != NULL && file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
@@ -162,20 +162,20 @@ static int unsupported_pixels_keep_the_inspection(void) {
 static int contradictory_legacy_flags_never_produce_pixels(void) {
     test_bytes bgra = fixture_copy_bgra();
     test_bytes bgrx = fixture_lz4_bgrx();
-    edds_info info;
+    edds_info  info;
     edds_error error;
-    FILE *file;
+    FILE      *file;
 
     CHECK(bgra.data != NULL && bgrx.data != NULL);
     bgra.data[80] = 0x40;
-    file = stream_of(bgra.data, bgra.size);
+    file          = stream_of(bgra.data, bgra.size);
     CHECK(file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(info.pixel_format == EDDS_PIXEL_UNKNOWN && !info.preview_supported);
     fclose(file);
 
     bgrx.data[80] = 0x41;
-    file = stream_of(bgrx.data, bgrx.size);
+    file          = stream_of(bgrx.data, bgrx.size);
     CHECK(file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
     CHECK(info.pixel_format == EDDS_PIXEL_UNKNOWN && !info.preview_supported);
@@ -188,7 +188,7 @@ static int contradictory_legacy_flags_never_produce_pixels(void) {
 
 static int truncation_and_limits_fail_without_output(void) {
     test_bytes fixture = fixture_copy_bgra();
-    edds_info info;
+    edds_info  info;
     edds_error error;
 
     CHECK(fixture.data != NULL);
@@ -216,9 +216,9 @@ static int truncation_and_limits_fail_without_output(void) {
 
 static int malformed_lz4_and_cancellation_are_bounded(void) {
     test_bytes fixture = fixture_lz4_bgrx();
-    edds_info info;
+    edds_info  info;
     edds_error error;
-    FILE *file;
+    FILE      *file;
 
     CHECK(fixture.data != NULL);
     file = stream_of(fixture.data, fixture.size);
@@ -227,7 +227,7 @@ static int malformed_lz4_and_cancellation_are_bounded(void) {
     fclose(file);
 
     fixture.data[143] = 0;
-    file = stream_of(fixture.data, fixture.size);
+    file              = stream_of(fixture.data, fixture.size);
     CHECK(file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_INVALID_INPUT);
     fclose(file);
@@ -238,10 +238,10 @@ static int malformed_lz4_and_cancellation_are_bounded(void) {
 
 static int malformed_sizes_and_oversized_files_are_refused(void) {
     test_bytes copy = fixture_copy_bgra();
-    test_bytes lz4 = fixture_lz4_bgrx();
-    edds_info info;
+    test_bytes lz4  = fixture_lz4_bgrx();
+    edds_info  info;
     edds_error error;
-    FILE *file;
+    FILE      *file;
 
     CHECK(copy.data != NULL && lz4.data != NULL);
     memset(copy.data + 132, 0xff, 4);
@@ -270,10 +270,10 @@ static int malformed_sizes_and_oversized_files_are_refused(void) {
 
 static int integer_boundaries_are_refused_before_arithmetic(void) {
     test_bytes dimensions = fixture_integer_overflow();
-    test_bytes mips = fixture_copy_bgra();
-    edds_info info;
+    test_bytes mips       = fixture_copy_bgra();
+    edds_info  info;
     edds_error error;
-    FILE *file;
+    FILE      *file;
 
     CHECK(dimensions.data != NULL && mips.data != NULL);
     file = stream_of(dimensions.data, dimensions.size);
@@ -306,13 +306,13 @@ static int uncompressed_tga_converts_through_the_public_edds_seam(void) {
         100, 110, 120, 255, 130, 140, 150, 255, 160, 170, 180, 255
     };
     static const uint8_t expected_mip_one[] = { 85, 95, 105, 255 };
-    FILE *source = stream_of(tga, sizeof tga);
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    FILE                *source             = stream_of(tga, sizeof tga);
+    FILE                *output             = temporary();
+    edds_profile         profile;
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
 
     CHECK(source != NULL && output != NULL);
     edds_default_profile(&profile);
@@ -360,7 +360,7 @@ static int supported_workbench_defaults_are_explicit(void) {
 
 static int mip_profile_refuses_conflicts_and_unproven_values(void) {
     edds_profile profile;
-    edds_error error;
+    edds_error   error;
 
     edds_default_profile(&profile);
     profile.contains_mips = 1;
@@ -374,7 +374,7 @@ static int mip_profile_refuses_conflicts_and_unproven_values(void) {
 
     edds_default_profile(&profile);
     profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
-    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    profile.mipmap_filter   = EDDS_FILTER_KAISER;
     CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
 
     edds_default_profile(&profile);
@@ -383,14 +383,14 @@ static int mip_profile_refuses_conflicts_and_unproven_values(void) {
     CHECK(strstr(error.message, "Triangle") != NULL);
 
     edds_default_profile(&profile);
-    profile.generate_mips = 0;
+    profile.generate_mips   = 0;
     profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
     CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
     CHECK(strcmp(error.code, "unsupported-combination") == 0);
 
     edds_default_profile(&profile);
     profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
-    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    profile.mipmap_filter   = EDDS_FILTER_KAISER;
     CHECK(edds_profile_check(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
     CHECK(strcmp(error.code, "unsupported-combination") == 0);
 
@@ -407,21 +407,21 @@ static int dds_supplied_levels_are_removed_from_the_large_end(void) {
         11, 22, 33, 255, 44, 55, 66, 255
     };
     static const uint8_t expected_last[] = { 77, 88, 99, 255 };
-    test_bytes dds = fixture_dds_bgrx_mips();
-    FILE *source = stream_of(dds.data, dds.size);
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    test_bytes           dds             = fixture_dds_bgrx_mips();
+    FILE                *source          = stream_of(dds.data, dds.size);
+    FILE                *output          = temporary();
+    edds_profile         profile;
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
 
     CHECK(dds.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.contains_mips = 1;
-    profile.generate_mips = 0;
-    profile.remove_mips = 1;
+    profile.contains_mips   = 1;
+    profile.generate_mips   = 0;
+    profile.remove_mips     = 1;
     CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -451,14 +451,14 @@ static int rgba_png_converts_with_declared_alpha(void) {
         110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220
     };
     static const uint8_t expected_mip_one[] = { 100, 110, 120, 130 };
-    test_bytes png = fixture_png_rgba();
-    FILE *source = stream_of(png.data, png.size);
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    test_bytes           png                = fixture_png_rgba();
+    FILE                *source             = stream_of(png.data, png.size);
+    FILE                *output             = temporary();
+    edds_profile         profile;
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
 
     CHECK(png.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
@@ -488,18 +488,18 @@ static int rgba_png_converts_with_declared_alpha(void) {
 
 static int png_colour_key_is_transparency_and_a_palette_changes_nothing(void) {
     static const uint8_t expected[] = { 10, 20, 30, 0, 40, 50, 60, 255 };
-    test_bytes png = fixture_png_rgb_keyed();
-    FILE *source = stream_of(png.data, png.size);
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    test_bytes           png        = fixture_png_rgb_keyed();
+    FILE                *source     = stream_of(png.data, png.size);
+    FILE                *output     = temporary();
+    edds_profile         profile;
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
     CHECK(png.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.generate_mips = 0;
+    profile.generate_mips   = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_PNG, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -517,18 +517,18 @@ static int png_colour_key_is_transparency_and_a_palette_changes_nothing(void) {
 
 static int png_gamma_is_metadata_not_a_sample_transform(void) {
     static const uint8_t expected_first_pixel[] = { 10, 20, 30, 40 };
-    test_bytes png = fixture_png_rgba_gamma();
-    FILE *source = stream_of(png.data, png.size);
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    test_bytes           png                    = fixture_png_rgba_gamma();
+    FILE                *source                 = stream_of(png.data, png.size);
+    FILE                *output                 = temporary();
+    edds_profile         profile;
+    edds_info            info;
+    edds_error           error;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
     CHECK(png.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.generate_mips = 0;
+    profile.generate_mips   = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_PNG, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -554,17 +554,17 @@ static int tga_origin_channels_and_declared_alpha_are_normalized(void) {
         1, 2, 3, 4, 4, 5, 6, 7,
         7, 8, 9, 10, 10, 11, 12, 13
     };
-    FILE *source = stream_of(tga, sizeof tga);
-    FILE *output = temporary();
+    FILE        *source = stream_of(tga, sizeof tga);
+    FILE        *output = temporary();
     edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    edds_info    info;
+    edds_error   error;
+    uint8_t     *rgba      = NULL;
+    size_t       rgba_size = 0;
     CHECK(source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.generate_mips = 0;
+    profile.generate_mips   = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -580,20 +580,22 @@ static int tga_origin_channels_and_declared_alpha_are_normalized(void) {
 }
 
 static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
-    enum { WIDTH = 25,
-        TGA_BYTES = 18 + WIDTH * 3 };
+    enum {
+        WIDTH     = 25,
+        TGA_BYTES = 18 + WIDTH * 3
+    };
 
-    uint8_t tga[TGA_BYTES] = { 0 };
+    uint8_t      tga[TGA_BYTES] = { 0 };
     edds_profile profile;
-    uint32_t fastest_stored = 0;
+    uint32_t     fastest_stored = 0;
 
-    tga[2] = 2;
+    tga[2]  = 2;
     tga[12] = WIDTH;
     tga[14] = 1;
     tga[16] = 24;
     tga[17] = 0x20;
     for (size_t at = 18; at < sizeof tga; at += 3u) {
-        tga[at] = 30;
+        tga[at]      = 30;
         tga[at + 1u] = 20;
         tga[at + 2u] = 10;
     }
@@ -603,14 +605,14 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
     for (edds_format_compress mode = EDDS_COMPRESS_FASTEST;
         mode <= EDDS_COMPRESS_BEST;
         mode = (edds_format_compress)(mode + 1)) {
-        FILE *source = stream_of(tga, sizeof tga);
-        FILE *output = temporary();
-        edds_info info;
+        FILE      *source = stream_of(tga, sizeof tga);
+        FILE      *output = temporary();
+        edds_info  info;
         edds_error error;
-        uint8_t *rgba = NULL;
-        size_t rgba_size = 0;
+        uint8_t   *rgba      = NULL;
+        size_t     rgba_size = 0;
         CHECK(source != NULL && output != NULL);
-        profile.format_compress = mode;
+        profile.format_compress    = mode;
         profile.compress_threshold = 100;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
                   never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
@@ -633,12 +635,12 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
     {
         const uint32_t equality = fastest_stored * 100u / (WIDTH * 4u);
         for (unsigned below = 0; below < 2u; ++below) {
-            FILE *source = stream_of(tga, sizeof tga);
-            FILE *output = temporary();
-            edds_info info;
+            FILE      *source = stream_of(tga, sizeof tga);
+            FILE      *output = temporary();
+            edds_info  info;
             edds_error error;
             CHECK(source != NULL && output != NULL && equality > 0u);
-            profile.format_compress = EDDS_COMPRESS_FASTEST;
+            profile.format_compress    = EDDS_COMPRESS_FASTEST;
             profile.compress_threshold = equality - below;
             CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
                       never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
@@ -651,12 +653,12 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
         }
     }
     {
-        FILE *source = stream_of(tga, sizeof tga);
-        FILE *output = temporary();
-        edds_info info;
+        FILE      *source = stream_of(tga, sizeof tga);
+        FILE      *output = temporary();
+        edds_info  info;
         edds_error error;
         CHECK(source != NULL && output != NULL);
-        profile.format_compress = EDDS_COMPRESS_FASTEST;
+        profile.format_compress    = EDDS_COMPRESS_FASTEST;
         profile.compress_threshold = 0;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
                   never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
@@ -670,17 +672,19 @@ static int format_compress_selects_lossless_lz4_only_at_the_threshold(void) {
 }
 
 static int compression_efforts_are_observably_distinct_and_lossless(void) {
-    enum { PATTERN = 128,
-        SHORT = 8,
-        MEDIUM = 52,
-        PIXEL_BYTES = 468 };
+    enum {
+        PATTERN     = 128,
+        SHORT       = 8,
+        MEDIUM      = 52,
+        PIXEL_BYTES = 468
+    };
 
-    uint8_t tga[18 + PIXEL_BYTES];
-    uint8_t pattern[PATTERN];
+    uint8_t  tga[18 + PIXEL_BYTES];
+    uint8_t  pattern[PATTERN];
     uint32_t stored[3] = { 0, 0, 0 };
-    size_t at = 18;
+    size_t   at        = 18;
     memset(tga, 0, sizeof tga);
-    tga[2] = 2;
+    tga[2]  = 2;
     tga[12] = (uint8_t)(PIXEL_BYTES / 4);
     tga[14] = 1;
     tga[16] = 32;
@@ -710,17 +714,17 @@ static int compression_efforts_are_observably_distinct_and_lossless(void) {
     for (edds_format_compress mode = EDDS_COMPRESS_FASTEST;
         mode <= EDDS_COMPRESS_BEST;
         mode = (edds_format_compress)(mode + 1)) {
-        FILE *source = stream_of(tga, sizeof tga);
-        FILE *output = temporary();
+        FILE        *source = stream_of(tga, sizeof tga);
+        FILE        *output = temporary();
         edds_profile profile;
-        edds_info info;
-        edds_error error;
-        uint8_t *rgba = NULL;
-        size_t rgba_size = 0;
+        edds_info    info;
+        edds_error   error;
+        uint8_t     *rgba      = NULL;
+        size_t       rgba_size = 0;
         CHECK(source != NULL && output != NULL);
         edds_default_profile(&profile);
-        profile.generate_mips = 0;
-        profile.format_compress = mode;
+        profile.generate_mips      = 0;
+        profile.format_compress    = mode;
         profile.compress_threshold = 100;
         CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
                   never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
@@ -795,12 +799,12 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
         "  }\n"
         " }\n"
         "}\n";
-    FILE *input = stream_of((const uint8_t *)source, strlen(source));
-    FILE *output = temporary();
+    FILE         *input  = stream_of((const uint8_t *)source, strlen(source));
+    FILE         *output = temporary();
     edds_metadata metadata;
     edds_metadata reparsed;
-    edds_error error;
-    char actual[sizeof expected];
+    edds_error    error;
+    char          actual[sizeof expected];
 
     CHECK(input != NULL && output != NULL);
     CHECK(edds_metadata_parse(input, &metadata, &error) == EDDS_OK);
@@ -840,10 +844,10 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
     };
 
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-        char source[512];
+        char          source[512];
         edds_metadata metadata;
-        edds_error error;
-        FILE *input;
+        edds_error    error;
+        FILE         *input;
         (void)snprintf(source, sizeof source,
             "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
             "TGAResourceClass PC { SourceFile \"a.tga\" %s } } }",
@@ -859,17 +863,17 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
 
 /** Every registered resource class parses back to its own format, and only to its own. */
 static int every_resource_class_round_trips_through_metadata(void) {
-    size_t count = 0;
+    size_t                        count        = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
     CHECK(count == 5u);
     for (size_t at = 0; at < count; ++at) {
-        char text[768];
-        FILE *written = temporary();
-        FILE *reread;
+        char          text[768];
+        FILE         *written = temporary();
+        FILE         *reread;
         edds_metadata metadata;
         edds_metadata parsed;
-        edds_error error;
-        long size;
+        edds_error    error;
+        long          size;
         memset(&metadata, 0, sizeof metadata);
         memcpy(metadata.guid, "0123456789ABCDEF", 17);
         (void)snprintf(metadata.name, sizeof metadata.name, "Probe/pixel.edds");
@@ -902,9 +906,9 @@ static int metadata_source_class_must_match_its_extension(void) {
     static const char source[] =
         "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
         "TGAResourceClass PC { SourceFile \"a.png\" } } }";
-    FILE *input = stream_of((const uint8_t *)source, strlen(source));
+    FILE         *input = stream_of((const uint8_t *)source, strlen(source));
     edds_metadata metadata;
-    edds_error error;
+    edds_error    error;
     CHECK(input != NULL);
     CHECK(edds_metadata_parse(input, &metadata, &error) == EDDS_INVALID_INPUT);
     CHECK(strcmp(error.code, "source-format-mismatch") == 0);
@@ -937,7 +941,7 @@ static int batch_ndjson_parser_has_a_bounded_mutation_corpus(void) {
         "{\"protocolVersion\":2,\"kind\":\"batch\",\"jobCount\":1}";
     static const char unknown[] = "{\"protocolVersion\":1,\"kind\":\"surprise\"}";
     edds_batch_record record;
-    edds_error error;
+    edds_error        error;
     CHECK(edds_batch_parse_line(header, strlen(header), &record, &error) == EDDS_OK);
     CHECK(record.kind == EDDS_BATCH_HEADER && record.job_count == 100u);
     CHECK(edds_batch_parse_line(job, strlen(job), &record, &error) == EDDS_OK);
@@ -965,24 +969,24 @@ static int batch_ndjson_parser_has_a_bounded_mutation_corpus(void) {
 
 static int batch_reader_frames_lines_however_a_pipe_split_them(void) {
     static const char stream[] = "{\"a\":1}\n\r\n{\"b\":2}\r\n{\"c\":3}";
-    const size_t total = sizeof stream - 1u;
+    const size_t      total    = sizeof stream - 1u;
     /* Every split of the same bytes has to frame the same four lines, the blank one included. */
     for (size_t chunk = 1u; chunk <= total; ++chunk) {
         edds_batch_reader reader;
-        char framed[8][64];
-        size_t lines = 0;
-        size_t at = 0;
+        char              framed[8][64];
+        size_t            lines = 0;
+        size_t            at    = 0;
         edds_batch_reader_init(&reader);
         while (at < total) {
-            size_t remaining = total - at < chunk ? total - at : chunk;
-            const char *data = stream + at;
-            at += remaining;
+            size_t      remaining  = total - at < chunk ? total - at : chunk;
+            const char *data       = stream + at;
+            at                    += remaining;
             while (remaining > 0u) {
-                size_t consumed = 0;
-                size_t size = 0;
+                size_t                consumed = 0;
+                size_t                size     = 0;
                 const edds_batch_line line =
                     edds_batch_reader_push(&reader, data, remaining, &consumed, &size);
-                data += consumed;
+                data      += consumed;
                 remaining -= consumed;
                 if (line != EDDS_BATCH_LINE_READY) {
                     continue;
@@ -1007,12 +1011,12 @@ static int batch_reader_frames_lines_however_a_pipe_split_them(void) {
 }
 
 static int batch_reader_refuses_an_oversized_line_without_framing_half_of_it(void) {
-    const size_t span = EDDS_BATCH_MAX_LINE_BYTES + 20u;
+    const size_t      span = EDDS_BATCH_MAX_LINE_BYTES + 20u;
     edds_batch_reader reader;
-    char *oversized = malloc(span);
-    size_t consumed = 0;
-    size_t size = 0;
-    edds_batch_line line;
+    char             *oversized = malloc(span);
+    size_t            consumed  = 0;
+    size_t            size      = 0;
+    edds_batch_line   line;
     CHECK(oversized != NULL);
     memset(oversized, 'x', EDDS_BATCH_MAX_LINE_BYTES + 16u);
     oversized[EDDS_BATCH_MAX_LINE_BYTES + 16u] = '\n';
@@ -1030,17 +1034,17 @@ static int batch_reader_refuses_an_oversized_line_without_framing_half_of_it(voi
 
 typedef struct pool_probe {
     unsigned long ran[512];
-    uint32_t workers;
-    uint32_t live;
-    uint32_t peak;
+    uint32_t      workers;
+    uint32_t      live;
+    uint32_t      peak;
 } pool_probe;
 
 static void pool_probe_task(void *context, uint32_t index, edds_pool *pool) {
-    pool_probe *probe = (pool_probe *)context;
+    pool_probe    *probe  = (pool_probe *)context;
     const uint64_t charge = 3u * 1024u * 1024u;
     edds_pool_reserve(pool, charge);
     edds_pool_lock_output(pool);
-    probe->workers = edds_pool_workers(pool);
+    probe->workers     = edds_pool_workers(pool);
     probe->ran[index] += 1ul;
     if (++probe->live > probe->peak) {
         probe->peak = probe->live;
@@ -1091,7 +1095,7 @@ static int an_image_larger_than_the_whole_budget_still_runs_alone(void) {
 }
 
 static void pool_mixed_task(void *context, uint32_t index, edds_pool *pool) {
-    pool_probe *probe = (pool_probe *)context;
+    pool_probe    *probe  = (pool_probe *)context;
     /* Every fourth image needs the whole budget; the rest are small enough to share it. */
     const uint64_t charge = index % 4u == 0u ? 4u * 1024u * 1024u : 256u * 1024u;
     edds_pool_reserve(pool, charge);
@@ -1126,18 +1130,18 @@ static int oversized_and_small_images_share_one_budget_without_starving(void) {
 
 /** Converts one source through the public seam and hands back its level-zero RGBA. */
 static int decoded_through_convert(
-    const uint8_t *bytes,
-    size_t size,
+    const uint8_t     *bytes,
+    size_t             size,
     edds_source_format format,
-    int generate_mips,
-    edds_info *info,
-    uint8_t **rgba,
-    size_t *rgba_size) {
-    FILE *source = stream_of(bytes, size);
-    FILE *output = temporary();
+    int                generate_mips,
+    edds_info         *info,
+    uint8_t          **rgba,
+    size_t            *rgba_size) {
+    FILE        *source = stream_of(bytes, size);
+    FILE        *output = temporary();
     edds_profile profile;
-    edds_error error;
-    int ok;
+    edds_error   error;
+    int          ok;
     if (source == NULL || output == NULL) {
         if (source != NULL) {
             fclose(source);
@@ -1149,9 +1153,9 @@ static int decoded_through_convert(
     }
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.generate_mips = generate_mips;
-    ok = edds_convert(source, format, output, &profile,
-             never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK &&
+    profile.generate_mips   = generate_mips;
+    ok                      = edds_convert(source, format, output, &profile,
+                                  never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK &&
         fseek(output, 0, SEEK_SET) == 0 &&
         edds_inspect(output, info, never_cancelled, NULL, &error) == EDDS_OK &&
         edds_preview(output, info, 0, never_cancelled, NULL, rgba, rgba_size, &error) == EDDS_OK;
@@ -1165,15 +1169,15 @@ static int decoded_through_convert(
  * is — when the conversion either succeeded or left bytes behind it.
  */
 static edds_status refused_by_profile(
-    const uint8_t *bytes,
-    size_t size,
-    edds_source_format format,
+    const uint8_t      *bytes,
+    size_t              size,
+    edds_source_format  format,
     const edds_profile *profile,
-    edds_error *error) {
-    FILE *source = stream_of(bytes, size);
-    FILE *output = temporary();
+    edds_error         *error) {
+    FILE       *source = stream_of(bytes, size);
+    FILE       *output = temporary();
     edds_status status;
-    long written = -1;
+    long        written = -1;
     if (source == NULL || output == NULL) {
         if (source != NULL) {
             fclose(source);
@@ -1194,22 +1198,22 @@ static edds_status refused_by_profile(
 }
 
 static edds_status refused_by(
-    const uint8_t *bytes,
-    size_t size,
+    const uint8_t     *bytes,
+    size_t             size,
     edds_source_format format,
-    edds_error *error) {
+    edds_error        *error) {
     edds_profile profile;
     edds_default_profile(&profile);
     return refused_by_profile(bytes, size, format, &profile, error);
 }
 
 static int dds_top_level_generates_but_cannot_claim_a_supplied_chain(void) {
-    test_bytes dds = fixture_dds_bgrx_top();
-    FILE *source = stream_of(dds.data, dds.size);
-    FILE *output = temporary();
+    test_bytes   dds    = fixture_dds_bgrx_top();
+    FILE        *source = stream_of(dds.data, dds.size);
+    FILE        *output = temporary();
     edds_profile profile;
-    edds_info info;
-    edds_error error;
+    edds_info    info;
+    edds_error   error;
 
     CHECK(dds.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
@@ -1231,8 +1235,8 @@ static int dds_top_level_generates_but_cannot_claim_a_supplied_chain(void) {
     /* DDS permits zero for a top-only file; keep that admitted header shape controlled too. */
     memset(dds.data + 28, 0, 4);
     {
-        uint8_t *rgba = NULL;
-        size_t rgba_size = 0;
+        uint8_t *rgba      = NULL;
+        size_t   rgba_size = 0;
         CHECK(decoded_through_convert(dds.data, dds.size, EDDS_SOURCE_DDS, 0,
             &info, &rgba, &rgba_size));
         CHECK(rgba_size == 4u * 2u * 4u && rgba[0] == 1u && rgba[1] == 2u &&
@@ -1244,11 +1248,11 @@ static int dds_top_level_generates_but_cannot_claim_a_supplied_chain(void) {
 }
 
 static int dds_refusals_are_precise_and_atomic(void) {
-    test_bytes dds = fixture_dds_bgrx_mips();
-    test_bytes top = fixture_dds_bgrx_top();
-    test_bytes png = fixture_png_rgba();
+    test_bytes   dds = fixture_dds_bgrx_mips();
+    test_bytes   top = fixture_dds_bgrx_top();
+    test_bytes   png = fixture_png_rgba();
     edds_profile profile;
-    edds_error error;
+    edds_error   error;
 
     CHECK(dds.data != NULL && top.data != NULL && png.data != NULL && dds.size > 128u);
 
@@ -1261,7 +1265,7 @@ static int dds_refusals_are_precise_and_atomic(void) {
 
     profile.generate_mips = 0;
     profile.contains_mips = 1;
-    profile.remove_mips = 3;
+    profile.remove_mips   = 3;
     memset(&error, 0, sizeof error);
     CHECK(refused_by_profile(dds.data, dds.size, EDDS_SOURCE_DDS, &profile, &error) ==
         EDDS_INVALID_INPUT);
@@ -1330,9 +1334,9 @@ static int every_pixel_is(const uint8_t *rgba, size_t size, uint8_t red, uint8_t
 
 static int baseline_jpeg_carries_two_flat_mcus_without_alpha(void) {
     test_bytes jpeg = fixture_jpeg_ycbcr();
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    edds_info  info;
+    uint8_t   *rgba      = NULL;
+    size_t     rgba_size = 0;
     CHECK(jpeg.data != NULL);
     CHECK(decoded_through_convert(jpeg.data, jpeg.size, EDDS_SOURCE_JPG, 0, &info, &rgba, &rgba_size));
     CHECK(info.width == 16 && info.height == 8 && info.mip_count == 1);
@@ -1340,8 +1344,8 @@ static int baseline_jpeg_carries_two_flat_mcus_without_alpha(void) {
     CHECK(info.pixel_format == EDDS_PIXEL_BGRX8);
     CHECK(rgba_size == 16u * 8u * 4u);
     for (size_t pixel = 0; pixel < 16u * 8u; ++pixel) {
-        const uint8_t expected = pixel % 16u < 8u ? 78u : 178u;
-        const uint8_t *at = rgba + pixel * 4u;
+        const uint8_t  expected = pixel % 16u < 8u ? 78u : 178u;
+        const uint8_t *at       = rgba + pixel * 4u;
         CHECK(at[0] == expected && at[1] == expected && at[2] == expected && at[3] == 255u);
     }
     edds_free(rgba);
@@ -1350,13 +1354,13 @@ static int baseline_jpeg_carries_two_flat_mcus_without_alpha(void) {
 }
 
 static int greyscale_jpeg_decodes_as_one_component(void) {
-    static const uint8_t entropy[] = { 0x8d, 0xef };
-    const fixture_jpeg_spec spec = { .frame_marker = 0xc0, .precision = 8, .width = 8, .height = 8, .component_count = 1, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
-    uint8_t file[512];
-    const size_t size = fixture_jpeg_build(file, sizeof file, &spec);
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    static const uint8_t    entropy[] = { 0x8d, 0xef };
+    const fixture_jpeg_spec spec      = { .frame_marker = 0xc0, .precision = 8, .width = 8, .height = 8, .component_count = 1, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
+    uint8_t                 file[512];
+    const size_t            size = fixture_jpeg_build(file, sizeof file, &spec);
+    edds_info               info;
+    uint8_t                *rgba      = NULL;
+    size_t                  rgba_size = 0;
     CHECK(size != 0);
     CHECK(decoded_through_convert(file, size, EDDS_SOURCE_JPG, 0, &info, &rgba, &rgba_size));
     CHECK(info.width == 8 && info.height == 8 && info.pixel_format == EDDS_PIXEL_BGRX8);
@@ -1367,13 +1371,13 @@ static int greyscale_jpeg_decodes_as_one_component(void) {
 
 /** 4:2:0 chroma is replicated across its luma block, and the JFIF matrix places the colour. */
 static int subsampled_jpeg_upsamples_chroma_over_its_luma_block(void) {
-    static const uint8_t entropy[] = { 0x8d, 0xe0, 0x23, 0x78 };
-    const fixture_jpeg_spec spec = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 16, .component_count = 3, .luma_sampling = 0x22, .entropy = entropy, .entropy_size = sizeof entropy };
-    uint8_t file[512];
-    const size_t size = fixture_jpeg_build(file, sizeof file, &spec);
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    static const uint8_t    entropy[] = { 0x8d, 0xe0, 0x23, 0x78 };
+    const fixture_jpeg_spec spec      = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 16, .component_count = 3, .luma_sampling = 0x22, .entropy = entropy, .entropy_size = sizeof entropy };
+    uint8_t                 file[512];
+    const size_t            size = fixture_jpeg_build(file, sizeof file, &spec);
+    edds_info               info;
+    uint8_t                *rgba      = NULL;
+    size_t                  rgba_size = 0;
     CHECK(size != 0);
     CHECK(decoded_through_convert(file, size, EDDS_SOURCE_JPG, 0, &info, &rgba, &rgba_size));
     CHECK(info.width == 16 && info.height == 16);
@@ -1384,13 +1388,13 @@ static int subsampled_jpeg_upsamples_chroma_over_its_luma_block(void) {
 }
 
 static int jpeg_restart_markers_reset_the_dc_prediction(void) {
-    static const uint8_t entropy[] = { 0x8d, 0xe0, 0xff, 0xd0, 0xb2, 0x00 };
-    const fixture_jpeg_spec spec = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .restart_interval = 1, .entropy = entropy, .entropy_size = sizeof entropy };
-    uint8_t file[512];
-    const size_t size = fixture_jpeg_build(file, sizeof file, &spec);
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    static const uint8_t    entropy[] = { 0x8d, 0xe0, 0xff, 0xd0, 0xb2, 0x00 };
+    const fixture_jpeg_spec spec      = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .restart_interval = 1, .entropy = entropy, .entropy_size = sizeof entropy };
+    uint8_t                 file[512];
+    const size_t            size = fixture_jpeg_build(file, sizeof file, &spec);
+    edds_info               info;
+    uint8_t                *rgba      = NULL;
+    size_t                  rgba_size = 0;
     CHECK(size != 0);
     CHECK(decoded_through_convert(file, size, EDDS_SOURCE_JPG, 0, &info, &rgba, &rgba_size));
     CHECK(rgba_size == 16u * 8u * 4u);
@@ -1402,7 +1406,7 @@ static int jpeg_restart_markers_reset_the_dc_prediction(void) {
 }
 
 static int unsupported_jpeg_subtypes_are_refused_before_any_pixel(void) {
-    static const uint8_t entropy[] = { 0x8d, 0xe0, 0xf2, 0x00, 0x7f };
+    static const uint8_t entropy[]      = { 0x8d, 0xe0, 0xf2, 0x00, 0x7f };
     static const uint8_t exif_rotated[] = {
         'E', 'x', 'i', 'f', 0, 0,
         'I', 'I', 0x2a, 0, 8, 0, 0, 0,
@@ -1413,7 +1417,7 @@ static int unsupported_jpeg_subtypes_are_refused_before_any_pixel(void) {
 
     const struct {
         fixture_jpeg_spec spec;
-        const char *code;
+        const char       *code;
     } cases[] = {
         { { .frame_marker = 0xc2, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy },
             "unsupported-jpeg-frame" },
@@ -1430,9 +1434,9 @@ static int unsupported_jpeg_subtypes_are_refused_before_any_pixel(void) {
     };
 
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-        uint8_t file[512];
+        uint8_t      file[512];
         const size_t size = fixture_jpeg_build(file, sizeof file, &cases[at].spec);
-        edds_error error;
+        edds_error   error;
         memset(&error, 0, sizeof error);
         CHECK(size != 0);
         CHECK(refused_by(file, size, EDDS_SOURCE_JPG, &error) == EDDS_UNSUPPORTED_FORMAT);
@@ -1442,12 +1446,12 @@ static int unsupported_jpeg_subtypes_are_refused_before_any_pixel(void) {
 }
 
 static int damaged_jpeg_input_fails_without_partial_output(void) {
-    static const uint8_t entropy[] = { 0x8d, 0xe0, 0xf2 };
+    static const uint8_t    entropy[] = { 0x8d, 0xe0, 0xf2 };
     const fixture_jpeg_spec truncated = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy, .omit_end_of_image = 1 };
-    const fixture_jpeg_spec complete = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
-    uint8_t file[512];
-    size_t size = fixture_jpeg_build(file, sizeof file, &truncated);
-    edds_error error;
+    const fixture_jpeg_spec complete  = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
+    uint8_t                 file[512];
+    size_t                  size = fixture_jpeg_build(file, sizeof file, &truncated);
+    edds_error              error;
     memset(&error, 0, sizeof error);
     CHECK(size != 0);
     CHECK(refused_by(file, size, EDDS_SOURCE_JPG, &error) == EDDS_INVALID_INPUT);
@@ -1462,7 +1466,9 @@ static int damaged_jpeg_input_fails_without_partial_output(void) {
     return 1;
 }
 
-enum { TIFF_PIXEL_BYTES = 18 };
+enum {
+    TIFF_PIXEL_BYTES = 18
+};
 
 static const uint8_t tiff_rgb_pixels[TIFF_PIXEL_BYTES] = {
     10, 20, 30, 40, 50, 60, 70, 80, 90,
@@ -1473,7 +1479,7 @@ static const uint8_t tiff_rgb_pixels[TIFF_PIXEL_BYTES] = {
 static size_t pack_lzw_literals(uint8_t *output, size_t capacity, const uint8_t *data, size_t size) {
     const size_t codes = size + 2u;
     const size_t bytes = (codes * 9u + 7u) / 8u;
-    size_t bit = 0;
+    size_t       bit   = 0;
     if (capacity < bytes) {
         return 0;
     }
@@ -1492,7 +1498,7 @@ static size_t pack_lzw_literals(uint8_t *output, size_t capacity, const uint8_t 
 }
 
 static size_t pack_zlib_stored(uint8_t *output, size_t capacity, const uint8_t *data, size_t size) {
-    uint32_t first = 1;
+    uint32_t first  = 1;
     uint32_t second = 0;
     if (capacity < size + 11u || size > 0xffffu) {
         return 0;
@@ -1506,27 +1512,27 @@ static size_t pack_zlib_stored(uint8_t *output, size_t capacity, const uint8_t *
     output[6] = (uint8_t)~(uint8_t)(size >> 8);
     memcpy(output + 7, data, size);
     for (size_t at = 0; at < size; ++at) {
-        first = (first + data[at]) % 65521u;
+        first  = (first + data[at]) % 65521u;
         second = (second + first) % 65521u;
     }
-    output[7 + size] = (uint8_t)(second >> 8);
-    output[8 + size] = (uint8_t)second;
-    output[9 + size] = (uint8_t)(first >> 8);
+    output[7 + size]  = (uint8_t)(second >> 8);
+    output[8 + size]  = (uint8_t)second;
+    output[9 + size]  = (uint8_t)(first >> 8);
     output[10 + size] = (uint8_t)first;
     return size + 11u;
 }
 
 /** The nine-tag baseline RGB directory every compression case here shares. */
 static size_t build_rgb_tiff(
-    uint8_t *output,
-    size_t capacity,
-    int big_endian,
-    uint32_t compression,
+    uint8_t       *output,
+    size_t         capacity,
+    int            big_endian,
+    uint32_t       compression,
     const uint8_t *strip,
-    size_t strip_size) {
-    const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(9);
-    const uint32_t pixels_at = bits_at + 6u;
-    const fixture_tiff_tag tags[9] = {
+    size_t         strip_size) {
+    const uint32_t         bits_at   = (uint32_t)fixture_tiff_ifd_end(9);
+    const uint32_t         pixels_at = bits_at + 6u;
+    const fixture_tiff_tag tags[9]   = {
         { 256, 3, 1, 3 },
         { 257, 3, 1, 2 },
         { 258, 3, 3, bits_at },
@@ -1554,18 +1560,18 @@ static int tiff_compressions_and_byte_orders_agree_on_one_image(void) {
         10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255,
         100, 110, 120, 255, 130, 140, 150, 255, 160, 170, 180, 255
     };
-    uint8_t packbits[TIFF_PIXEL_BYTES + 1];
-    uint8_t lzw[64];
-    uint8_t deflate[TIFF_PIXEL_BYTES + 16];
+    uint8_t      packbits[TIFF_PIXEL_BYTES + 1];
+    uint8_t      lzw[64];
+    uint8_t      deflate[TIFF_PIXEL_BYTES + 16];
     const size_t lzw_size = pack_lzw_literals(lzw, sizeof lzw, tiff_rgb_pixels, TIFF_PIXEL_BYTES);
     const size_t deflate_size =
         pack_zlib_stored(deflate, sizeof deflate, tiff_rgb_pixels, TIFF_PIXEL_BYTES);
 
     struct {
-        uint32_t compression;
+        uint32_t       compression;
         const uint8_t *strip;
-        size_t size;
-        int big_endian;
+        size_t         size;
+        int            big_endian;
     } cases[] = {
         { 1, tiff_rgb_pixels, TIFF_PIXEL_BYTES, 0 },
         { 1, tiff_rgb_pixels, TIFF_PIXEL_BYTES, 1 },
@@ -1582,12 +1588,12 @@ static int tiff_compressions_and_byte_orders_agree_on_one_image(void) {
     cases[4].size = deflate_size;
     cases[5].size = deflate_size;
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-        uint8_t file[512];
-        edds_info info;
-        uint8_t *rgba = NULL;
-        size_t rgba_size = 0;
-        const size_t size = build_rgb_tiff(file, sizeof file, cases[at].big_endian,
-            cases[at].compression, cases[at].strip, cases[at].size);
+        uint8_t      file[512];
+        edds_info    info;
+        uint8_t     *rgba      = NULL;
+        size_t       rgba_size = 0;
+        const size_t size      = build_rgb_tiff(file, sizeof file, cases[at].big_endian,
+                 cases[at].compression, cases[at].strip, cases[at].size);
         CHECK(size != 0);
         CHECK(decoded_through_convert(file, size, EDDS_SOURCE_TIFF, 0, &info, &rgba, &rgba_size));
         CHECK(info.width == 3 && info.height == 2 && info.pixel_format == EDDS_PIXEL_BGRX8);
@@ -1599,10 +1605,10 @@ static int tiff_compressions_and_byte_orders_agree_on_one_image(void) {
 
 /** Alpha is a fact of the source: it arrives only where an unassociated extra sample declares it. */
 static int tiff_unassociated_extra_sample_is_the_only_alpha(void) {
-    static const uint8_t pixels[] = { 10, 20, 30, 40, 50, 60, 70, 80 };
-    const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(10);
-    const uint32_t pixels_at = bits_at + 8u;
-    fixture_tiff_tag tags[10] = {
+    static const uint8_t pixels[]  = { 10, 20, 30, 40, 50, 60, 70, 80 };
+    const uint32_t       bits_at   = (uint32_t)fixture_tiff_ifd_end(10);
+    const uint32_t       pixels_at = bits_at + 8u;
+    fixture_tiff_tag     tags[10]  = {
         { 256, 3, 1, 2 },
         { 257, 3, 1, 1 },
         { 258, 3, 4, bits_at },
@@ -1614,13 +1620,13 @@ static int tiff_unassociated_extra_sample_is_the_only_alpha(void) {
         { 279, 4, 1, (uint32_t)sizeof pixels },
         { 338, 3, 1, 2 }
     };
-    uint8_t trailing[8 + sizeof pixels];
-    uint8_t file[512];
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    uint8_t    trailing[8 + sizeof pixels];
+    uint8_t    file[512];
+    edds_info  info;
+    uint8_t   *rgba      = NULL;
+    size_t     rgba_size = 0;
     edds_error error;
-    size_t size;
+    size_t     size;
     memset(trailing, 0, sizeof trailing);
     trailing[0] = 8;
     trailing[2] = 8;
@@ -1636,7 +1642,7 @@ static int tiff_unassociated_extra_sample_is_the_only_alpha(void) {
 
     /* Premultiplied alpha is a different sample meaning, so it is refused rather than shown. */
     tags[9].value = 1;
-    size = fixture_tiff_build(file, sizeof file, 0, tags, 10, trailing, sizeof trailing);
+    size          = fixture_tiff_build(file, sizeof file, 0, tags, 10, trailing, sizeof trailing);
     memset(&error, 0, sizeof error);
     CHECK(size != 0);
     CHECK(refused_by(file, size, EDDS_SOURCE_TIFF, &error) == EDDS_UNSUPPORTED_FORMAT);
@@ -1646,8 +1652,8 @@ static int tiff_unassociated_extra_sample_is_the_only_alpha(void) {
 
 static int unsupported_tiff_subtypes_are_refused_before_any_pixel(void) {
     const struct {
-        uint16_t tag;
-        uint32_t value;
+        uint16_t    tag;
+        uint32_t    value;
         const char *code;
     } changes[] = {
         { 262, 3, "unsupported-tiff-channels" },
@@ -1661,9 +1667,9 @@ static int unsupported_tiff_subtypes_are_refused_before_any_pixel(void) {
     };
 
     for (size_t at = 0; at < sizeof changes / sizeof changes[0]; ++at) {
-        const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(10);
-        const uint32_t pixels_at = bits_at + 6u;
-        fixture_tiff_tag tags[10] = {
+        const uint32_t   bits_at   = (uint32_t)fixture_tiff_ifd_end(10);
+        const uint32_t   pixels_at = bits_at + 6u;
+        fixture_tiff_tag tags[10]  = {
             { 256, 3, 1, 3 },
             { 257, 3, 1, 2 },
             { 258, 3, 3, bits_at },
@@ -1675,15 +1681,15 @@ static int unsupported_tiff_subtypes_are_refused_before_any_pixel(void) {
             { 279, 4, 1, TIFF_PIXEL_BYTES },
             { changes[at].tag, 3, 1, changes[at].value }
         };
-        uint8_t trailing[6 + TIFF_PIXEL_BYTES];
-        uint8_t file[512];
+        uint8_t    trailing[6 + TIFF_PIXEL_BYTES];
+        uint8_t    file[512];
         edds_error error;
-        size_t size;
+        size_t     size;
         for (size_t entry = 0; entry < 9u; ++entry) {
             if (tags[entry].tag == changes[at].tag) {
                 /* A tag the baseline already carries is overridden where it stands. */
                 tags[entry].value = changes[at].value;
-                tags[9] = tags[8];
+                tags[9]           = tags[8];
             }
         }
         memset(trailing, 0, sizeof trailing);
@@ -1701,9 +1707,9 @@ static int unsupported_tiff_subtypes_are_refused_before_any_pixel(void) {
 }
 
 static int sixteen_bit_tiff_samples_are_refused(void) {
-    const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(9);
-    const uint32_t pixels_at = bits_at + 6u;
-    const fixture_tiff_tag tags[9] = {
+    const uint32_t         bits_at   = (uint32_t)fixture_tiff_ifd_end(9);
+    const uint32_t         pixels_at = bits_at + 6u;
+    const fixture_tiff_tag tags[9]   = {
         { 256, 3, 1, 3 },
         { 257, 3, 1, 2 },
         { 258, 3, 3, bits_at },
@@ -1714,15 +1720,15 @@ static int sixteen_bit_tiff_samples_are_refused(void) {
         { 278, 3, 1, 2 },
         { 279, 4, 1, TIFF_PIXEL_BYTES * 2u }
     };
-    uint8_t trailing[6 + TIFF_PIXEL_BYTES * 2];
-    uint8_t file[512];
+    uint8_t    trailing[6 + TIFF_PIXEL_BYTES * 2];
+    uint8_t    file[512];
     edds_error error;
-    size_t size;
+    size_t     size;
     memset(trailing, 0, sizeof trailing);
     trailing[0] = 16;
     trailing[2] = 16;
     trailing[4] = 16;
-    size = fixture_tiff_build(file, sizeof file, 0, tags, 9, trailing, sizeof trailing);
+    size        = fixture_tiff_build(file, sizeof file, 0, tags, 9, trailing, sizeof trailing);
     memset(&error, 0, sizeof error);
     CHECK(size != 0);
     CHECK(refused_by(file, size, EDDS_SOURCE_TIFF, &error) == EDDS_UNSUPPORTED_FORMAT);
@@ -1731,8 +1737,8 @@ static int sixteen_bit_tiff_samples_are_refused(void) {
 }
 
 static int a_second_tiff_page_is_refused_rather_than_silently_dropped(void) {
-    uint8_t file[512];
-    edds_error error;
+    uint8_t      file[512];
+    edds_error   error;
     const size_t size = build_rgb_tiff(file, sizeof file, 0, 1, tiff_rgb_pixels, TIFF_PIXEL_BYTES);
     CHECK(size != 0);
     /* The next-directory pointer sits immediately after the nine entries. */
@@ -1744,7 +1750,7 @@ static int a_second_tiff_page_is_refused_rather_than_silently_dropped(void) {
 }
 
 static int damaged_tiff_input_fails_without_partial_output(void) {
-    uint8_t file[512];
+    uint8_t      file[512];
     const size_t size = build_rgb_tiff(file, sizeof file, 0, 1, tiff_rgb_pixels, TIFF_PIXEL_BYTES);
     CHECK(size != 0);
     for (size_t prefix = 0; prefix < size; ++prefix) {
@@ -1757,7 +1763,7 @@ static int damaged_tiff_input_fails_without_partial_output(void) {
 
 /** One table every part of the converter reads, rather than four remembered lists of its own. */
 static int the_source_contract_names_only_registered_resource_classes(void) {
-    size_t count = 0;
+    size_t                        count        = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
     CHECK(capabilities != NULL && count == 5u);
     for (size_t at = 0; at < count; ++at) {
@@ -1780,7 +1786,7 @@ static int the_source_contract_names_only_registered_resource_classes(void) {
  */
 
 enum {
-    GRADIENT_WIDTH = 9,
+    GRADIENT_WIDTH  = 9,
     GRADIENT_HEIGHT = 5,
     GRADIENT_PIXELS = GRADIENT_WIDTH * GRADIENT_HEIGHT
 };
@@ -1796,13 +1802,13 @@ typedef enum source_alpha_shape {
 static void gradient_bgra(uint8_t bgra[GRADIENT_PIXELS * 4], source_alpha_shape alpha) {
     for (uint32_t y = 0; y < GRADIENT_HEIGHT; ++y) {
         for (uint32_t x = 0; x < GRADIENT_WIDTH; ++x) {
-            uint8_t *pixel = bgra + ((size_t)y * GRADIENT_WIDTH + x) * 4u;
-            const uint8_t red = (uint8_t)((x * 255u) / (GRADIENT_WIDTH - 1u));
+            uint8_t      *pixel = bgra + ((size_t)y * GRADIENT_WIDTH + x) * 4u;
+            const uint8_t red   = (uint8_t)((x * 255u) / (GRADIENT_WIDTH - 1u));
             const uint8_t green = (uint8_t)((y * 255u) / (GRADIENT_HEIGHT - 1u));
-            pixel[0] = (uint8_t)(255u - red);
-            pixel[1] = green;
-            pixel[2] = red;
-            pixel[3] = 255u;
+            pixel[0]            = (uint8_t)(255u - red);
+            pixel[1]            = green;
+            pixel[2]            = red;
+            pixel[3]            = 255u;
             if (alpha == SOURCE_ALPHA_RAMP) {
                 pixel[3] = (uint8_t)(((x + y) * 255u) / (GRADIENT_WIDTH + GRADIENT_HEIGHT - 2u));
             }
@@ -1814,8 +1820,10 @@ static void gradient_bgra(uint8_t bgra[GRADIENT_PIXELS * 4], source_alpha_shape 
     }
 }
 
-enum { SMOOTH_SIDE = 16,
-    SMOOTH_PIXELS = SMOOTH_SIDE * SMOOTH_SIDE };
+enum {
+    SMOOTH_SIDE   = 16,
+    SMOOTH_PIXELS = SMOOTH_SIDE * SMOOTH_SIDE
+};
 
 /**
  * A gentle blend, which is what a texture usually is. The error bounds are claimed against this
@@ -1826,10 +1834,10 @@ static void smooth_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
     for (uint32_t y = 0; y < SMOOTH_SIDE; ++y) {
         for (uint32_t x = 0; x < SMOOTH_SIDE; ++x) {
             uint8_t *pixel = bgra + ((size_t)y * SMOOTH_SIDE + x) * 4u;
-            pixel[0] = (uint8_t)(180u - x * 3u);
-            pixel[1] = (uint8_t)(60u + y * 5u);
-            pixel[2] = (uint8_t)(40u + x * 6u);
-            pixel[3] = (uint8_t)(255u - y * 4u);
+            pixel[0]       = (uint8_t)(180u - x * 3u);
+            pixel[1]       = (uint8_t)(60u + y * 5u);
+            pixel[2]       = (uint8_t)(40u + x * 6u);
+            pixel[3]       = (uint8_t)(255u - y * 4u);
         }
     }
 }
@@ -1838,7 +1846,7 @@ static void smooth_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
 static void quadrant_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
     for (uint32_t y = 0; y < SMOOTH_SIDE; ++y) {
         for (uint32_t x = 0; x < SMOOTH_SIDE; ++x) {
-            uint8_t *pixel = bgra + ((size_t)y * SMOOTH_SIDE + x) * 4u;
+            uint8_t       *pixel    = bgra + ((size_t)y * SMOOTH_SIDE + x) * 4u;
             const unsigned quadrant = (x < SMOOTH_SIDE / 2u ? 0u : 1u) +
                 (y < SMOOTH_SIDE / 2u ? 0u : 2u);
             pixel[0] = (uint8_t)(30u + quadrant * 60u);
@@ -1851,21 +1859,21 @@ static void quadrant_bgra(uint8_t bgra[SMOOTH_PIXELS * 4]) {
 
 /** Converts a synthetic TGA and hands back the inspection plus one decoded mip. */
 static int converted_source(
-    const uint8_t *bgra,
-    uint32_t width,
-    uint32_t height,
-    int with_alpha,
+    const uint8_t      *bgra,
+    uint32_t            width,
+    uint32_t            height,
+    int                 with_alpha,
     const edds_profile *profile,
-    uint32_t level,
-    edds_info *info,
-    uint8_t **rgba,
-    size_t *rgba_size) {
-    uint8_t tga[18u + 64u * 64u * 4u];
-    const size_t size = fixture_tga_build(tga, sizeof tga, width, height, with_alpha, bgra);
-    FILE *source = size == 0 ? NULL : stream_of(tga, size);
-    FILE *output = temporary();
-    edds_error error;
-    int ok;
+    uint32_t            level,
+    edds_info          *info,
+    uint8_t           **rgba,
+    size_t             *rgba_size) {
+    uint8_t      tga[18u + 64u * 64u * 4u];
+    const size_t size   = fixture_tga_build(tga, sizeof tga, width, height, with_alpha, bgra);
+    FILE        *source = size == 0 ? NULL : stream_of(tga, size);
+    FILE        *output = temporary();
+    edds_error   error;
+    int          ok;
     if (source == NULL || output == NULL) {
         if (source != NULL) {
             fclose(source);
@@ -1887,19 +1895,19 @@ static int converted_source(
 }
 
 static int box_and_kaiser_mips_cover_npot_edges_exactly(void) {
-    static const uint8_t expected_box[] = { 10, 0, 0, 255, 13, 0, 0, 255 };
-    static const uint8_t expected_kaiser[] = { 0, 0, 0, 255, 0, 0, 0, 255 };
-    uint8_t bgra[5u * 3u * 4u] = { 0 };
-    edds_profile profile;
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    static const uint8_t expected_box[]     = { 10, 0, 0, 255, 13, 0, 0, 255 };
+    static const uint8_t expected_kaiser[]  = { 0, 0, 0, 255, 0, 0, 0, 255 };
+    uint8_t              bgra[5u * 3u * 4u] = { 0 };
+    edds_profile         profile;
+    edds_info            info;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
 
     for (uint32_t y = 0; y < 3u; ++y) {
         for (uint32_t x = 0; x < 5u; ++x) {
             const size_t at = ((size_t)y * 5u + x) * 4u;
-            bgra[at + 2u] = (uint8_t)(y * 10u + x);
-            bgra[at + 3u] = 255u;
+            bgra[at + 2u]   = (uint8_t)(y * 10u + x);
+            bgra[at + 3u]   = 255u;
         }
     }
     edds_default_profile(&profile);
@@ -1915,22 +1923,22 @@ static int box_and_kaiser_mips_cover_npot_edges_exactly(void) {
         bgra[at * 4u + 3u] = 255u;
     }
     bgra[(1u * 5u + 2u) * 4u + 2u] = 255u;
-    profile.mipmap_filter = EDDS_FILTER_KAISER;
+    profile.mipmap_filter          = EDDS_FILTER_KAISER;
     CHECK(converted_source(bgra, 5, 3, 1, &profile, 1, &info, &rgba, &rgba_size));
     CHECK(rgba_size == sizeof expected_kaiser);
     CHECK(memcmp(rgba, expected_kaiser, sizeof expected_kaiser) == 0);
     edds_free(rgba);
 
     {
-        static const uint8_t expected_line[] = { 8, 0, 0, 255, 32, 0, 0, 255 };
-        uint8_t horizontal[5u * 4u] = { 0 };
-        uint8_t vertical[5u * 4u] = { 0 };
-        profile.mipmap_filter = EDDS_FILTER_BOX;
+        static const uint8_t expected_line[]     = { 8, 0, 0, 255, 32, 0, 0, 255 };
+        uint8_t              horizontal[5u * 4u] = { 0 };
+        uint8_t              vertical[5u * 4u]   = { 0 };
+        profile.mipmap_filter                    = EDDS_FILTER_BOX;
         for (size_t at = 0; at < 5u; ++at) {
             horizontal[at * 4u + 2u] = (uint8_t)(at * 10u);
             horizontal[at * 4u + 3u] = 255u;
-            vertical[at * 4u + 2u] = (uint8_t)(at * 10u);
-            vertical[at * 4u + 3u] = 255u;
+            vertical[at * 4u + 2u]   = (uint8_t)(at * 10u);
+            vertical[at * 4u + 3u]   = 255u;
         }
         rgba = NULL;
         CHECK(converted_source(horizontal, 5, 1, 1, &profile, 1, &info, &rgba, &rgba_size));
@@ -1949,16 +1957,16 @@ static int box_and_kaiser_mips_cover_npot_edges_exactly(void) {
 }
 
 static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void) {
-    test_bytes dxt1 = fixture_dds_dxt1_top();
-    test_bytes dxt5 = fixture_dds_dxt5_top();
-    test_bytes r8 = fixture_dds_dx10_r8_mips();
+    test_bytes   dxt1 = fixture_dds_dxt1_top();
+    test_bytes   dxt5 = fixture_dds_dxt5_top();
+    test_bytes   r8   = fixture_dds_dx10_r8_mips();
     edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
-    FILE *source;
-    FILE *output;
+    edds_info    info;
+    edds_error   error;
+    uint8_t     *rgba      = NULL;
+    size_t       rgba_size = 0;
+    FILE        *source;
+    FILE        *output;
 
     CHECK(dxt1.data != NULL && dxt5.data != NULL && r8.data != NULL);
     CHECK(decoded_through_convert(dxt1.data, dxt1.size, EDDS_SOURCE_DDS, 0,
@@ -1977,25 +1985,25 @@ static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void)
     rgba = NULL;
 
     {
-        static const uint8_t r[] = { 17 };
-        static const uint8_t rg[] = { 17, 33 };
-        static const uint8_t zero8[8] = { 0 };
+        static const uint8_t r[]        = { 17 };
+        static const uint8_t rg[]       = { 17, 33 };
+        static const uint8_t zero8[8]   = { 0 };
         static const uint8_t zero16[16] = { 0 };
-        static const uint8_t bgra[] = { 3, 2, 1, 4 };
-        static const uint8_t bc7[] = {
+        static const uint8_t bgra[]     = { 3, 2, 1, 4 };
+        static const uint8_t bc7[]      = {
             0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x81, 0x40,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
         };
 
         static const struct {
-            uint32_t dxgi;
+            uint32_t       dxgi;
             const uint8_t *sample;
-            size_t sample_size;
-            uint32_t bytes_per_pixel;
-            uint8_t red;
-            uint8_t green;
-            uint8_t blue;
-            uint8_t alpha;
+            size_t         sample_size;
+            uint32_t       bytes_per_pixel;
+            uint8_t        red;
+            uint8_t        green;
+            uint8_t        blue;
+            uint8_t        alpha;
         } cases[] = {
             { 61, r, sizeof r, 1, 17, 0, 0, 255 },
             { 49, rg, sizeof rg, 2, 17, 33, 0, 255 },
@@ -2009,10 +2017,10 @@ static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void)
         };
 
         for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-            const size_t pixels = cases[at].bytes_per_pixel == 0u ? 1u : 16u;
+            const size_t pixels       = cases[at].bytes_per_pixel == 0u ? 1u : 16u;
             const size_t payload_size = cases[at].sample_size * pixels;
-            uint8_t payload[64] = { 0 };
-            test_bytes fixture;
+            uint8_t      payload[64]  = { 0 };
+            test_bytes   fixture;
             for (size_t pixel = 0; pixel < pixels; ++pixel) {
                 memcpy(payload + pixel * cases[at].sample_size,
                     cases[at].sample, cases[at].sample_size);
@@ -2036,9 +2044,9 @@ static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void)
     CHECK(source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.conversion = EDDS_CONVERSION_RED;
-    profile.contains_mips = 1;
-    profile.generate_mips = 0;
+    profile.conversion      = EDDS_CONVERSION_RED;
+    profile.contains_mips   = 1;
+    profile.generate_mips   = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -2064,21 +2072,21 @@ static int dds_source_matrix_covers_legacy_blocks_and_dx10_supplied_levels(void)
 }
 
 static int dds_alpha_branch_scans_every_supplied_level(void) {
-    test_bytes dds = fixture_dds_bgra_alpha_mips();
-    FILE *source = stream_of(dds.data, dds.size);
-    FILE *output = temporary();
+    test_bytes   dds    = fixture_dds_bgra_alpha_mips();
+    FILE        *source = stream_of(dds.data, dds.size);
+    FILE        *output = temporary();
     edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    edds_info    info;
+    edds_error   error;
+    uint8_t     *rgba      = NULL;
+    size_t       rgba_size = 0;
 
     CHECK(dds.data != NULL && source != NULL && output != NULL);
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.conversion = EDDS_CONVERSION_DXT;
-    profile.contains_mips = 1;
-    profile.generate_mips = 0;
+    profile.conversion      = EDDS_CONVERSION_DXT;
+    profile.contains_mips   = 1;
+    profile.generate_mips   = 0;
     CHECK(edds_convert(source, EDDS_SOURCE_DDS, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -2104,16 +2112,16 @@ static int normalize_flag_and_mipmap_function_have_distinct_stages(void) {
         255, 127, 127, 33,
         127, 255, 127, 77
     };
-    static const uint8_t expected_pre_normalized_mip[] = { 191, 191, 127, 55 };
+    static const uint8_t expected_pre_normalized_mip[]  = { 191, 191, 127, 55 };
     static const uint8_t expected_post_normalized_mip[] = { 218, 218, 126, 55 };
-    edds_profile profile;
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t rgba_size = 0;
+    edds_profile         profile;
+    edds_info            info;
+    uint8_t             *rgba      = NULL;
+    size_t               rgba_size = 0;
 
     edds_default_profile(&profile);
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.normalize = 1;
+    profile.normalize       = 1;
     CHECK(converted_source(source_bgra, 2, 1, 1, &profile, 0,
         &info, &rgba, &rgba_size));
     CHECK(rgba_size == sizeof expected_normalized_source &&
@@ -2127,7 +2135,7 @@ static int normalize_flag_and_mipmap_function_have_distinct_stages(void) {
     edds_free(rgba);
     rgba = NULL;
 
-    profile.normalize = 0;
+    profile.normalize       = 0;
     profile.mipmap_function = EDDS_MIPMAP_NORMALIZE;
     CHECK(converted_source(source_bgra, 2, 1, 1, &profile, 1,
         &info, &rgba, &rgba_size));
@@ -2138,10 +2146,10 @@ static int normalize_flag_and_mipmap_function_have_distinct_stages(void) {
 }
 
 static edds_status refused_profile(const edds_profile *profile, edds_error *error) {
-    uint8_t bgra[GRADIENT_PIXELS * 4];
-    uint8_t tga[18u + GRADIENT_PIXELS * 4u];
-    FILE *source;
-    FILE *output = temporary();
+    uint8_t     bgra[GRADIENT_PIXELS * 4];
+    uint8_t     tga[18u + GRADIENT_PIXELS * 4u];
+    FILE       *source;
+    FILE       *output = temporary();
     edds_status status;
     gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
     source = stream_of(tga,
@@ -2168,11 +2176,11 @@ static uint32_t block_count_of(uint32_t width, uint32_t height) {
 }
 
 static double mean_channel_error(
-    const uint8_t *decoded,
-    const uint8_t *expected,
-    size_t pixels,
+    const uint8_t  *decoded,
+    const uint8_t  *expected,
+    size_t          pixels,
     const unsigned *channels,
-    unsigned channel_count) {
+    unsigned        channel_count) {
     double total = 0;
     for (size_t pixel = 0; pixel < pixels; ++pixel) {
         for (unsigned at = 0; at < channel_count; ++at) {
@@ -2187,7 +2195,7 @@ static double mean_channel_error(
 /** The gradient as straight RGBA, which is what a decode of a lossless result must equal. */
 static void gradient_rgba(const uint8_t *bgra, uint8_t *rgba, size_t pixels) {
     for (size_t pixel = 0; pixel < pixels; ++pixel) {
-        rgba[pixel * 4u] = bgra[pixel * 4u + 2u];
+        rgba[pixel * 4u]      = bgra[pixel * 4u + 2u];
         rgba[pixel * 4u + 1u] = bgra[pixel * 4u + 1u];
         rgba[pixel * 4u + 2u] = bgra[pixel * 4u];
         rgba[pixel * 4u + 3u] = bgra[pixel * 4u + 3u];
@@ -2196,13 +2204,13 @@ static void gradient_rgba(const uint8_t *bgra, uint8_t *rgba, size_t pixels) {
 
 static int every_conversion_stores_its_proven_runtime_format(void) {
     static const struct {
-        edds_conversion conversion;
+        edds_conversion   conversion;
         edds_pixel_format format;
-        const char *four_cc;
-        uint32_t dxgi;
-        uint32_t block_bytes;
-        uint32_t pixel_bytes;
-        const char *channels;
+        const char       *four_cc;
+        uint32_t          dxgi;
+        uint32_t          block_bytes;
+        uint32_t          pixel_bytes;
+        const char       *channels;
     } expected[] = {
         { EDDS_CONVERSION_NONE, EDDS_PIXEL_BGRA8, "NONE", 0, 0, 4, "RGBA" },
         { EDDS_CONVERSION_DXT, EDDS_PIXEL_DXT5, "DXT5", 0, 16, 0, "RGBA" },
@@ -2218,9 +2226,9 @@ static int every_conversion_stores_its_proven_runtime_format(void) {
 
     for (size_t at = 0; at < sizeof expected / sizeof expected[0]; ++at) {
         edds_profile profile;
-        edds_info info;
+        edds_info    info;
         edds_default_profile(&profile);
-        profile.conversion = expected[at].conversion;
+        profile.conversion      = expected[at].conversion;
         profile.format_compress = EDDS_COMPRESS_COPY;
         CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
             &info, NULL, NULL));
@@ -2232,11 +2240,11 @@ static int every_conversion_stores_its_proven_runtime_format(void) {
         /* Five mips: 9x5, 4x2, 2x1, 1x1 is four, and the chain ends at one by one. */
         CHECK(info.mip_count == 4u);
         for (uint32_t level = 0; level < info.mip_count; ++level) {
-            const uint32_t width = info.mips[level].width;
+            const uint32_t width  = info.mips[level].width;
             const uint32_t height = info.mips[level].height;
-            const uint32_t bytes = expected[at].block_bytes != 0
-                ? block_count_of(width, height) * expected[at].block_bytes
-                : width * height * expected[at].pixel_bytes;
+            const uint32_t bytes  = expected[at].block_bytes != 0
+                 ? block_count_of(width, height) * expected[at].block_bytes
+                 : width * height * expected[at].pixel_bytes;
             CHECK(info.mips[level].decoded_bytes == bytes);
             CHECK(info.mips[level].container == EDDS_CONTAINER_COPY);
         }
@@ -2249,9 +2257,9 @@ static int every_conversion_stores_its_proven_runtime_format(void) {
 static int the_alpha_branch_is_read_off_each_source(void) {
     static const struct {
         source_alpha_shape shape;
-        int with_alpha;
-        edds_pixel_format uncompressed;
-        edds_pixel_format compressed;
+        int                with_alpha;
+        edds_pixel_format  uncompressed;
+        edds_pixel_format  compressed;
     } cases[] = {
         { SOURCE_NO_ALPHA_CHANNEL, 0, EDDS_PIXEL_BGRX8, EDDS_PIXEL_DXT1 },
         { SOURCE_FULLY_OPAQUE_ALPHA, 1, EDDS_PIXEL_BGRA8, EDDS_PIXEL_DXT1 },
@@ -2260,9 +2268,9 @@ static int the_alpha_branch_is_read_off_each_source(void) {
     };
 
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-        uint8_t bgra[GRADIENT_PIXELS * 4];
+        uint8_t      bgra[GRADIENT_PIXELS * 4];
         edds_profile profile;
-        edds_info info;
+        edds_info    info;
         gradient_bgra(bgra, cases[at].shape);
         edds_default_profile(&profile);
         CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, cases[at].with_alpha,
@@ -2278,11 +2286,11 @@ static int the_alpha_branch_is_read_off_each_source(void) {
 
 /** Two sources in one batch each keep their own branch; nothing about it is shared. */
 static int two_sources_under_one_profile_keep_their_own_alpha_branch(void) {
-    uint8_t opaque[GRADIENT_PIXELS * 4];
-    uint8_t translucent[GRADIENT_PIXELS * 4];
+    uint8_t      opaque[GRADIENT_PIXELS * 4];
+    uint8_t      translucent[GRADIENT_PIXELS * 4];
     edds_profile profile;
-    edds_info first;
-    edds_info second;
+    edds_info    first;
+    edds_info    second;
     gradient_bgra(opaque, SOURCE_FULLY_OPAQUE_ALPHA);
     gradient_bgra(translucent, SOURCE_ALPHA_RAMP);
     edds_default_profile(&profile);
@@ -2297,12 +2305,12 @@ static int two_sources_under_one_profile_keep_their_own_alpha_branch(void) {
 
 /** Red and RedGreen store the source channels themselves, so their decode is exact. */
 static int the_uncompressed_channel_formats_are_lossless(void) {
-    uint8_t bgra[GRADIENT_PIXELS * 4];
-    uint8_t expected[GRADIENT_PIXELS * 4];
+    uint8_t      bgra[GRADIENT_PIXELS * 4];
+    uint8_t      expected[GRADIENT_PIXELS * 4];
     edds_profile profile;
-    edds_info info;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    edds_info    info;
+    uint8_t     *rgba = NULL;
+    size_t       size = 0;
     gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
     gradient_rgba(bgra, expected, GRADIENT_PIXELS);
 
@@ -2334,16 +2342,16 @@ static int the_uncompressed_channel_formats_are_lossless(void) {
 
 /** Every lossy conversion owes a bounded error on the channels it claims to carry. */
 static int every_lossy_conversion_stays_inside_its_error_bound(void) {
-    static const unsigned colour[] = { 0, 1, 2 };
+    static const unsigned colour[]       = { 0, 1, 2 };
     static const unsigned colour_alpha[] = { 0, 1, 2, 3 };
-    static const unsigned red[] = { 0 };
-    static const unsigned red_green[] = { 0, 1 };
+    static const unsigned red[]          = { 0 };
+    static const unsigned red_green[]    = { 0, 1 };
 
     static const struct {
         edds_conversion conversion;
         const unsigned *channels;
-        unsigned channel_count;
-        double bound;
+        unsigned        channel_count;
+        double          bound;
     } cases[] = {
         { EDDS_CONVERSION_DXT, colour_alpha, 4, 2.5 },
         { EDDS_CONVERSION_RED_HQ, red, 1, 1.0 },
@@ -2358,9 +2366,9 @@ static int every_lossy_conversion_stays_inside_its_error_bound(void) {
 
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
         edds_profile profile;
-        edds_info info;
-        uint8_t *rgba = NULL;
-        size_t size = 0;
+        edds_info    info;
+        uint8_t     *rgba = NULL;
+        size_t       size = 0;
         edds_default_profile(&profile);
         profile.conversion = cases[at].conversion;
         CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
@@ -2380,10 +2388,10 @@ static int every_lossy_conversion_stays_inside_its_error_bound(void) {
  */
 static int the_colour_hq_conversion_beats_dxt_on_the_same_colours(void) {
     static const unsigned colour[] = { 0, 1, 2 };
-    uint8_t bgra[SMOOTH_PIXELS * 4];
-    uint8_t expected[SMOOTH_PIXELS * 4];
-    double dxt_error;
-    double hq_error;
+    uint8_t               bgra[SMOOTH_PIXELS * 4];
+    uint8_t               expected[SMOOTH_PIXELS * 4];
+    double                dxt_error;
+    double                hq_error;
     smooth_bgra(bgra);
     for (size_t pixel = 0; pixel < SMOOTH_PIXELS; ++pixel) {
         bgra[pixel * 4u + 3u] = 255u;
@@ -2392,16 +2400,16 @@ static int the_colour_hq_conversion_beats_dxt_on_the_same_colours(void) {
 
     {
         edds_profile profile;
-        edds_info info;
-        uint8_t *rgba = NULL;
-        size_t size = 0;
+        edds_info    info;
+        uint8_t     *rgba = NULL;
+        size_t       size = 0;
         edds_default_profile(&profile);
         profile.conversion = EDDS_CONVERSION_DXT;
         CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0, &info, &rgba, &size));
         CHECK(info.pixel_format == EDDS_PIXEL_DXT1);
         dxt_error = mean_channel_error(rgba, expected, SMOOTH_PIXELS, colour, 3);
         edds_free(rgba);
-        rgba = NULL;
+        rgba               = NULL;
         profile.conversion = EDDS_CONVERSION_COLOR_HQ;
         CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0, &info, &rgba, &size));
         CHECK(info.pixel_format == EDDS_PIXEL_BC7);
@@ -2421,11 +2429,11 @@ static int conversion_quality_is_refused_where_nothing_proves_an_effect(void) {
         EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
     };
     edds_profile profile;
-    edds_error error;
+    edds_error   error;
 
     for (size_t at = 0; at < sizeof uncompressed / sizeof uncompressed[0]; ++at) {
         edds_default_profile(&profile);
-        profile.conversion = uncompressed[at];
+        profile.conversion         = uncompressed[at];
         profile.conversion_quality = EDDS_QUALITY_SCALE / 2u;
         CHECK(refused_profile(&profile, &error) == EDDS_UNSUPPORTED_FORMAT);
         CHECK(strcmp(error.code, "unsupported-setting") == 0);
@@ -2435,7 +2443,7 @@ static int conversion_quality_is_refused_where_nothing_proves_an_effect(void) {
     }
     for (size_t at = 0; at < sizeof compressed / sizeof compressed[0]; ++at) {
         edds_default_profile(&profile);
-        profile.conversion = compressed[at];
+        profile.conversion         = compressed[at];
         profile.conversion_quality = 0;
         CHECK(edds_profile_check(&profile, &error) == EDDS_OK);
         profile.conversion_quality = EDDS_QUALITY_SCALE;
@@ -2461,23 +2469,23 @@ static int conversion_quality_changes_a_compressed_result(void) {
         EDDS_CONVERSION_RED_GREEN_HQ, EDDS_CONVERSION_COLOR_HQ
     };
     static const unsigned channels[] = { 0, 1, 2, 3 };
-    uint8_t bgra[GRADIENT_PIXELS * 4];
-    uint8_t expected[GRADIENT_PIXELS * 4];
+    uint8_t               bgra[GRADIENT_PIXELS * 4];
+    uint8_t               expected[GRADIENT_PIXELS * 4];
     gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
     gradient_rgba(bgra, expected, GRADIENT_PIXELS);
 
     for (size_t at = 0; at < sizeof compressed / sizeof compressed[0]; ++at) {
         edds_profile profile;
-        edds_info cheap;
-        edds_info dear;
-        uint8_t *cheap_rgba = NULL;
-        uint8_t *dear_rgba = NULL;
-        size_t cheap_size = 0;
-        size_t dear_size = 0;
-        double cheap_error;
-        double dear_error;
+        edds_info    cheap;
+        edds_info    dear;
+        uint8_t     *cheap_rgba = NULL;
+        uint8_t     *dear_rgba  = NULL;
+        size_t       cheap_size = 0;
+        size_t       dear_size  = 0;
+        double       cheap_error;
+        double       dear_error;
         edds_default_profile(&profile);
-        profile.conversion = compressed[at];
+        profile.conversion         = compressed[at];
         profile.conversion_quality = 0;
         CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
             &cheap, &cheap_rgba, &cheap_size));
@@ -2485,7 +2493,7 @@ static int conversion_quality_changes_a_compressed_result(void) {
         CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
             &dear, &dear_rgba, &dear_size));
         cheap_error = mean_channel_error(cheap_rgba, expected, GRADIENT_PIXELS, channels, 4);
-        dear_error = mean_channel_error(dear_rgba, expected, GRADIENT_PIXELS, channels, 4);
+        dear_error  = mean_channel_error(dear_rgba, expected, GRADIENT_PIXELS, channels, 4);
         CHECK(cheap_size == dear_size);
         CHECK(dear_error < cheap_error);
         edds_free(cheap_rgba);
@@ -2509,18 +2517,18 @@ static int container_compression_never_changes_a_decoded_pixel(void) {
 
     for (size_t at = 0; at < sizeof conversions / sizeof conversions[0]; ++at) {
         edds_profile profile;
-        edds_info copied;
-        edds_info compressed;
-        uint8_t *copied_rgba = NULL;
-        uint8_t *compressed_rgba = NULL;
-        size_t copied_size = 0;
-        size_t compressed_size = 0;
+        edds_info    copied;
+        edds_info    compressed;
+        uint8_t     *copied_rgba     = NULL;
+        uint8_t     *compressed_rgba = NULL;
+        size_t       copied_size     = 0;
+        size_t       compressed_size = 0;
         edds_default_profile(&profile);
-        profile.conversion = conversions[at];
+        profile.conversion      = conversions[at];
         profile.format_compress = EDDS_COMPRESS_COPY;
         CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
             &copied, &copied_rgba, &copied_size));
-        profile.format_compress = EDDS_COMPRESS_BEST;
+        profile.format_compress    = EDDS_COMPRESS_BEST;
         profile.compress_threshold = 100;
         CHECK(converted_source(bgra, SMOOTH_SIDE, SMOOTH_SIDE, 1, &profile, 0,
             &compressed, &compressed_rgba, &compressed_size));
@@ -2549,7 +2557,7 @@ static int block_padding_reaches_the_smallest_mip(void) {
 
     for (size_t at = 0; at < sizeof conversions / sizeof conversions[0]; ++at) {
         edds_profile profile;
-        edds_info info;
+        edds_info    info;
         edds_default_profile(&profile);
         profile.conversion = conversions[at];
         CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, 0,
@@ -2566,8 +2574,8 @@ static int block_padding_reaches_the_smallest_mip(void) {
                 (conversions[at] == EDDS_CONVERSION_RED_HQ ? 8u : 16u));
         }
         for (uint32_t level = 0; level < info.mip_count; ++level) {
-            uint8_t *rgba = NULL;
-            size_t size = 0;
+            uint8_t  *rgba = NULL;
+            size_t    size = 0;
             edds_info reread;
             CHECK(converted_source(bgra, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, &profile, level,
                 &reread, &rgba, &size));
@@ -2580,41 +2588,41 @@ static int block_padding_reaches_the_smallest_mip(void) {
 
 /** A block payload that is not whole blocks is refused at inspection, before any decode. */
 static int truncated_gpu_blocks_are_refused(void) {
-    uint8_t bgra[GRADIENT_PIXELS * 4];
-    uint8_t tga[18u + GRADIENT_PIXELS * 4u];
-    uint8_t *converted = NULL;
-    size_t converted_size = 0;
-    FILE *source;
-    FILE *output = temporary();
+    uint8_t      bgra[GRADIENT_PIXELS * 4];
+    uint8_t      tga[18u + GRADIENT_PIXELS * 4u];
+    uint8_t     *converted      = NULL;
+    size_t       converted_size = 0;
+    FILE        *source;
+    FILE        *output = temporary();
     edds_profile profile;
-    edds_error error;
-    edds_info info;
-    long size;
+    edds_error   error;
+    edds_info    info;
+    long         size;
 
     gradient_bgra(bgra, SOURCE_ALPHA_RAMP);
     source = stream_of(tga,
         fixture_tga_build(tga, sizeof tga, GRADIENT_WIDTH, GRADIENT_HEIGHT, 1, bgra));
     edds_default_profile(&profile);
-    profile.conversion = EDDS_CONVERSION_COLOR_HQ;
+    profile.conversion      = EDDS_CONVERSION_COLOR_HQ;
     profile.format_compress = EDDS_COMPRESS_COPY;
-    profile.generate_mips = 0;
+    profile.generate_mips   = 0;
     CHECK(source != NULL && output != NULL);
     CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
               never_cancelled, NULL, NULL, NULL, &error) == EDDS_OK);
     fclose(source);
     CHECK(fseek(output, 0, SEEK_END) == 0 && (size = ftell(output)) > 0);
     converted_size = (size_t)size;
-    converted = malloc(converted_size);
+    converted      = malloc(converted_size);
     CHECK(converted != NULL && fseek(output, 0, SEEK_SET) == 0);
     CHECK(fread(converted, 1, converted_size, output) == converted_size);
     fclose(output);
 
     /* One block short of what three by two blocks require, declared in the mip table itself. */
     {
-        FILE *damaged;
-        const size_t table_at = 148u;
+        FILE        *damaged;
+        const size_t table_at    = 148u;
         converted[table_at + 4u] = (uint8_t)(6u * 16u - 16u);
-        damaged = stream_of(converted, converted_size - 16u);
+        damaged                  = stream_of(converted, converted_size - 16u);
         CHECK(damaged != NULL);
         CHECK(edds_inspect(damaged, &info, never_cancelled, NULL, &error) == EDDS_INVALID_INPUT);
         CHECK(strcmp(error.code, "unexpected-mip-size") == 0);
@@ -2626,8 +2634,8 @@ static int truncated_gpu_blocks_are_refused(void) {
 
 /** Every conversion and every quality the CLI accepts survives a trip through the metadata text. */
 static int every_conversion_round_trips_through_metadata(void) {
-    static const uint32_t qualities[] = { 0, 26, 30, 500, 403, EDDS_QUALITY_SCALE };
-    size_t count = 0;
+    static const uint32_t             qualities[]  = { 0, 26, 30, 500, 403, EDDS_QUALITY_SCALE };
+    size_t                            count        = 0;
     const edds_conversion_capability *capabilities = edds_conversions(&count);
     CHECK(count == 8u);
 
@@ -2635,17 +2643,17 @@ static int every_conversion_round_trips_through_metadata(void) {
         for (size_t quality = 0; quality < sizeof qualities / sizeof qualities[0]; ++quality) {
             edds_metadata metadata;
             edds_metadata parsed;
-            edds_error error;
-            FILE *written;
+            edds_error    error;
+            FILE         *written;
             memset(&metadata, 0, sizeof metadata);
             memcpy(metadata.guid, "0123456789ABCDEF", 17);
             (void)snprintf(metadata.name, sizeof metadata.name, "Probe/pixel.edds");
             (void)snprintf(metadata.source_file, sizeof metadata.source_file, "pixel.tga");
             metadata.source_format = EDDS_SOURCE_TGA;
             edds_default_profile(&metadata.profile);
-            metadata.profile.conversion = capabilities[at].conversion;
+            metadata.profile.conversion         = capabilities[at].conversion;
             metadata.profile.conversion_quality = qualities[quality];
-            written = temporary();
+            written                             = temporary();
             CHECK(written != NULL);
             if (!capabilities[at].supported ||
                 (!capabilities[at].uses_quality && qualities[quality] != EDDS_QUALITY_SCALE)) {
@@ -2669,8 +2677,8 @@ static int every_conversion_round_trips_through_metadata(void) {
 static int metadata_quality_text_is_exact_or_refused(void) {
     static const struct {
         const char *text;
-        int accepted;
-        uint32_t thousandths;
+        int         accepted;
+        uint32_t    thousandths;
     } cases[] = {
         { "1", 1, 1000 }, { "0", 1, 0 }, { "0.5", 1, 500 }, { "0.403", 1, 403 },
         { "0.026", 1, 26 }, { "1.000", 1, 1000 }, { "0.0260", 0, 0 }, { "1.5", 0, 0 },
@@ -2678,10 +2686,10 @@ static int metadata_quality_text_is_exact_or_refused(void) {
     };
 
     for (size_t at = 0; at < sizeof cases / sizeof cases[0]; ++at) {
-        char source[256];
-        FILE *input;
+        char          source[256];
+        FILE         *input;
         edds_metadata metadata;
-        edds_error error;
+        edds_error    error;
         (void)snprintf(source, sizeof source,
             "MetaFileClass { Name \"{0123456789ABCDEF}a.edds\" Configurations { "
             "TGAResourceClass PC { SourceFile \"a.tga\" Conversion DXTCompression "
@@ -2703,7 +2711,7 @@ static int metadata_quality_text_is_exact_or_refused(void) {
 
 /** The conversion contract is one table, and everything that names a conversion reads it. */
 static int the_conversion_contract_is_one_table(void) {
-    size_t count = 0;
+    size_t                            count        = 0;
     const edds_conversion_capability *capabilities = edds_conversions(&count);
     CHECK(capabilities != NULL && count == 8u);
     for (size_t at = 0; at < count; ++at) {
@@ -2721,11 +2729,11 @@ static int the_conversion_contract_is_one_table(void) {
 /** A stored DXT1 block is pixels now, so an existing DayZ texture previews instead of refusing. */
 static int a_stored_dxt1_block_decodes_to_its_pixels(void) {
     test_bytes fixture = fixture_dxt1();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
+    FILE      *file    = stream_of(fixture.data, fixture.size);
+    edds_info  info;
     edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    uint8_t   *rgba = NULL;
+    size_t     size = 0;
 
     CHECK(fixture.data != NULL && file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
@@ -2749,11 +2757,11 @@ static int a_stored_dxt1_block_decodes_to_its_pixels(void) {
  */
 static int a_dxt5_colour_block_is_never_read_as_punch_through(void) {
     test_bytes fixture = fixture_dxt5_low_endpoints();
-    FILE *file = stream_of(fixture.data, fixture.size);
-    edds_info info;
+    FILE      *file    = stream_of(fixture.data, fixture.size);
+    edds_info  info;
     edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    uint8_t   *rgba = NULL;
+    size_t     size = 0;
 
     CHECK(fixture.data != NULL && file != NULL);
     CHECK(edds_inspect(file, &info, never_cancelled, NULL, &error) == EDDS_OK);
@@ -2771,28 +2779,30 @@ static int a_dxt5_colour_block_is_never_read_as_punch_through(void) {
 
 /** A generated atlas never exists as a file, so it enters the same writer straight from memory. */
 static int an_in_memory_atlas_encodes_losslessly_without_mips(void) {
-    enum { SIDE = 64 };
+    enum {
+        SIDE = 64
+    };
 
     static uint8_t pixels[SIDE * SIDE * 4];
-    FILE *output = temporary();
-    edds_profile profile;
-    edds_info info;
-    edds_error error;
-    uint8_t *rgba = NULL;
-    size_t size = 0;
+    FILE          *output = temporary();
+    edds_profile   profile;
+    edds_info      info;
+    edds_error     error;
+    uint8_t       *rgba = NULL;
+    size_t         size = 0;
 
     for (size_t at = 0; at < sizeof pixels; at += 4u) {
         /* Mostly zero like the gaps of an atlas, with a band of distinct values to keep. */
         const uint8_t value = at / 4u % SIDE < 8u ? (uint8_t)(at / 4u * 7u) : 0u;
-        pixels[at] = value;
-        pixels[at + 1u] = (uint8_t)(255u - value);
-        pixels[at + 2u] = (uint8_t)(value / 2u);
-        pixels[at + 3u] = 255u;
+        pixels[at]          = value;
+        pixels[at + 1u]     = (uint8_t)(255u - value);
+        pixels[at + 2u]     = (uint8_t)(value / 2u);
+        pixels[at + 3u]     = 255u;
     }
     edds_default_profile(&profile);
-    profile.format_compress = EDDS_COMPRESS_BEST;
+    profile.format_compress    = EDDS_COMPRESS_BEST;
     profile.compress_threshold = 100;
-    profile.generate_mips = 0;
+    profile.generate_mips      = 0;
 
     CHECK(output != NULL);
     CHECK(edds_encode_rgba(pixels, SIDE, SIDE, 1, output, &profile, never_cancelled, NULL, &error) == EDDS_OK);

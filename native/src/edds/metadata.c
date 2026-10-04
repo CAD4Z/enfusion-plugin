@@ -8,21 +8,21 @@
 #include <string.h>
 
 enum setting_bit {
-    SETTING_SOURCE = 1u << 0,
-    SETTING_TARGET = 1u << 1,
-    SETTING_FORMAT = 1u << 2,
-    SETTING_THRESHOLD = 1u << 3,
-    SETTING_REMOVE_MIPS = 1u << 4,
-    SETTING_CONVERSION = 1u << 5,
-    SETTING_QUALITY = 1u << 6,
-    SETTING_SWIZZLING = 1u << 7,
+    SETTING_SOURCE        = 1u << 0,
+    SETTING_TARGET        = 1u << 1,
+    SETTING_FORMAT        = 1u << 2,
+    SETTING_THRESHOLD     = 1u << 3,
+    SETTING_REMOVE_MIPS   = 1u << 4,
+    SETTING_CONVERSION    = 1u << 5,
+    SETTING_QUALITY       = 1u << 6,
+    SETTING_SWIZZLING     = 1u << 7,
     SETTING_CONTAINS_MIPS = 1u << 8,
     SETTING_GENERATE_MIPS = 1u << 9,
-    SETTING_NORMALIZE = 1u << 10,
-    SETTING_MIP_FUNCTION = 1u << 11,
-    SETTING_MIP_FILTER = 1u << 12,
-    SETTING_TILED = 1u << 13,
-    SETTING_CUBEMAP = 1u << 14
+    SETTING_NORMALIZE     = 1u << 10,
+    SETTING_MIP_FUNCTION  = 1u << 11,
+    SETTING_MIP_FILTER    = 1u << 12,
+    SETTING_TILED         = 1u << 13,
+    SETTING_CUBEMAP       = 1u << 14
 };
 
 static void fail(edds_error *error, const char *code, const char *format, ...) {
@@ -61,10 +61,10 @@ static int unsigned_value(const meta_token *value, uint32_t *result) {
  * a fourth decimal would have to be rounded on the way back out and is refused instead.
  */
 static int quality_value(const meta_token *value, uint32_t *result) {
-    const char *at = value->text;
-    uint32_t whole = 0;
-    uint32_t fraction = 0;
-    unsigned digits = 0;
+    const char *at       = value->text;
+    uint32_t    whole    = 0;
+    uint32_t    fraction = 0;
+    unsigned    digits   = 0;
     if (value->kind != META_TOKEN_WORD || *at < '0' || *at > '9') {
         return 0;
     }
@@ -102,7 +102,7 @@ static int quality_value(const meta_token *value, uint32_t *result) {
 
 /** The shortest text that reads back as exactly this quality: `1`, `0.5`, `0.403`. */
 static void quality_text(uint32_t value, char text[8]) {
-    const uint32_t whole = value / EDDS_QUALITY_SCALE;
+    const uint32_t whole    = value / EDDS_QUALITY_SCALE;
     const uint32_t fraction = value % EDDS_QUALITY_SCALE;
     if (fraction == 0) {
         (void)snprintf(text, 8, "%u", whole);
@@ -130,12 +130,12 @@ static edds_status unsupported(edds_error *error, const char *key, const char *v
 }
 
 static edds_status recipe_setting(
-    edds_metadata *metadata,
-    uint32_t *seen,
+    edds_metadata    *metadata,
+    uint32_t         *seen,
     const meta_token *key,
     const meta_token *value,
-    edds_error *error) {
-    uint32_t bit = 0;
+    edds_error       *error) {
+    uint32_t bit    = 0;
     uint32_t number = 0;
     if (strcmp(key->text, "SourceFile") == 0) {
         bit = SETTING_SOURCE;
@@ -298,16 +298,16 @@ malformed:
 }
 
 static edds_status parse_recipe(
-    meta_scanner *scan,
+    meta_scanner  *scan,
     edds_metadata *metadata,
-    edds_error *error) {
-    uint32_t seen = 0;
-    edds_status pending = EDDS_OK;
-    edds_error pending_error = { { 0 }, { 0 } };
+    edds_error    *error) {
+    uint32_t    seen          = 0;
+    edds_status pending       = EDDS_OK;
+    edds_error  pending_error = { { 0 }, { 0 } };
     for (;;) {
         const meta_token key = meta_next_token(scan);
-        meta_token value;
-        edds_status status;
+        meta_token       value;
+        edds_status      status;
         if (key.kind == META_TOKEN_CLOSE) {
             break;
         }
@@ -342,7 +342,7 @@ static edds_status parse_recipe(
      * a quality against the conversion it would reach — is only decidable once the recipe is whole.
      */
     {
-        edds_error combination;
+        edds_error  combination;
         edds_status status = edds_profile_check(&metadata->profile, &combination);
         if (status == EDDS_OK && metadata->source_format != EDDS_SOURCE_DDS &&
             metadata->profile.contains_mips) {
@@ -351,7 +351,7 @@ static edds_status parse_recipe(
             status = EDDS_UNSUPPORTED_FORMAT;
         }
         if (status != EDDS_OK && pending == EDDS_OK) {
-            pending = status;
+            pending       = status;
             pending_error = combination;
         }
     }
@@ -362,16 +362,16 @@ static edds_status parse_recipe(
 }
 
 static edds_status parse_configurations(
-    meta_scanner *scan,
+    meta_scanner  *scan,
     edds_metadata *metadata,
-    int *found_pc,
-    edds_error *error) {
-    edds_status pending = EDDS_OK;
-    edds_error pending_error = { { 0 }, { 0 } };
+    int           *found_pc,
+    edds_error    *error) {
+    edds_status pending       = EDDS_OK;
+    edds_error  pending_error = { { 0 }, { 0 } };
     for (;;) {
-        meta_token resource = meta_next_token(scan);
-        meta_token platform;
-        meta_token next;
+        meta_token                    resource = meta_next_token(scan);
+        meta_token                    platform;
+        meta_token                    next;
         const edds_source_capability *recognized;
         if (resource.kind == META_TOKEN_CLOSE) {
             if (pending != EDDS_OK) {
@@ -404,9 +404,9 @@ static edds_status parse_configurations(
                     "Metadata contains more than one source-image PC recipe.");
                 return EDDS_INVALID_INPUT;
             }
-            *found_pc = 1;
+            *found_pc               = 1;
             metadata->source_format = recognized->format;
-            status = parse_recipe(scan, metadata, error);
+            status                  = parse_recipe(scan, metadata, error);
             if (status == EDDS_UNSUPPORTED_FORMAT) {
                 if (pending == EDDS_OK) {
                     pending_error = *error;
@@ -426,7 +426,7 @@ malformed:
 }
 
 static int extension_is(const char *path, const char *extension) {
-    const size_t path_size = strlen(path);
+    const size_t path_size      = strlen(path);
     const size_t extension_size = strlen(extension);
     if (path_size < extension_size) {
         return 0;
@@ -441,16 +441,16 @@ static int extension_is(const char *path, const char *extension) {
 }
 
 edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error) {
-    char *source = NULL;
-    size_t size = 0;
+    char        *source = NULL;
+    size_t       size   = 0;
     meta_scanner scan;
-    meta_token value;
-    int found_name = 0;
-    int found_configurations = 0;
-    int found_pc = 0;
-    edds_status status = EDDS_INVALID_INPUT;
-    edds_status pending = EDDS_OK;
-    edds_error pending_error = { { 0 }, { 0 } };
+    meta_token   value;
+    int          found_name           = 0;
+    int          found_configurations = 0;
+    int          found_pc             = 0;
+    edds_status  status               = EDDS_INVALID_INPUT;
+    edds_status  pending              = EDDS_OK;
+    edds_error   pending_error        = { { 0 }, { 0 } };
     if (input == NULL || metadata == NULL) {
         fail(error, "invalid-api-argument", "The metadata input and output are required.");
         return EDDS_INTERNAL_FAILURE;
@@ -461,9 +461,9 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
         return EDDS_INVALID_INPUT;
     }
     scan.source = source;
-    scan.size = size;
-    scan.at = 0;
-    value = meta_next_token(&scan);
+    scan.size   = size;
+    scan.at     = 0;
+    value       = meta_next_token(&scan);
     if (value.kind != META_TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 ||
         meta_next_token(&scan).kind != META_TOKEN_OPEN) {
         fail(error, "malformed-metadata", "Metadata must contain one MetaFileClass block.");
@@ -496,7 +496,7 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
             found_configurations = 1;
             configuration_status = parse_configurations(&scan, metadata, &found_pc, error);
             if (configuration_status == EDDS_UNSUPPORTED_FORMAT) {
-                pending = configuration_status;
+                pending       = configuration_status;
                 pending_error = *error;
             } else if (configuration_status != EDDS_OK) {
                 status = configuration_status;
@@ -532,29 +532,29 @@ done:
 
 static const char *compress_name(edds_format_compress compress) {
     switch (compress) {
-        case EDDS_COMPRESS_COPY: return "Copy";
+        case EDDS_COMPRESS_COPY:    return "Copy";
         case EDDS_COMPRESS_FASTEST: return "Fastest";
-        case EDDS_COMPRESS_MEDIUM: return "Medium";
-        case EDDS_COMPRESS_BEST: return "Best";
-        default: return NULL;
+        case EDDS_COMPRESS_MEDIUM:  return "Medium";
+        case EDDS_COMPRESS_BEST:    return "Best";
+        default:                    return NULL;
     }
 }
 
 static const char *mipmap_function_name(edds_mipmap_function function) {
     switch (function) {
-        case EDDS_MIPMAP_FILTER: return "Filter";
-        case EDDS_MIPMAP_NORMALIZE: return "Normalize";
+        case EDDS_MIPMAP_FILTER:      return "Filter";
+        case EDDS_MIPMAP_NORMALIZE:   return "Normalize";
         case EDDS_MIPMAP_COLOR_NOISE: return "ColorNoise";
-        default: return NULL;
+        default:                      return NULL;
     }
 }
 
 static const char *mipmap_filter_name(edds_mipmap_filter filter) {
     switch (filter) {
-        case EDDS_FILTER_BOX: return "Box";
-        case EDDS_FILTER_KAISER: return "Kaiser";
+        case EDDS_FILTER_BOX:      return "Box";
+        case EDDS_FILTER_KAISER:   return "Kaiser";
         case EDDS_FILTER_TRIANGLE: return "Triangle";
-        default: return NULL;
+        default:                   return NULL;
     }
 }
 
@@ -577,13 +577,13 @@ static int safe_string(const char *value) {
 }
 
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error) {
-    const char *resource;
-    const char *compress;
-    const char *mipmap_function;
-    const char *mipmap_filter;
+    const char                       *resource;
+    const char                       *compress;
+    const char                       *mipmap_function;
+    const char                       *mipmap_filter;
     const edds_conversion_capability *conversion;
-    char quality[8];
-    int written;
+    char                              quality[8];
+    int                               written;
     if (output == NULL || metadata == NULL) {
         fail(error, "invalid-api-argument", "The metadata value and output are required.");
         return EDDS_INTERNAL_FAILURE;
@@ -593,10 +593,10 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
             edds_source_capability_of_format(metadata->source_format);
         resource = capability == NULL ? NULL : capability->resource_class;
     }
-    compress = compress_name(metadata->profile.format_compress);
+    compress        = compress_name(metadata->profile.format_compress);
     mipmap_function = mipmap_function_name(metadata->profile.mipmap_function);
-    mipmap_filter = mipmap_filter_name(metadata->profile.mipmap_filter);
-    conversion = edds_conversion_capability_of(metadata->profile.conversion);
+    mipmap_filter   = mipmap_filter_name(metadata->profile.mipmap_filter);
+    conversion      = edds_conversion_capability_of(metadata->profile.conversion);
     if (resource == NULL || compress == NULL || conversion == NULL || mipmap_function == NULL ||
         mipmap_filter == NULL || strlen(metadata->guid) != 16u ||
         !safe_string(metadata->name) || !safe_string(metadata->source_file)) {

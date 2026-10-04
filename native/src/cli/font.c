@@ -23,18 +23,20 @@
  * `.fnt.meta`, the `.fnt` and its `.edds` atlas — and they are replaced together or not at all.
  */
 
-enum { FONT_PROTOCOL_VERSION = 1 };
+enum {
+    FONT_PROTOCOL_VERSION = 1
+};
 
 typedef struct font_options {
-    int machine;
-    int protocol_seen;
-    uint32_t protocol;
+    int             machine;
+    int             protocol_seen;
+    uint32_t        protocol;
     const cli_char *meta;
     const cli_char *input;
     const cli_char *output;
     const cli_char *resource_name;
-    int size_seen;
-    uint32_t size;
+    int             size_seen;
+    uint32_t        size;
     const cli_char *characters;
     const cli_char *guid;
     const cli_char *cancel_file;
@@ -114,7 +116,7 @@ static int parse_options(int argc, cli_char **argv, font_options *options) {
 /** A copy of `path` without its last `cut` characters, with `suffix` appended. */
 static cli_char *replace_tail(const cli_char *path, size_t cut, const char *suffix) {
     const size_t keep = cli_strlen(path) - cut, extra = strlen(suffix);
-    cli_char *result = malloc((keep + extra + 1u) * sizeof *result);
+    cli_char    *result = malloc((keep + extra + 1u) * sizeof *result);
     if (result == NULL) {
         return NULL;
     }
@@ -147,7 +149,7 @@ static cli_char *folder_of(const cli_char *path) {
 /** The file name without its last extension, as UTF-8: what the FNT header calls the font. */
 static char *stem_of(const cli_char *path) {
     size_t start = cli_strlen(path), end;
-    char *name;
+    char  *name;
     while (start > 0 && !is_separator(path[start - 1u])) {
         --start;
     }
@@ -167,7 +169,7 @@ static char *stem_of(const cli_char *path) {
         }
         memcpy(copy, path + start, (end - start) * sizeof *copy);
         copy[end - start] = 0;
-        name = utf8_of(copy);
+        name              = utf8_of(copy);
         free(copy);
     }
     return name;
@@ -175,7 +177,7 @@ static char *stem_of(const cli_char *path) {
 
 static int read_file(const cli_char *path, uint64_t limit, uint8_t **data, size_t *size) {
     FILE *file = open_input(path);
-    long length;
+    long  length;
     *data = NULL;
     *size = 0;
     if (file == NULL) {
@@ -208,13 +210,13 @@ static int absolute_recipe_path(const char *path) {
 static cli_char *joined(const cli_char *folder, const char *relative) {
     cli_char *tail = cli_of_utf8(relative);
     cli_char *result;
-    size_t folder_size, tail_size;
+    size_t    folder_size, tail_size;
     if (tail == NULL) {
         return NULL;
     }
     folder_size = cli_strlen(folder);
-    tail_size = cli_strlen(tail);
-    result = malloc((folder_size + tail_size + 2u) * sizeof *result);
+    tail_size   = cli_strlen(tail);
+    result      = malloc((folder_size + tail_size + 2u) * sizeof *result);
     if (result != NULL) {
         memcpy(result, folder, folder_size * sizeof *result);
         result[folder_size] = (cli_char)'/';
@@ -227,7 +229,7 @@ static cli_char *joined(const cli_char *folder, const char *relative) {
 static cli_char *full_path(const cli_char *path) {
 #ifdef _WIN32
     const DWORD needed = GetFullPathNameW(path, 0, NULL, NULL);
-    cli_char *result;
+    cli_char   *result;
     if (needed == 0) {
         return NULL;
     }
@@ -241,10 +243,10 @@ static cli_char *full_path(const cli_char *path) {
     }
     return result;
 #else
-    char *folder = folder_of(path);
-    const char *name = path + strlen(path);
-    char resolved[PATH_MAX];
-    char *result;
+    char       *folder = folder_of(path);
+    const char *name   = path + strlen(path);
+    char        resolved[PATH_MAX];
+    char       *result;
     while (name > path && name[-1] != '/') {
         --name;
     }
@@ -263,15 +265,15 @@ static cli_char *full_path(const cli_char *path) {
 
 typedef struct segment {
     const cli_char *start;
-    size_t size;
+    size_t          size;
 } segment;
 
 /** The named folders of an absolute path, `.` dropped and `..` walked back; NULL on failure. */
 static segment *segments_of(const cli_char *path, size_t *count) {
     const size_t length = cli_strlen(path);
-    segment *list = malloc((length / 2u + 2u) * sizeof *list);
-    size_t at = 0;
-    *count = 0;
+    segment     *list   = malloc((length / 2u + 2u) * sizeof *list);
+    size_t       at     = 0;
+    *count              = 0;
     if (list == NULL) {
         return NULL;
     }
@@ -288,7 +290,7 @@ static segment *segments_of(const cli_char *path, size_t *count) {
             }
         } else if (at > start) {
             list[*count].start = path + start;
-            list[*count].size = at - start;
+            list[*count].size  = at - start;
             ++*count;
         }
         while (at < length && is_separator(path[at])) {
@@ -322,15 +324,15 @@ static int same_segment(segment a, segment b) {
  */
 static char *relative_to(const cli_char *folder, const cli_char *target) {
     cli_char *from = full_path(folder), *to = full_path(target);
-    segment *from_segments = NULL, *to_segments = NULL;
-    size_t from_count = 0, to_count = 0, common = 0, size = 1;
+    segment  *from_segments = NULL, *to_segments = NULL;
+    size_t    from_count = 0, to_count = 0, common = 0, size = 1;
     cli_char *relative = NULL;
-    char *result = NULL;
+    char     *result   = NULL;
     if (from == NULL || to == NULL) {
         goto done;
     }
     from_segments = segments_of(from, &from_count);
-    to_segments = segments_of(to, &to_count);
+    to_segments   = segments_of(to, &to_count);
     if (from_segments == NULL || to_segments == NULL || to_count == 0) {
         goto done;
     }
@@ -394,7 +396,7 @@ static int random_bytes(uint8_t *bytes, size_t count) {
     return 1;
 #else
     FILE *source = fopen("/dev/urandom", "rb");
-    int ok;
+    int   ok;
     if (source == NULL) {
         return 0;
     }
@@ -417,9 +419,9 @@ static int same_guid(const char *a, const char *b) {
 static int guid_taken(const cli_char *folder, const char *guid) {
     int taken = 0;
 #ifdef _WIN32
-    cli_char *pattern = replace_tail(folder, 0, "\\*.meta");
+    cli_char        *pattern = replace_tail(folder, 0, "\\*.meta");
     WIN32_FIND_DATAW found;
-    HANDLE search;
+    HANDLE           search;
     if (pattern == NULL) {
         return 1;
     }
@@ -440,8 +442,8 @@ static int guid_taken(const cli_char *folder, const char *guid) {
             }
         }
         if (full != NULL) {
-            FILE *meta = open_input(full);
-            char existing[EDDS_METADATA_GUID_BYTES];
+            FILE      *meta = open_input(full);
+            char       existing[EDDS_METADATA_GUID_BYTES];
             edds_error ignored;
             if (meta != NULL) {
                 if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK && same_guid(existing, guid)) {
@@ -455,14 +457,14 @@ static int guid_taken(const cli_char *folder, const char *guid) {
     } while (!taken && FindNextFileW(search, &found));
     FindClose(search);
 #else
-    DIR *directory = opendir(folder);
+    DIR           *directory = opendir(folder);
     struct dirent *entry;
     if (directory == NULL) {
         return 0;
     }
     while (!taken && (entry = readdir(directory)) != NULL) {
         const size_t length = strlen(entry->d_name);
-        char *full;
+        char        *full;
         if (length < 5u || strcmp(entry->d_name + length - 5u, ".meta") != 0) {
             continue;
         }
@@ -472,8 +474,8 @@ static int guid_taken(const cli_char *folder, const char *guid) {
         }
         (void)snprintf(full, strlen(folder) + length + 2u, "%s/%s", folder, entry->d_name);
         {
-            FILE *meta = fopen(full, "rb");
-            char existing[EDDS_METADATA_GUID_BYTES];
+            FILE      *meta = fopen(full, "rb");
+            char       existing[EDDS_METADATA_GUID_BYTES];
             edds_error ignored;
             if (meta != NULL) {
                 if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK && same_guid(existing, guid)) {
@@ -497,7 +499,7 @@ static edds_status new_guid(const cli_char *folder, char guid[EDDS_METADATA_GUID
             break;
         }
         for (size_t at = 0; at < 8u; ++at) {
-            guid[2u * at] = digits[bytes[at] >> 4];
+            guid[2u * at]      = digits[bytes[at] >> 4];
             guid[2u * at + 1u] = digits[bytes[at] & 15u];
         }
         guid[16] = '\0';
@@ -531,7 +533,7 @@ static void free_paths(font_paths *paths) {
 
 static edds_status recipe_from_meta(const font_options *options, font_paths *paths, font_recipe *recipe,
     edds_error *error) {
-    FILE *input = open_input(options->meta);
+    FILE       *input = open_input(options->meta);
     edds_status status;
     if (input == NULL) {
         return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed", "The font recipe could not be opened.");
@@ -546,7 +548,7 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
             "SourceFile and Characters are relative to the folder of the recipe.");
     }
     if (options->resource_name != NULL) {
-        char *name = utf8_of(options->resource_name);
+        char     *name = utf8_of(options->resource_name);
         const int fits = name != NULL && strlen(name) < sizeof recipe->name;
         if (fits) {
             memcpy(recipe->name, name, strlen(name) + 1u);
@@ -556,9 +558,9 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
             return refuse(error, EDDS_INVALID_INPUT, "invalid-resource-name", "The resource name does not fit a recipe.");
         }
     }
-    paths->meta = replace_tail(options->meta, 0, "");
-    paths->fnt = replace_tail(options->meta, 5u, "");
-    paths->atlas = replace_tail(options->meta, 9u, ".edds");
+    paths->meta   = replace_tail(options->meta, 0, "");
+    paths->fnt    = replace_tail(options->meta, 5u, "");
+    paths->atlas  = replace_tail(options->meta, 9u, ".edds");
     paths->folder = folder_of(options->meta);
     if (paths->meta == NULL || paths->fnt == NULL || paths->atlas == NULL || paths->folder == NULL) {
         return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed", "The font paths could not be prepared.");
@@ -578,11 +580,11 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
     char *text;
     memset(recipe, 0, sizeof *recipe);
     recipe->font_size = options->size_seen ? options->size : FONT_DEFAULT_SIZE;
-    paths->fnt = replace_tail(options->output, 0, "");
-    paths->meta = replace_tail(options->output, 0, ".meta");
-    paths->atlas = replace_tail(options->output, 4u, ".edds");
-    paths->folder = folder_of(options->output);
-    paths->source = replace_tail(options->input, 0, "");
+    paths->fnt        = replace_tail(options->output, 0, "");
+    paths->meta       = replace_tail(options->output, 0, ".meta");
+    paths->atlas      = replace_tail(options->output, 4u, ".edds");
+    paths->folder     = folder_of(options->output);
+    paths->source     = replace_tail(options->input, 0, "");
     if (options->characters != NULL) {
         paths->characters = replace_tail(options->characters, 0, "");
     }
@@ -617,7 +619,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
     }
     /* A font already here keeps its identity; a new one gets a new identity. */
     if (path_exists(paths->meta)) {
-        FILE *existing = open_input(paths->meta);
+        FILE       *existing = open_input(paths->meta);
         edds_status status;
         if (existing == NULL) {
             return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed", "The existing font recipe could not be opened.");
@@ -629,7 +631,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
         }
     }
     if (options->guid != NULL) {
-        char *guid = utf8_of(options->guid);
+        char     *guid  = utf8_of(options->guid);
         const int valid = guid != NULL && meta_valid_guid(guid);
         if (valid && recipe->guid[0] != '\0' && strcmp(recipe->guid, guid) != 0) {
             free(guid);
@@ -654,10 +656,10 @@ static edds_status write_atlas(FILE *output, const font_output *font, edds_error
     edds_profile profile;
     edds_default_profile(&profile);
     /* Lossless, no mips: the shader reads level 0 and nothing else, and a lossy block would move edges. */
-    profile.conversion = EDDS_CONVERSION_NONE;
-    profile.format_compress = EDDS_COMPRESS_BEST;
+    profile.conversion         = EDDS_CONVERSION_NONE;
+    profile.format_compress    = EDDS_COMPRESS_BEST;
     profile.compress_threshold = 100;
-    profile.generate_mips = 0;
+    profile.generate_mips      = 0;
     return edds_encode_rgba(font->atlas, font->atlas_width, font->atlas_height, 1, output, &profile,
         was_cancelled, NULL, error);
 }
@@ -668,11 +670,11 @@ static edds_status publish(const font_paths *paths, const font_recipe *recipe, c
     cli_artifact artifacts[3] = {
         { paths->atlas, NULL, NULL, 0, 0 }, { paths->fnt, NULL, NULL, 0, 0 }, { paths->meta, NULL, NULL, 0, 0 }
     };
-    static const char *const write_stages[3] = { "font-atlas-write", "font-fnt-write", "font-meta-write" };
+    static const char *const write_stages[3]  = { "font-atlas-write", "font-fnt-write", "font-meta-write" };
     static const char *const backup_stages[3] = { "font-atlas-backup", "font-fnt-backup", "font-meta-backup" };
     static const char *const commit_stages[3] = { "font-atlas-commit", "font-fnt-commit", "font-meta-commit" };
-    edds_status status = EDDS_OK;
-    size_t backed = 0, committed = 0;
+    edds_status              status           = EDDS_OK;
+    size_t                   backed = 0, committed = 0;
     for (size_t at = 0; at < 3u && status == EDDS_OK; ++at) {
         FILE *file = create_temporary(&artifacts[at], "new");
         if (file == NULL) {
@@ -744,17 +746,17 @@ static void write_codes(const char *name, const uint32_t *codes, size_t count) {
 }
 
 static int generate_command(const font_options *options) {
-    font_paths paths;
-    font_recipe recipe;
+    font_paths      paths;
+    font_recipe     recipe;
     font_characters characters = { NULL, 0 };
-    font_output font;
-    font_request request;
-    edds_error error;
-    edds_status status;
-    uint8_t *source = NULL, *text = NULL;
-    size_t source_size = 0, text_size = 0;
-    char *name = NULL;
-    int read;
+    font_output     font;
+    font_request    request;
+    edds_error      error;
+    edds_status     status;
+    uint8_t        *source = NULL, *text = NULL;
+    size_t          source_size = 0, text_size = 0;
+    char           *name = NULL;
+    int             read;
     memset(&paths, 0, sizeof paths);
     memset(&font, 0, sizeof font);
     if (options->meta != NULL) {
@@ -794,12 +796,12 @@ static int generate_command(const font_options *options) {
         status = refuse(&error, EDDS_INVALID_INPUT, "invalid-font-name", "The font file name is not valid UTF-8.");
         goto done;
     }
-    request.data = source;
-    request.size = source_size;
+    request.data       = source;
+    request.size       = source_size;
     request.characters = paths.characters != NULL ? &characters : NULL;
-    request.font_size = recipe.font_size;
-    request.name = name;
-    status = font_generate(&request, &font, was_cancelled, NULL, NULL, NULL, &error);
+    request.font_size  = recipe.font_size;
+    request.name       = name;
+    status             = font_generate(&request, &font, was_cancelled, NULL, NULL, NULL, &error);
     if (status != EDDS_OK) {
         goto done;
     }
@@ -836,9 +838,9 @@ done:
 /* --- Inspect ---------------------------------------------------------------------------------- */
 
 static int inspect_fnt(const cli_char *path) {
-    FILE *input = open_input(path);
-    font_info info;
-    edds_error error;
+    FILE       *input = open_input(path);
+    font_info   info;
+    edds_error  error;
     edds_status status;
     if (input == NULL) {
         return report_failure(refuse(&error, EDDS_INVALID_INPUT, "input-open-failed", "The FNT file could not be opened."), &error);
@@ -864,12 +866,12 @@ static int inspect_fnt(const cli_char *path) {
 }
 
 static int inspect_source(const cli_char *path) {
-    uint8_t *data = NULL;
-    size_t size = 0;
+    uint8_t         *data = NULL;
+    size_t           size = 0;
     font_source_info info;
-    edds_error error;
-    edds_status status;
-    const int read = read_file(path, FONT_MAX_FILE_BYTES, &data, &size);
+    edds_error       error;
+    edds_status      status;
+    const int        read = read_file(path, FONT_MAX_FILE_BYTES, &data, &size);
     if (read <= 0) {
         return report_failure(refuse(&error, EDDS_INVALID_INPUT, read < 0 ? "font-file-limit" : "input-open-failed",
                                   "The source font could not be read within the font size limit."),
@@ -890,7 +892,7 @@ static int inspect_source(const cli_char *path) {
 
 int font_command(int argc, cli_char **argv) {
     font_options options;
-    int generate;
+    int          generate;
     cli_catch_interrupts();
     if (argc < 2 || (!equals(argv[1], "generate") && !equals(argv[1], "inspect"))) {
         return invalid("invalid-command", "Expected generate or inspect.");

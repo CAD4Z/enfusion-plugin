@@ -37,11 +37,11 @@ typedef struct edds_pool edds_pool;
 typedef void (*edds_pool_task_fn)(void *context, uint32_t index, edds_pool *pool);
 
 edds_status edds_pool_run(
-    uint32_t count,
-    uint64_t memory_budget,
+    uint32_t          count,
+    uint64_t          memory_budget,
     edds_pool_task_fn task,
-    void *context,
-    edds_error *error);
+    void             *context,
+    edds_error       *error);
 
 /**
  * Holds `bytes` of the shared budget until the matching release. A charge larger than the whole

@@ -15,18 +15,18 @@
  * msdfgen by Viktor Chlumský, MIT licence; the notice is in THIRD-PARTY.md.
  */
 
-#define RED 1u
-#define GREEN 2u
-#define BLUE 4u
-#define YELLOW (RED | GREEN)
+#define RED     1u
+#define GREEN   2u
+#define BLUE    4u
+#define YELLOW  (RED | GREEN)
 #define MAGENTA (RED | BLUE)
-#define CYAN (GREEN | BLUE)
-#define WHITE (RED | GREEN | BLUE)
+#define CYAN    (GREEN | BLUE)
+#define WHITE   (RED | GREEN | BLUE)
 
 /* Texels of field computed around the glyph box: the engine's 5 px quad plus one for filtering. */
-#define MARGIN 6.0
+#define MARGIN                 6.0
 /* A sign the median disagrees with closer than this to the outline is antialiasing, not a fault. */
-#define TOLERANCE 0.25
+#define TOLERANCE              0.25
 #define MOST_CORRECTION_PASSES 16
 
 typedef struct signed_distance {
@@ -52,15 +52,15 @@ static void switch_color(unsigned *color, unsigned *seed, unsigned banned) {
         return;
     }
     if (*color == 0 || *color == WHITE) {
-        static const unsigned start[3] = { CYAN, MAGENTA, YELLOW };
-        *color = start[*seed % 3u];
-        *seed /= 3u;
+        static const unsigned start[3]  = { CYAN, MAGENTA, YELLOW };
+        *color                          = start[*seed % 3u];
+        *seed                          /= 3u;
         return;
     }
     {
-        const unsigned shifted = *color << (1u + (*seed & 1u));
-        *color = (shifted | shifted >> 3) & WHITE;
-        *seed >>= 1;
+        const unsigned shifted   = *color << (1u + (*seed & 1u));
+        *color                   = (shifted | shifted >> 3) & WHITE;
+        *seed                  >>= 1;
     }
 }
 
@@ -80,10 +80,10 @@ static int is_corner(font_vec a, font_vec b, double threshold) {
  */
 static edds_status color_shape(const font_shape *loops, font_shape *colored, edds_error *error) {
     const double threshold = sin(3.0);
-    unsigned color = WHITE;
-    unsigned seed = 0;
-    size_t start = 0;
-    size_t *corners = malloc((loops->count == 0 ? 1u : loops->count) * sizeof *corners);
+    unsigned     color     = WHITE;
+    unsigned     seed      = 0;
+    size_t       start     = 0;
+    size_t      *corners   = malloc((loops->count == 0 ? 1u : loops->count) * sizeof *corners);
     memset(colored, 0, sizeof *colored);
     if (corners == NULL) {
         goto failed;
@@ -94,13 +94,13 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
     }
     colored->capacity = loops->count * 3u + 3u;
     for (size_t loop = 0; loop < loops->loop_count; ++loop) {
-        const size_t end = loops->loop_ends[loop];
-        const size_t count = end - start;
-        const font_edge *edges = loops->edges + start;
-        size_t corner_count = 0;
+        const size_t     end          = loops->loop_ends[loop];
+        const size_t     count        = end - start;
+        const font_edge *edges        = loops->edges + start;
+        size_t           corner_count = 0;
         for (size_t at = 0; at < count; ++at) {
             const font_vec before = normalized(edge_direction(&edges[(at + count - 1u) % count], 1.0));
-            const font_vec after = normalized(edge_direction(&edges[at], 0.0));
+            const font_vec after  = normalized(edge_direction(&edges[at], 0.0));
             if (is_corner(before, after, threshold)) {
                 corners[corner_count++] = at;
             }
@@ -109,7 +109,7 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
             switch_color(&color, &seed, 0);
             for (size_t at = 0; at < count; ++at) {
                 font_edge edge = edges[at];
-                edge.color = color;
+                edge.color     = color;
                 if (!font_shape_push(colored, &edge)) {
                     goto failed;
                 }
@@ -124,7 +124,7 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
             if (count >= 3u) {
                 for (size_t at = 0; at < count; ++at) {
                     font_edge edge = edges[(corners[0] + at) % count];
-                    edge.color = colors[1 + trichotomy(at, count)];
+                    edge.color     = colors[1 + trichotomy(at, count)];
                     if (!font_shape_push(colored, &edge)) {
                         goto failed;
                     }
@@ -135,20 +135,20 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                 for (size_t at = 0; at < parts; ++at) {
                     font_edge edge = edge_part(&edges[(corners[0] + at / 3u) % count],
                         (double)(at % 3u) / 3.0, (double)(at % 3u + 1u) / 3.0);
-                    edge.color = colors[1 + trichotomy(at, parts)];
+                    edge.color     = colors[1 + trichotomy(at, parts)];
                     if (!font_shape_push(colored, &edge)) {
                         goto failed;
                     }
                 }
             }
         } else {
-            size_t spline = 0;
+            size_t   spline = 0;
             unsigned initial;
             switch_color(&color, &seed, 0);
             initial = color;
             for (size_t at = 0; at < count; ++at) {
                 const size_t index = (corners[0] + at) % count;
-                font_edge edge = edges[index];
+                font_edge    edge  = edges[index];
                 if (spline + 1u < corner_count && corners[spline + 1u] == index) {
                     ++spline;
                     switch_color(&color, &seed, spline == corner_count - 1u ? initial : 0u);
@@ -179,12 +179,12 @@ static int closer(signed_distance a, signed_distance b) {
 
 /** Real roots of x³ + a·x² + b·x + c: trigonometric for three, Cardano for one. */
 static int solve_normed_cubic(double roots[3], double a, double b, double c) {
-    const double pi = 3.14159265358979323846;
-    const double a2 = a * a;
-    double q = (a2 - 3.0 * b) / 9.0;
-    const double r = (a * (2.0 * a2 - 9.0 * b) + 27.0 * c) / 54.0;
-    const double r2 = r * r;
-    const double q3 = q * q * q;
+    const double pi    = 3.14159265358979323846;
+    const double a2    = a * a;
+    double       q     = (a2 - 3.0 * b) / 9.0;
+    const double r     = (a * (2.0 * a2 - 9.0 * b) + 27.0 * c) / 54.0;
+    const double r2    = r * r;
+    const double q3    = q * q * q;
     const double shift = a / 3.0;
     if (r2 < q3) {
         double t = r / sqrt(q3);
@@ -194,8 +194,8 @@ static int solve_normed_cubic(double roots[3], double a, double b, double c) {
         if (t > 1) {
             t = 1;
         }
-        t = acos(t);
-        q = -2.0 * sqrt(q);
+        t        = acos(t);
+        q        = -2.0 * sqrt(q);
         roots[0] = q * cos(t / 3.0) - shift;
         roots[1] = q * cos((t + 2.0 * pi) / 3.0) - shift;
         roots[2] = q * cos((t - 2.0 * pi) / 3.0) - shift;
@@ -204,7 +204,7 @@ static int solve_normed_cubic(double roots[3], double a, double b, double c) {
     {
         const double u = (r < 0 ? 1.0 : -1.0) * pow(fabs(r) + sqrt(r2 - q3), 1.0 / 3.0);
         const double v = u == 0 ? 0 : q / u;
-        roots[0] = (u + v) - shift;
+        roots[0]       = (u + v) - shift;
         if (u == v || fabs(u - v) < 1e-12 * fabs(u + v)) {
             roots[1] = -0.5 * (u + v) - shift;
             return 2;
@@ -230,53 +230,53 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
     if (!edge->quad) {
         const font_vec aq = vec_minus(origin, edge->p[0]);
         const font_vec ab = vec_minus(edge->p[2], edge->p[0]);
-        font_vec nearer;
-        double endpoint;
-        *param = vec_dot(aq, ab) / vec_dot(ab, ab);
-        nearer = vec_minus(*param > 0.5 ? edge->p[2] : edge->p[0], origin);
+        font_vec       nearer;
+        double         endpoint;
+        *param   = vec_dot(aq, ab) / vec_dot(ab, ab);
+        nearer   = vec_minus(*param > 0.5 ? edge->p[2] : edge->p[0], origin);
         endpoint = vec_length(nearer);
         if (*param > 0 && *param < 1) {
             const double orthogonal = vec_dot(normalized(vec_of(ab.y, -ab.x)), aq);
             if (fabs(orthogonal) < endpoint) {
                 result.distance = orthogonal;
-                result.dot = 0;
+                result.dot      = 0;
                 return result;
             }
         }
         result.distance = nonzero_sign(vec_cross(aq, ab)) * endpoint;
-        result.dot = fabs(vec_dot(normalized(ab), normalized(nearer)));
+        result.dot      = fabs(vec_dot(normalized(ab), normalized(nearer)));
         return result;
     }
     {
         const font_vec qa = vec_minus(edge->p[0], origin);
         const font_vec ab = vec_minus(edge->p[1], edge->p[0]);
         const font_vec br = vec_minus(vec_minus(edge->p[2], edge->p[1]), ab);
-        const double a = vec_dot(br, br);
-        const double b = 3.0 * vec_dot(ab, br);
-        const double c = 2.0 * vec_dot(ab, ab) + vec_dot(qa, br);
-        const double d = vec_dot(qa, ab);
-        double roots[3];
-        const int count = solve_cubic(roots, a, b, c, d);
-        font_vec direction = edge_direction(edge, 0);
-        double nearest = nonzero_sign(vec_cross(direction, qa)) * vec_length(qa);
-        *param = -vec_dot(qa, direction) / vec_dot(direction, direction);
+        const double   a  = vec_dot(br, br);
+        const double   b  = 3.0 * vec_dot(ab, br);
+        const double   c  = 2.0 * vec_dot(ab, ab) + vec_dot(qa, br);
+        const double   d  = vec_dot(qa, ab);
+        double         roots[3];
+        const int      count     = solve_cubic(roots, a, b, c, d);
+        font_vec       direction = edge_direction(edge, 0);
+        double         nearest   = nonzero_sign(vec_cross(direction, qa)) * vec_length(qa);
+        *param                   = -vec_dot(qa, direction) / vec_dot(direction, direction);
         {
-            const font_vec end = vec_minus(edge->p[2], origin);
-            const double distance = vec_length(end);
+            const font_vec end      = vec_minus(edge->p[2], origin);
+            const double   distance = vec_length(end);
             if (distance < fabs(nearest)) {
                 direction = edge_direction(edge, 1);
-                nearest = nonzero_sign(vec_cross(direction, end)) * distance;
-                *param = vec_dot(vec_minus(origin, edge->p[1]), direction) / vec_dot(direction, direction);
+                nearest   = nonzero_sign(vec_cross(direction, end)) * distance;
+                *param    = vec_dot(vec_minus(origin, edge->p[1]), direction) / vec_dot(direction, direction);
             }
         }
         for (int at = 0; at < count; ++at) {
             const double t = roots[at];
             if (t > 0 && t < 1) {
-                const font_vec qe = vec_plus(vec_plus(qa, vec_times(ab, 2.0 * t)), vec_times(br, t * t));
-                const double distance = vec_length(qe);
+                const font_vec qe       = vec_plus(vec_plus(qa, vec_times(ab, 2.0 * t)), vec_times(br, t * t));
+                const double   distance = vec_length(qe);
                 if (distance <= fabs(nearest)) {
                     nearest = nonzero_sign(vec_cross(vec_plus(ab, vec_times(br, t)), qe)) * distance;
-                    *param = t;
+                    *param  = t;
                 }
             }
         }
@@ -299,7 +299,7 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
 static double pseudo_distance(const font_edge *edge, font_vec origin, signed_distance distance, double param) {
     if (param < 0) {
         const font_vec direction = normalized(edge_direction(edge, 0));
-        const font_vec aq = vec_minus(origin, edge->p[0]);
+        const font_vec aq        = vec_minus(origin, edge->p[0]);
         if (vec_dot(aq, direction) < 0) {
             const double pseudo = vec_cross(aq, direction);
             if (fabs(pseudo) <= fabs(distance.distance)) {
@@ -308,7 +308,7 @@ static double pseudo_distance(const font_edge *edge, font_vec origin, signed_dis
         }
     } else if (param > 1) {
         const font_vec direction = normalized(edge_direction(edge, 1));
-        const font_vec bq = vec_minus(origin, edge->p[2]);
+        const font_vec bq        = vec_minus(origin, edge->p[2]);
         if (vec_dot(bq, direction) > 0) {
             const double pseudo = vec_cross(bq, direction);
             if (fabs(pseudo) <= fabs(distance.distance)) {
@@ -323,7 +323,7 @@ static double pseudo_distance(const font_edge *edge, font_vec origin, signed_dis
 static double true_distance(const font_shape *edges, font_vec origin) {
     double nearest = HUGE_VAL;
     for (size_t at = 0; at < edges->count; ++at) {
-        double param = 0;
+        double       param    = 0;
         const double distance = fabs(edge_distance(&edges->edges[at], origin, &param).distance);
         if (distance < nearest) {
             nearest = distance;
@@ -356,17 +356,17 @@ static double median_float(double a, double b, double c) {
 
 typedef struct cell_field {
     /* The computed window of the cell, in atlas texels. */
-    int32_t left;
-    int32_t top;
+    int32_t  left;
+    int32_t  top;
     uint32_t width;
     uint32_t height;
     /* Glyph space of a texel centre: x = texel + 0.5 - box_left + box_x, y mirrored. */
-    double box_left;
-    double box_top;
-    int32_t box_x;
-    int32_t box_y;
+    double   box_left;
+    double   box_top;
+    int32_t  box_x;
+    int32_t  box_y;
     uint8_t *bytes;
-    double *truth;
+    double  *truth;
     uint8_t *disputed;
 } cell_field;
 
@@ -375,7 +375,7 @@ static font_vec glyph_point(const cell_field *field, double x, double y) {
 }
 
 static void settle(cell_field *field, size_t texel) {
-    const uint8_t value = encoded(field->truth[texel]);
+    const uint8_t value      = encoded(field->truth[texel]);
     field->bytes[3u * texel] = field->bytes[3u * texel + 1u] = field->bytes[3u * texel + 2u] = value;
 }
 
@@ -406,9 +406,9 @@ static int check_block(cell_field *field, const font_shape *colored, const font_
     for (int sy = 0; sy < 4; ++sy) {
         for (int sx = 0; sx < 4; ++sx) {
             const double fx = 0.125 + 0.25 * sx, fy = 0.125 + 0.25 * sy;
-            double channels[3];
-            int inside_median, inside_outline;
-            font_vec point;
+            double       channels[3];
+            int          inside_median, inside_outline;
+            font_vec     point;
             for (int channel = 0; channel < 3; ++channel) {
                 const double top = field->bytes[3u * corners[0] + (size_t)channel] * (1.0 - fx) +
                     field->bytes[3u * corners[1] + (size_t)channel] * fx;
@@ -416,8 +416,8 @@ static int check_block(cell_field *field, const font_shape *colored, const font_
                     field->bytes[3u * corners[3] + (size_t)channel] * fx;
                 channels[channel] = top * (1.0 - fy) + bottom * fy;
             }
-            inside_median = median_float(channels[0], channels[1], channels[2]) >= 127.5;
-            point = glyph_point(field, field->left + u + 0.5 + fx, field->top + v + 0.5 + fy);
+            inside_median  = median_float(channels[0], channels[1], channels[2]) >= 127.5;
+            point          = glyph_point(field, field->left + u + 0.5 + fx, field->top + v + 0.5 + fy);
             inside_outline = font_shape_winding(shape, point) != 0;
             if (inside_median != inside_outline && true_distance(colored, point) > TOLERANCE) {
                 int marked = 0;
@@ -437,7 +437,7 @@ static int check_block(cell_field *field, const font_shape *colored, const font_
 
 static void correct(cell_field *field, const font_shape *colored, const font_shape *shape) {
     const size_t texels = (size_t)field->width * field->height;
-    uint8_t *recheck;
+    uint8_t     *recheck;
     for (size_t texel = 0; texel < texels; ++texel) {
         const uint8_t median = median_of(field->bytes[3u * texel], field->bytes[3u * texel + 1u],
             field->bytes[3u * texel + 2u]);
@@ -494,16 +494,16 @@ static void correct(cell_field *field, const font_shape *colored, const font_sha
 }
 
 edds_status font_field_render(
-    font_shape *boundary,
-    const font_shape *shape,
+    font_shape           *boundary,
+    const font_shape     *shape,
     const font_placement *placement,
-    uint8_t *atlas,
-    uint32_t atlas_width,
-    edds_error *error) {
-    font_shape colored;
-    cell_field field;
+    uint8_t              *atlas,
+    uint32_t              atlas_width,
+    edds_error           *error) {
+    font_shape  colored;
+    cell_field  field;
     edds_status status;
-    int32_t right, bottom;
+    int32_t     right, bottom;
     if (boundary->count == 0) {
         return EDDS_OK;
     }
@@ -513,13 +513,13 @@ edds_status font_field_render(
     }
     memset(&field, 0, sizeof field);
     field.box_left = placement->cell_x + ((double)placement->cell - placement->width) * 0.5;
-    field.box_top = placement->cell_y + ((double)placement->cell - placement->height) * 0.5;
-    field.box_x = placement->box_x;
-    field.box_y = placement->box_y;
-    field.left = (int32_t)floor(field.box_left - MARGIN);
-    field.top = (int32_t)floor(field.box_top - MARGIN);
-    right = (int32_t)ceil(field.box_left + placement->width + MARGIN);
-    bottom = (int32_t)ceil(field.box_top + placement->height + MARGIN);
+    field.box_top  = placement->cell_y + ((double)placement->cell - placement->height) * 0.5;
+    field.box_x    = placement->box_x;
+    field.box_y    = placement->box_y;
+    field.left     = (int32_t)floor(field.box_left - MARGIN);
+    field.top      = (int32_t)floor(field.box_top - MARGIN);
+    right          = (int32_t)ceil(field.box_left + placement->width + MARGIN);
+    bottom         = (int32_t)ceil(field.box_top + placement->height + MARGIN);
     if (field.left < (int32_t)placement->cell_x) {
         field.left = (int32_t)placement->cell_x;
     }
@@ -532,10 +532,10 @@ edds_status font_field_render(
     if (bottom > (int32_t)(placement->cell_y + placement->cell)) {
         bottom = (int32_t)(placement->cell_y + placement->cell);
     }
-    field.width = (uint32_t)(right - field.left);
-    field.height = (uint32_t)(bottom - field.top);
-    field.bytes = malloc((size_t)field.width * field.height * 3u);
-    field.truth = malloc((size_t)field.width * field.height * sizeof *field.truth);
+    field.width    = (uint32_t)(right - field.left);
+    field.height   = (uint32_t)(bottom - field.top);
+    field.bytes    = malloc((size_t)field.width * field.height * 3u);
+    field.truth    = malloc((size_t)field.width * field.height * sizeof *field.truth);
     field.disputed = calloc((size_t)field.width * field.height, 1);
     if (field.bytes == NULL || field.truth == NULL || field.disputed == NULL) {
         font_fail(error, "allocation-failed", "Memory for a glyph field could not be allocated.");
@@ -544,33 +544,33 @@ edds_status font_field_render(
     }
     for (uint32_t v = 0; v < field.height; ++v) {
         for (uint32_t u = 0; u < field.width; ++u) {
-            const font_vec origin = glyph_point(&field, field.left + u + 0.5, field.top + v + 0.5);
-            signed_distance best[3], nearest;
-            double params[3] = { 0, 0, 0 };
+            const font_vec   origin = glyph_point(&field, field.left + u + 0.5, field.top + v + 0.5);
+            signed_distance  best[3], nearest;
+            double           params[3] = { 0, 0, 0 };
             const font_edge *owners[3] = { NULL, NULL, NULL };
-            const size_t texel = (size_t)v * field.width + u;
-            nearest.distance = HUGE_VAL;
-            nearest.dot = 0;
+            const size_t     texel     = (size_t)v * field.width + u;
+            nearest.distance           = HUGE_VAL;
+            nearest.dot                = 0;
             for (int channel = 0; channel < 3; ++channel) {
                 best[channel] = nearest;
             }
             for (size_t at = 0; at < colored.count; ++at) {
-                const font_edge *edge = &colored.edges[at];
-                double param = 0;
+                const font_edge      *edge     = &colored.edges[at];
+                double                param    = 0;
                 const signed_distance distance = edge_distance(edge, origin, &param);
                 if (fabs(distance.distance) < fabs(nearest.distance)) {
                     nearest = distance;
                 }
                 for (int channel = 0; channel < 3; ++channel) {
                     if ((edge->color & (1u << channel)) != 0 && closer(distance, best[channel])) {
-                        best[channel] = distance;
+                        best[channel]   = distance;
                         params[channel] = param;
                         owners[channel] = edge;
                     }
                 }
             }
             for (int channel = 0; channel < 3; ++channel) {
-                const double value = owners[channel] == NULL ? -HUGE_VAL : pseudo_distance(owners[channel], origin, best[channel], params[channel]);
+                const double value                        = owners[channel] == NULL ? -HUGE_VAL : pseudo_distance(owners[channel], origin, best[channel], params[channel]);
                 field.bytes[3u * texel + (size_t)channel] = encoded(value);
             }
             field.truth[texel] = (font_shape_winding(shape, origin) != 0 ? 1.0 : -1.0) * fabs(nearest.distance);
@@ -581,9 +581,9 @@ edds_status font_field_render(
         uint8_t *row = atlas + ((size_t)(field.top + (int32_t)v) * atlas_width + (size_t)field.left) * 4u;
         for (uint32_t u = 0; u < field.width; ++u) {
             const size_t texel = (size_t)v * field.width + u;
-            row[4u * u] = field.bytes[3u * texel];
-            row[4u * u + 1u] = field.bytes[3u * texel + 1u];
-            row[4u * u + 2u] = field.bytes[3u * texel + 2u];
+            row[4u * u]        = field.bytes[3u * texel];
+            row[4u * u + 1u]   = field.bytes[3u * texel + 1u];
+            row[4u * u + 2u]   = field.bytes[3u * texel + 2u];
         }
     }
     status = EDDS_OK;

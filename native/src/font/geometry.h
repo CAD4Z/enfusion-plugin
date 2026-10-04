@@ -70,8 +70,8 @@ static inline font_vec edge_direction(const font_edge *edge, double t) {
 /** The part of an edge between two parameters; a curve's control point is its blossom at both. */
 static inline font_edge edge_part(const font_edge *edge, double from, double to) {
     font_edge result = *edge;
-    result.p[0] = edge_point(edge, from);
-    result.p[2] = edge_point(edge, to);
+    result.p[0]      = edge_point(edge, from);
+    result.p[2]      = edge_point(edge, to);
     if (edge->quad) {
         const double a = (1.0 - from) * (1.0 - to), b = (1.0 - from) * to + from * (1.0 - to), c = from * to;
         result.p[1] = vec_of(a * edge->p[0].x + b * edge->p[1].x + c * edge->p[2].x,

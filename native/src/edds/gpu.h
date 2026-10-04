@@ -25,11 +25,11 @@ uint32_t edds_gpu_mip_bytes(edds_pixel_format format, uint32_t width, uint32_t h
  */
 void edds_gpu_encode(
     edds_pixel_format format,
-    uint32_t quality,
-    const uint8_t *bgra,
-    uint32_t width,
-    uint32_t height,
-    uint8_t *output);
+    uint32_t          quality,
+    const uint8_t    *bgra,
+    uint32_t          width,
+    uint32_t          height,
+    uint8_t          *output);
 
 /**
  * Decodes one stored mip into top-to-bottom RGBA, showing the values the file actually holds: a
@@ -38,10 +38,10 @@ void edds_gpu_encode(
  */
 int edds_gpu_decode(
     edds_pixel_format format,
-    const uint8_t *stored,
-    uint32_t stored_bytes,
-    uint32_t width,
-    uint32_t height,
-    uint8_t *rgba);
+    const uint8_t    *stored,
+    uint32_t          stored_bytes,
+    uint32_t          width,
+    uint32_t          height,
+    uint8_t          *rgba);
 
 #endif

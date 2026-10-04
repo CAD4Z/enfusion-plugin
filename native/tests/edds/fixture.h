@@ -6,7 +6,7 @@
 
 typedef struct test_bytes {
     uint8_t *data;
-    size_t size;
+    size_t   size;
 } test_bytes;
 
 test_bytes fixture_copy_bgra(void);
@@ -33,10 +33,10 @@ test_bytes fixture_dds_bgra_alpha_mips(void);
 test_bytes fixture_dds_dx10_r8_mips(void);
 /** A controlled four-by-four, top-only DX10 DDS for one exact payload format. */
 test_bytes fixture_dds_dx10_top(
-    uint32_t dxgi_format,
+    uint32_t       dxgi_format,
     const uint8_t *payload,
-    size_t payload_size,
-    uint32_t bytes_per_pixel);
+    size_t         payload_size,
+    uint32_t       bytes_per_pixel);
 test_bytes fixture_integer_overflow(void);
 test_bytes fixture_png_rgba(void);
 test_bytes fixture_png_flat(uint32_t side);
@@ -76,31 +76,31 @@ typedef struct fixture_tiff_tag {
 
 size_t fixture_tiff_ifd_end(size_t tag_count);
 size_t fixture_tiff_build(
-    uint8_t *output,
-    size_t capacity,
-    int big_endian,
+    uint8_t                *output,
+    size_t                  capacity,
+    int                     big_endian,
     const fixture_tiff_tag *tags,
-    size_t tag_count,
-    const uint8_t *trailing,
-    size_t trailing_size);
+    size_t                  tag_count,
+    const uint8_t          *trailing,
+    size_t                  trailing_size);
 
 /**
  * A JPEG around fixed all-ones quantisation and a three-symbol Huffman pair, so a test writes only
  * the frame shape it is about and the entropy bits it wants decoded.
  */
 typedef struct fixture_jpeg_spec {
-    uint8_t frame_marker;
-    uint8_t precision;
-    uint16_t width;
-    uint16_t height;
-    uint8_t component_count;
-    uint8_t luma_sampling;
-    uint16_t restart_interval;
+    uint8_t        frame_marker;
+    uint8_t        precision;
+    uint16_t       width;
+    uint16_t       height;
+    uint8_t        component_count;
+    uint8_t        luma_sampling;
+    uint16_t       restart_interval;
     const uint8_t *exif;
-    size_t exif_size;
+    size_t         exif_size;
     const uint8_t *entropy;
-    size_t entropy_size;
-    int omit_end_of_image;
+    size_t         entropy_size;
+    int            omit_end_of_image;
 } fixture_jpeg_spec;
 
 size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_spec *spec);
@@ -113,11 +113,11 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
  */
 size_t fixture_tga_bytes(uint32_t width, uint32_t height, int with_alpha);
 size_t fixture_tga_build(
-    uint8_t *output,
-    size_t capacity,
-    uint32_t width,
-    uint32_t height,
-    int with_alpha,
+    uint8_t       *output,
+    size_t         capacity,
+    uint32_t       width,
+    uint32_t       height,
+    int            with_alpha,
     const uint8_t *bgra);
 
 #endif

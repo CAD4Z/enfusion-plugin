@@ -29,7 +29,7 @@ int ascii_lower(cli_char value) {
 }
 
 int ends_with(const cli_char *path, const char *suffix) {
-    const size_t path_size = cli_strlen(path);
+    const size_t path_size   = cli_strlen(path);
     const size_t suffix_size = strlen(suffix);
     if (path_size < suffix_size) {
         return 0;
@@ -53,16 +53,16 @@ int is_separator(cli_char value) {
  */
 static cli_char *normalized_path(const cli_char *path) {
     const size_t length = cli_strlen(path);
-    cli_char *result = malloc((length + 2u) * sizeof *result);
+    cli_char    *result = malloc((length + 2u) * sizeof *result);
     /* Where each segment that may still be walked off begins; a root segment is never in here. */
-    size_t *marks = malloc((length / 2u + 2u) * sizeof *marks);
-    size_t depth = 0;
-    size_t out = 0;
-    size_t at = 0;
-    size_t prefix;
-    size_t roots;
-    int share;
-    int anchored;
+    size_t      *marks  = malloc((length / 2u + 2u) * sizeof *marks);
+    size_t       depth  = 0;
+    size_t       out    = 0;
+    size_t       at     = 0;
+    size_t       prefix;
+    size_t       roots;
+    int          share;
+    int          anchored;
     if (result == NULL || marks == NULL) {
         free(result);
         free(marks);
@@ -75,22 +75,22 @@ static cli_char *normalized_path(const cli_char *path) {
     }
     share = length >= at + 2u && is_separator(path[at]) && is_separator(path[at + 1u]);
     if (share) {
-        result[out++] = (cli_char)'/';
-        result[out++] = (cli_char)'/';
-        at += 2u;
+        result[out++]  = (cli_char)'/';
+        result[out++]  = (cli_char)'/';
+        at            += 2u;
     } else if (at < length && is_separator(path[at])) {
         result[out++] = (cli_char)'/';
         ++at;
     }
-    prefix = out;
+    prefix   = out;
     /* The server and the share name a UNC root; a bare drive letter is a root of its own. */
-    roots = share ? 2u : 0u;
+    roots    = share ? 2u : 0u;
     anchored = prefix > 0u;
 
     while (at < length) {
         const size_t start = at;
-        size_t size;
-        int parent;
+        size_t       size;
+        int          parent;
         while (at < length && !is_separator(path[at])) {
             ++at;
         }
@@ -124,7 +124,7 @@ static cli_char *normalized_path(const cli_char *path) {
         }
         if (!anchored && depth == 1u && out == 2u && result[1] == (cli_char)':') {
             /* That first segment was a drive letter after all: it becomes the root behind us. */
-            depth = 0;
+            depth    = 0;
             anchored = 1;
         }
     }
@@ -155,8 +155,8 @@ static int same_path_literally(const cli_char *left, const cli_char *right) {
  */
 static cli_char *full_path_of(const cli_char *path) {
     const DWORD needed = GetFullPathNameW(path, 0, NULL, NULL);
-    cli_char *result;
-    DWORD written;
+    cli_char   *result;
+    DWORD       written;
     if (needed == 0) {
         return NULL;
     }
@@ -174,10 +174,10 @@ static cli_char *full_path_of(const cli_char *path) {
 
 static int same_file(const cli_char *left, const cli_char *right) {
     BY_HANDLE_FILE_INFORMATION left_facts, right_facts;
-    const DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
-    HANDLE left_handle = CreateFileW(left, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    HANDLE right_handle = CreateFileW(right, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    int same = 0;
+    const DWORD                share        = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    HANDLE                     left_handle  = CreateFileW(left, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    HANDLE                     right_handle = CreateFileW(right, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    int                        same         = 0;
     if (left_handle != INVALID_HANDLE_VALUE && right_handle != INVALID_HANDLE_VALUE &&
         GetFileInformationByHandle(left_handle, &left_facts) &&
         GetFileInformationByHandle(right_handle, &right_facts)) {
@@ -198,7 +198,7 @@ static int same_file(const cli_char *left, const cli_char *right) {
 /** The normal form of the path as the system resolves it; a malloc'd string, or NULL. */
 cli_char *canonical_path(const cli_char *path) {
 #ifdef _WIN32
-    cli_char *full = full_path_of(path);
+    cli_char *full   = full_path_of(path);
     cli_char *result = normalized_path(full != NULL ? full : path);
     free(full);
     return result;
@@ -210,19 +210,19 @@ cli_char *canonical_path(const cli_char *path) {
 int same_path(const cli_char *left, const cli_char *right) {
     cli_char *canonical_left;
     cli_char *canonical_right;
-    int same;
+    int       same;
 #ifdef _WIN32
     if (same_file(left, right)) {
         return 1;
     }
 #endif
-    canonical_left = canonical_path(left);
+    canonical_left  = canonical_path(left);
     canonical_right = canonical_path(right);
     /* Out of memory, the coarser answer is the safe one: a collision missed writes two jobs to
        one file, while a collision seen twice only refuses work the caller can ask for again. */
-    same = canonical_left == NULL || canonical_right == NULL
-        ? same_path_literally(left, right)
-        : cli_strcmp(canonical_left, canonical_right) == 0;
+    same            = canonical_left == NULL || canonical_right == NULL
+                   ? same_path_literally(left, right)
+                   : cli_strcmp(canonical_left, canonical_right) == 0;
     free(canonical_left);
     free(canonical_right);
     return same;
@@ -230,7 +230,7 @@ int same_path(const cli_char *left, const cli_char *right) {
 
 static cli_char *temporary_path(const cli_char *output, const char *kind, unsigned attempt) {
     const size_t base = cli_strlen(output);
-    cli_char *path = malloc((base + 96u) * sizeof *path);
+    cli_char    *path = malloc((base + 96u) * sizeof *path);
     if (path == NULL) {
         return NULL;
     }
@@ -260,8 +260,8 @@ int revision_of(const cli_char *path, file_revision *revision) {
     memset(revision, 0, sizeof *revision);
 #ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA attributes;
-    ULARGE_INTEGER size;
-    ULARGE_INTEGER time;
+    ULARGE_INTEGER            size;
+    ULARGE_INTEGER            time;
     if (!GetFileAttributesExW(path, GetFileExInfoStandard, &attributes)) {
         const DWORD code = GetLastError();
         return code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND;
@@ -269,12 +269,12 @@ int revision_of(const cli_char *path, file_revision *revision) {
     if ((attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
         return 1;
     }
-    size.HighPart = attributes.nFileSizeHigh;
-    size.LowPart = attributes.nFileSizeLow;
-    time.HighPart = attributes.ftLastWriteTime.dwHighDateTime;
-    time.LowPart = attributes.ftLastWriteTime.dwLowDateTime;
-    revision->exists = 1;
-    revision->size = size.QuadPart;
+    size.HighPart      = attributes.nFileSizeHigh;
+    size.LowPart       = attributes.nFileSizeLow;
+    time.HighPart      = attributes.ftLastWriteTime.dwHighDateTime;
+    time.LowPart       = attributes.ftLastWriteTime.dwLowDateTime;
+    revision->exists   = 1;
+    revision->size     = size.QuadPart;
     revision->modified = time.QuadPart / 10000u - 11644473600000u;
 #else
     struct stat attributes;
@@ -284,8 +284,8 @@ int revision_of(const cli_char *path, file_revision *revision) {
     if (!S_ISREG(attributes.st_mode)) {
         return 1;
     }
-    revision->exists = 1;
-    revision->size = (uint64_t)attributes.st_size;
+    revision->exists   = 1;
+    revision->size     = (uint64_t)attributes.st_size;
     revision->modified = (uint64_t)attributes.st_mtim.tv_sec * 1000u +
         (uint64_t)attributes.st_mtim.tv_nsec / 1000000u;
 #endif
@@ -313,8 +313,8 @@ int parse_revision(const cli_char *text, file_revision *revision) {
             return 0;
         }
     }
-    revision->exists = 1;
-    revision->size = values[0];
+    revision->exists   = 1;
+    revision->size     = values[0];
     revision->modified = values[1];
     return 1;
 }
@@ -324,15 +324,15 @@ int parse_revision(const cli_char *text, file_revision *revision) {
  * side truncates it: one millisecond apart is the same write. The size still has to match exactly.
  */
 int same_revision(const file_revision *left, const file_revision *right) {
-    const uint64_t later = left->modified > right->modified ? left->modified : right->modified;
+    const uint64_t later   = left->modified > right->modified ? left->modified : right->modified;
     const uint64_t earlier = left->modified > right->modified ? right->modified : left->modified;
     return left->exists == right->exists && (!left->exists || (left->size == right->size && later - earlier <= 1u));
 }
 
 cli_char *append_suffix(const cli_char *path, const char *suffix) {
-    const size_t path_size = cli_strlen(path);
+    const size_t path_size   = cli_strlen(path);
     const size_t suffix_size = strlen(suffix);
-    cli_char *result = malloc((path_size + suffix_size + 1u) * sizeof *result);
+    cli_char    *result      = malloc((path_size + suffix_size + 1u) * sizeof *result);
     if (result == NULL) {
         return NULL;
     }
@@ -413,16 +413,16 @@ void cleanup_artifact(cli_artifact *artifact, int success) {
     free(artifact->temporary);
     free(artifact->backup);
     artifact->temporary = NULL;
-    artifact->backup = NULL;
+    artifact->backup    = NULL;
 }
 
 int begin_transaction(cli_transaction *transaction, const cli_char *output) {
     for (unsigned attempt = 0; attempt < 32u; ++attempt) {
         FILE *file;
-        int flushed;
+        int   flushed;
         free(transaction->pending);
         free(transaction->committed);
-        transaction->pending = temporary_path(output, "pending", attempt);
+        transaction->pending   = temporary_path(output, "pending", attempt);
         transaction->committed = temporary_path(output, "committed", attempt);
         if (transaction->pending == NULL || transaction->committed == NULL) {
             return 0;
@@ -435,7 +435,7 @@ int begin_transaction(cli_transaction *transaction, const cli_char *output) {
             return 0;
         }
         transaction->started = 1;
-        flushed = sync_output(file, "transaction-flush");
+        flushed              = sync_output(file, "transaction-flush");
         if (fclose(file) != 0) {
             flushed = 0;
         }

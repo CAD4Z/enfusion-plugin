@@ -10,14 +10,14 @@
  * KERN the pairs the engine finds by binary search over `(left << 16) | right`.
  */
 
-#define TYPE_MSDF 2u
+#define TYPE_MSDF       2u
 #define MOST_NAME_BYTES 254u
 
 typedef struct bytes {
     uint8_t *data;
-    size_t size;
-    size_t capacity;
-    int failed;
+    size_t   size;
+    size_t   capacity;
+    int      failed;
 } bytes;
 
 static void append(bytes *out, const void *data, size_t size) {
@@ -25,7 +25,7 @@ static void append(bytes *out, const void *data, size_t size) {
         return;
     }
     if (out->size + size > out->capacity) {
-        size_t capacity = out->capacity == 0 ? 1024u : out->capacity;
+        size_t   capacity = out->capacity == 0 ? 1024u : out->capacity;
         uint8_t *grown;
         while (capacity < out->size + size) {
             capacity *= 2u;
@@ -35,7 +35,7 @@ static void append(bytes *out, const void *data, size_t size) {
             out->failed = 1;
             return;
         }
-        out->data = grown;
+        out->data     = grown;
         out->capacity = capacity;
     }
     memcpy(out->data + out->size, data, size);
@@ -67,7 +67,7 @@ static void be32_at(bytes *out, size_t at, size_t value) {
     if (out->failed) {
         return;
     }
-    out->data[at] = (uint8_t)(value >> 24);
+    out->data[at]      = (uint8_t)(value >> 24);
     out->data[at + 1u] = (uint8_t)(value >> 16);
     out->data[at + 2u] = (uint8_t)(value >> 8);
     out->data[at + 3u] = (uint8_t)value;
@@ -87,19 +87,19 @@ static void close_chunk(bytes *out, size_t size_at) {
 
 edds_status font_fnt_write(
     const font_header *header,
-    const font_entry *entries,
-    size_t entry_count,
-    const font_pair *pairs,
-    size_t pair_count,
-    uint8_t **data,
-    size_t *size,
-    uint32_t *range_count,
-    edds_error *error) {
-    bytes out = { NULL, 0, 0, 0 };
+    const font_entry  *entries,
+    size_t             entry_count,
+    const font_pair   *pairs,
+    size_t             pair_count,
+    uint8_t          **data,
+    size_t            *size,
+    uint32_t          *range_count,
+    edds_error        *error) {
+    bytes        out       = { NULL, 0, 0, 0 };
     const size_t name_size = strlen(header->name);
-    size_t ranges = 0;
-    size_t chunk;
-    size_t ranges_at;
+    size_t       ranges    = 0;
+    size_t       chunk;
+    size_t       ranges_at;
     *data = NULL;
     *size = 0;
     if (name_size == 0 || name_size > MOST_NAME_BYTES) {
@@ -145,7 +145,7 @@ edds_status font_fnt_write(
         at += run;
     }
     if (!out.failed) {
-        out.data[ranges_at] = (uint8_t)ranges;
+        out.data[ranges_at]      = (uint8_t)ranges;
         out.data[ranges_at + 1u] = (uint8_t)(ranges >> 8);
         out.data[ranges_at + 2u] = (uint8_t)(ranges >> 16);
         out.data[ranges_at + 3u] = (uint8_t)(ranges >> 24);
@@ -178,8 +178,8 @@ edds_status font_fnt_write(
         font_fail(error, "allocation-failed", "Memory for the FNT file could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
-    *data = out.data;
-    *size = out.size;
+    *data        = out.data;
+    *size        = out.size;
     *range_count = (uint32_t)ranges;
     return EDDS_OK;
 }
@@ -200,7 +200,7 @@ static uint16_t read16(const uint8_t *at) {
 
 static float read_float(const uint8_t *at) {
     const uint32_t raw = read32(at);
-    float value;
+    float          value;
     memcpy(&value, &raw, sizeof value);
     return value;
 }
@@ -211,7 +211,7 @@ static edds_status malformed(edds_error *error, const char *what) {
 }
 
 static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *info, edds_error *error) {
-    uint32_t name_size;
+    uint32_t       name_size;
     const uint8_t *at;
     if (size < 4u) {
         return malformed(error, "HEAD is truncated");
@@ -224,16 +224,16 @@ static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *inf
         return malformed(error, "the HEAD name is not terminated");
     }
     memcpy(info->name, chunk + 4, name_size);
-    at = chunk + 4u + name_size;
-    info->size = (int32_t)read32(at);
-    info->type = at[8];
-    info->cell = (int32_t)read32(at + 9);
-    info->cap_height = read_float(at + 13);
+    at                = chunk + 4u + name_size;
+    info->size        = (int32_t)read32(at);
+    info->type        = at[8];
+    info->cell        = (int32_t)read32(at + 9);
+    info->cap_height  = read_float(at + 13);
     info->line_height = read_float(at + 17);
-    info->r = (int16_t)read16(at + 21);
-    info->bold = at[23];
-    info->italic = at[24];
-    info->c = read_float(at + 25);
+    info->r           = (int16_t)read16(at + 21);
+    info->bold        = at[23];
+    info->italic      = at[24];
+    info->c           = read_float(at + 25);
     if (!isfinite(info->cap_height) || !isfinite(info->line_height) || !isfinite(info->c)) {
         return malformed(error, "a HEAD metric is not a finite number");
     }
@@ -256,9 +256,9 @@ static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *inf
         return EDDS_INTERNAL_FAILURE;
     }
     for (uint32_t at = 0; at < info->range_count; ++at) {
-        info->ranges[at].first = read32(chunk + 16u + 8u * at);
-        info->ranges[at].count = read16(chunk + 20u + 8u * at);
-        total += info->ranges[at].count;
+        info->ranges[at].first  = read32(chunk + 16u + 8u * at);
+        info->ranges[at].count  = read16(chunk + 20u + 8u * at);
+        total                  += info->ranges[at].count;
     }
     if (total != info->glyph_count) {
         return malformed(error, "the GLPS ranges do not add up to the glyph count");
@@ -267,13 +267,13 @@ static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *inf
 }
 
 edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
-    uint8_t *data = NULL;
-    long length;
-    size_t size;
-    size_t at = 12;
-    int head = 0, glyphs = 0, boxes = 0;
-    uint32_t box_bytes = 0;
-    edds_status status = EDDS_OK;
+    uint8_t    *data = NULL;
+    long        length;
+    size_t      size;
+    size_t      at   = 12;
+    int         head = 0, glyphs = 0, boxes = 0;
+    uint32_t    box_bytes = 0;
+    edds_status status    = EDDS_OK;
     if (input == NULL || info == NULL) {
         font_fail(error, "invalid-api-argument", "The FNT input and value are required.");
         return EDDS_INTERNAL_FAILURE;

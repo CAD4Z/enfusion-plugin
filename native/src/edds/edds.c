@@ -8,24 +8,24 @@
 #include <string.h>
 
 enum {
-    DDS_HEADER_BYTES = 128,
-    DDS_DX10_HEADER_BYTES = 20,
+    DDS_HEADER_BYTES                 = 128,
+    DDS_DX10_HEADER_BYTES            = 20,
     DDS_RESOURCE_DIMENSION_TEXTURE2D = 3,
-    DDS_RESOURCE_MISC_TEXTURECUBE = 4,
-    DDSCAPS2_CUBEMAP = 0x00000200,
-    DDSCAPS2_VOLUME = 0x00200000,
-    DDPF_ALPHAPIXELS = 0x00000001,
-    DDPF_FOURCC = 0x00000004,
-    DDPF_RGB = 0x00000040,
-    LZ4_DECODED_BLOCK_BYTES = 65536
+    DDS_RESOURCE_MISC_TEXTURECUBE    = 4,
+    DDSCAPS2_CUBEMAP                 = 0x00000200,
+    DDSCAPS2_VOLUME                  = 0x00200000,
+    DDPF_ALPHAPIXELS                 = 0x00000001,
+    DDPF_FOURCC                      = 0x00000004,
+    DDPF_RGB                         = 0x00000040,
+    LZ4_DECODED_BLOCK_BYTES          = 65536
 };
 
 typedef struct stored_mip {
     edds_container container;
-    uint32_t stored_bytes;
-    uint32_t decoded_bytes;
-    uint32_t block_count;
-    uint64_t data_offset;
+    uint32_t       stored_bytes;
+    uint32_t       decoded_bytes;
+    uint32_t       block_count;
+    uint64_t       data_offset;
 } stored_mip;
 
 static uint32_t u32le(const uint8_t *at) {
@@ -147,25 +147,25 @@ static int topology_is_previewable(const edds_info *info) {
 }
 
 static edds_status scan_lz4(
-    FILE *input,
-    uint64_t offset,
-    uint32_t stored_bytes,
-    uint32_t *decoded_bytes,
-    uint32_t *block_count,
+    FILE             *input,
+    uint64_t          offset,
+    uint32_t          stored_bytes,
+    uint32_t         *decoded_bytes,
+    uint32_t         *block_count,
     edds_cancelled_fn cancel,
-    void *context,
-    edds_error *error) {
-    uint8_t word[4];
+    void             *context,
+    edds_error       *error) {
+    uint8_t  word[4];
     uint64_t consumed = 0;
-    uint32_t count = 0;
+    uint32_t count    = 0;
     uint32_t total;
-    int saw_final = 0;
+    int      saw_final = 0;
 
     if (stored_bytes < 8 || !seek_to(input, offset) || !read_exact(input, word, sizeof word)) {
         fail(error, "invalid-lz4-frame", "The LZ4 payload header is truncated.");
         return EDDS_INVALID_INPUT;
     }
-    total = u32le(word);
+    total    = u32le(word);
     consumed = 4;
     if (total == 0 || total > EDDS_MAX_PREVIEW_BYTES) {
         fail(error, "decoded-size-limit", "The LZ4 decoded size %u is outside the supported limit.", total);
@@ -183,9 +183,9 @@ static edds_status scan_lz4(
             fail(error, "invalid-lz4-frame", "The LZ4 block table is malformed or exceeds %u blocks.", EDDS_MAX_LZ4_BLOCKS);
             return EDDS_INVALID_INPUT;
         }
-        framed = u32le(word);
-        compressed = framed & 0x7fffffffu;
-        consumed += 4;
+        framed      = u32le(word);
+        compressed  = framed & 0x7fffffffu;
+        consumed   += 4;
         if (compressed == 0 || compressed > EDDS_MAX_LZ4_STORED_BLOCK ||
             compressed > stored_bytes - consumed) {
             fail(error, "invalid-lz4-block", "An LZ4 block has an invalid stored size of %u bytes.", compressed);
@@ -208,23 +208,23 @@ static edds_status scan_lz4(
         return EDDS_INVALID_INPUT;
     }
     *decoded_bytes = total;
-    *block_count = count;
+    *block_count   = count;
     return EDDS_OK;
 }
 
 edds_status edds_inspect(
-    FILE *input,
-    edds_info *info,
+    FILE             *input,
+    edds_info        *info,
     edds_cancelled_fn cancel,
-    void *cancel_context,
-    edds_error *error) {
-    uint8_t header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
-    uint8_t descriptor[8];
+    void             *cancel_context,
+    edds_error       *error) {
+    uint8_t    header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
+    uint8_t    descriptor[8];
     stored_mip stored[EDDS_MAX_MIPS];
-    uint64_t size;
-    uint64_t payload_at;
-    uint32_t mip_count;
-    uint32_t header_bytes = DDS_HEADER_BYTES;
+    uint64_t   size;
+    uint64_t   payload_at;
+    uint32_t   mip_count;
+    uint32_t   header_bytes = DDS_HEADER_BYTES;
 
     if (input == NULL || info == NULL) {
         fail(error, "invalid-api-argument", "The input stream and inspection output are required.");
@@ -256,13 +256,13 @@ edds_status edds_inspect(
         return EDDS_INVALID_INPUT;
     }
 
-    info->flags = u32le(header + 8);
-    info->height = u32le(header + 12);
-    info->width = u32le(header + 16);
+    info->flags                = u32le(header + 8);
+    info->height               = u32le(header + 12);
+    info->width                = u32le(header + 16);
     info->pitch_or_linear_size = u32le(header + 20);
-    info->depth = u32le(header + 24);
-    mip_count = u32le(header + 28);
-    info->pixel_format_flags = u32le(header + 80);
+    info->depth                = u32le(header + 24);
+    mip_count                  = u32le(header + 28);
+    info->pixel_format_flags   = u32le(header + 80);
     memcpy(info->four_cc, header + 84, 4);
     info->four_cc[4] = '\0';
     if (info->four_cc[0] == '\0' && info->four_cc[1] == '\0' &&
@@ -277,12 +277,12 @@ edds_status edds_inspect(
         }
     }
     info->rgb_bit_count = u32le(header + 88);
-    info->r_mask = u32le(header + 92);
-    info->g_mask = u32le(header + 96);
-    info->b_mask = u32le(header + 100);
-    info->a_mask = u32le(header + 104);
-    info->caps = u32le(header + 108);
-    info->caps2 = u32le(header + 112);
+    info->r_mask        = u32le(header + 92);
+    info->g_mask        = u32le(header + 96);
+    info->b_mask        = u32le(header + 100);
+    info->a_mask        = u32le(header + 104);
+    info->caps          = u32le(header + 108);
+    info->caps2         = u32le(header + 112);
 
     if (info->width == 0 || info->height == 0 ||
         info->width > EDDS_MAX_DIMENSION || info->height > EDDS_MAX_DIMENSION) {
@@ -304,14 +304,14 @@ edds_status edds_inspect(
             fail(error, "truncated-dx10-header", "The DDS DX10 header is truncated.");
             return EDDS_INVALID_INPUT;
         }
-        info->dxgi_format = u32le(header + 128);
-        info->resource_dimension = u32le(header + 132);
-        info->misc_flag = u32le(header + 136);
-        info->array_size = u32le(header + 140);
-        header_bytes += DDS_DX10_HEADER_BYTES;
+        info->dxgi_format         = u32le(header + 128);
+        info->resource_dimension  = u32le(header + 132);
+        info->misc_flag           = u32le(header + 136);
+        info->array_size          = u32le(header + 140);
+        header_bytes             += DDS_DX10_HEADER_BYTES;
     }
 
-    info->mip_count = mip_count;
+    info->mip_count    = mip_count;
     info->header_bytes = header_bytes;
     info->pixel_format = classify(info);
     {
@@ -333,8 +333,8 @@ edds_status edds_inspect(
     }
 
     for (uint32_t stored_index = 0; stored_index < mip_count; ++stored_index) {
-        uint32_t level = mip_count - stored_index - 1u;
-        uint32_t expected = 0;
+        uint32_t    level    = mip_count - stored_index - 1u;
+        uint32_t    expected = 0;
         edds_status status;
         if (cancelled(cancel, cancel_context, error)) {
             return EDDS_CANCELLED;
@@ -352,8 +352,8 @@ edds_status edds_inspect(
             return EDDS_INVALID_INPUT;
         }
         stored[stored_index].stored_bytes = u32le(descriptor + 4);
-        stored[stored_index].data_offset = payload_at;
-        stored[stored_index].block_count = 0;
+        stored[stored_index].data_offset  = payload_at;
+        stored[stored_index].block_count  = 0;
         if (stored[stored_index].stored_bytes == 0 ||
             stored[stored_index].stored_bytes > size - payload_at) {
             fail(error, "truncated-mip-payload", "Mip %u extends beyond the input boundary.", level);
@@ -361,9 +361,9 @@ edds_status edds_inspect(
         }
         if (stored[stored_index].container == EDDS_CONTAINER_LZ4) {
             const long table_return = (long)(header_bytes + (stored_index + 1u) * 8u);
-            status = scan_lz4(input, payload_at, stored[stored_index].stored_bytes,
-                &stored[stored_index].decoded_bytes, &stored[stored_index].block_count,
-                cancel, cancel_context, error);
+            status                  = scan_lz4(input, payload_at, stored[stored_index].stored_bytes,
+                                 &stored[stored_index].decoded_bytes, &stored[stored_index].block_count,
+                                 cancel, cancel_context, error);
             if (status != EDDS_OK) {
                 return status;
             }
@@ -393,25 +393,25 @@ edds_status edds_inspect(
     }
 
     for (uint32_t level = 0; level < mip_count; ++level) {
-        const stored_mip *source = &stored[mip_count - level - 1u];
-        edds_mip *destination = &info->mips[level];
-        destination->level = level;
-        destination->width = mip_dimension(info->width, level);
-        destination->height = mip_dimension(info->height, level);
-        destination->container = source->container;
-        destination->stored_bytes = source->stored_bytes;
-        destination->decoded_bytes = source->decoded_bytes;
-        destination->block_count = source->block_count;
-        destination->data_offset = source->data_offset;
+        const stored_mip *source      = &stored[mip_count - level - 1u];
+        edds_mip         *destination = &info->mips[level];
+        destination->level            = level;
+        destination->width            = mip_dimension(info->width, level);
+        destination->height           = mip_dimension(info->height, level);
+        destination->container        = source->container;
+        destination->stored_bytes     = source->stored_bytes;
+        destination->decoded_bytes    = source->decoded_bytes;
+        destination->block_count      = source->block_count;
+        destination->data_offset      = source->data_offset;
     }
     return EDDS_OK;
 }
 
 static int extend_length(
     const uint8_t *source,
-    size_t source_size,
-    size_t *source_at,
-    size_t *length) {
+    size_t         source_size,
+    size_t        *source_at,
+    size_t        *length) {
     uint8_t addition;
     do {
         if (*source_at >= source_size) {
@@ -428,16 +428,16 @@ static int extend_length(
 
 static int decode_lz4_block(
     const uint8_t *source,
-    size_t source_size,
-    uint8_t *output,
-    size_t output_capacity,
-    size_t *output_at) {
+    size_t         source_size,
+    uint8_t       *output,
+    size_t         output_capacity,
+    size_t        *output_at) {
     size_t source_at = 0;
     while (source_at < source_size) {
-        const uint8_t token = source[source_at++];
-        size_t literal_length = token >> 4;
-        size_t match_length;
-        size_t offset;
+        const uint8_t token          = source[source_at++];
+        size_t        literal_length = token >> 4;
+        size_t        match_length;
+        size_t        offset;
         if (literal_length == 15 && !extend_length(source, source_size, &source_at, &literal_length)) {
             return 0;
         }
@@ -445,7 +445,7 @@ static int decode_lz4_block(
             return 0;
         }
         memcpy(output + *output_at, source + source_at, literal_length);
-        source_at += literal_length;
+        source_at  += literal_length;
         *output_at += literal_length;
         if (source_at == source_size) {
             return 1;
@@ -453,7 +453,7 @@ static int decode_lz4_block(
         if (source_size - source_at < 2) {
             return 0;
         }
-        offset = (size_t)source[source_at] | ((size_t)source[source_at + 1] << 8);
+        offset     = (size_t)source[source_at] | ((size_t)source[source_at + 1] << 8);
         source_at += 2;
         if (offset == 0 || offset > *output_at) {
             return 0;
@@ -474,16 +474,16 @@ static int decode_lz4_block(
 }
 
 static edds_status decode_lz4(
-    FILE *input,
-    const edds_mip *mip,
+    FILE             *input,
+    const edds_mip   *mip,
     edds_cancelled_fn cancel,
-    void *context,
-    uint8_t *output,
-    edds_error *error) {
-    uint8_t word[4];
-    uint64_t consumed = 4;
-    size_t output_at = 0;
-    int saw_final = 0;
+    void             *context,
+    uint8_t          *output,
+    edds_error       *error) {
+    uint8_t  word[4];
+    uint64_t consumed  = 4;
+    size_t   output_at = 0;
+    int      saw_final = 0;
     if (!seek_to(input, mip->data_offset) || !read_exact(input, word, sizeof word) ||
         u32le(word) != mip->decoded_bytes) {
         fail(error, "changed-input", "The LZ4 payload no longer matches its inspection.");
@@ -493,7 +493,7 @@ static edds_status decode_lz4(
         uint32_t framed;
         uint32_t compressed_size;
         uint8_t *compressed;
-        size_t block_output_at;
+        size_t   block_output_at;
         if (cancelled(cancel, context, error)) {
             return EDDS_CANCELLED;
         }
@@ -501,9 +501,9 @@ static edds_status decode_lz4(
             fail(error, "truncated-lz4-block", "An LZ4 block header is truncated.");
             return EDDS_INVALID_INPUT;
         }
-        framed = u32le(word);
-        compressed_size = framed & 0x7fffffffu;
-        consumed += 4;
+        framed           = u32le(word);
+        compressed_size  = framed & 0x7fffffffu;
+        consumed        += 4;
         if (compressed_size == 0 || compressed_size > EDDS_MAX_LZ4_STORED_BLOCK ||
             compressed_size > mip->stored_bytes - consumed) {
             fail(error, "changed-input", "An LZ4 block no longer matches its inspection.");
@@ -541,19 +541,19 @@ static edds_status decode_lz4(
 }
 
 edds_status edds_preview(
-    FILE *input,
-    const edds_info *info,
-    uint32_t level,
+    FILE             *input,
+    const edds_info  *info,
+    uint32_t          level,
     edds_cancelled_fn cancel,
-    void *cancel_context,
-    uint8_t **rgba,
-    size_t *rgba_size,
-    edds_error *error) {
+    void             *cancel_context,
+    uint8_t         **rgba,
+    size_t           *rgba_size,
+    edds_error       *error) {
     const edds_mip *mip;
-    uint8_t *raw;
-    uint8_t *pixels;
-    uint32_t decoded_bytes = 0;
-    edds_status status = EDDS_OK;
+    uint8_t        *raw;
+    uint8_t        *pixels;
+    uint32_t        decoded_bytes = 0;
+    edds_status     status        = EDDS_OK;
     if (rgba != NULL) {
         *rgba = NULL;
     }
@@ -580,7 +580,7 @@ edds_status edds_preview(
         fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.", level);
         return EDDS_INVALID_INPUT;
     }
-    raw = edds_alloc(mip->decoded_bytes);
+    raw    = edds_alloc(mip->decoded_bytes);
     pixels = edds_alloc(decoded_bytes);
     if (raw == NULL || pixels == NULL) {
         edds_free(raw);
@@ -604,9 +604,9 @@ edds_status edds_preview(
                 level, edds_pixel_format_name(info->pixel_format));
             status = EDDS_INVALID_INPUT;
         } else {
-            *rgba = pixels;
+            *rgba      = pixels;
             *rgba_size = decoded_bytes;
-            pixels = NULL;
+            pixels     = NULL;
         }
     }
     edds_free(raw);
@@ -621,11 +621,11 @@ const char *edds_container_name(edds_container container) {
 const char *edds_status_category(edds_status status) {
     switch (status) {
         case EDDS_INVALID_INVOCATION: return "invalid-invocation";
-        case EDDS_INVALID_INPUT: return "invalid-input";
+        case EDDS_INVALID_INPUT:      return "invalid-input";
         case EDDS_UNSUPPORTED_FORMAT: return "unsupported-format";
-        case EDDS_CANCELLED: return "cancelled";
-        case EDDS_INTERNAL_FAILURE: return "internal-failure";
-        case EDDS_OK: return "success";
-        default: return "internal-failure";
+        case EDDS_CANCELLED:          return "cancelled";
+        case EDDS_INTERNAL_FAILURE:   return "internal-failure";
+        case EDDS_OK:                 return "success";
+        default:                      return "internal-failure";
     }
 }

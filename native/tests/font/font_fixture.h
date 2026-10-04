@@ -24,7 +24,7 @@ typedef enum font_fixture_variant {
     FONT_FIXTURE_CROWDED
 } font_fixture_variant;
 
-#define FONT_FIXTURE_UNITS_PER_EM 1000u
+#define FONT_FIXTURE_UNITS_PER_EM  1000u
 #define FONT_FIXTURE_CROWDED_FIRST 0x4E00u
 #define FONT_FIXTURE_CROWDED_COUNT 7000u
 
@@ -33,18 +33,18 @@ test_bytes font_fixture(font_fixture_variant variant);
 typedef struct font_fixture_point {
     double x;
     double y;
-    int on_curve;
+    int    on_curve;
 } font_fixture_point;
 
 /** One character's outline in font units, composites composed, in TrueType point form. */
 typedef struct font_fixture_outline {
     font_fixture_point *points;
-    size_t point_count;
+    size_t              point_count;
     /** Index one past the last point of each contour. */
-    size_t *contour_ends;
-    size_t contour_count;
+    size_t             *contour_ends;
+    size_t              contour_count;
     /** The advance the font gives the character, after any USE_MY_METRICS. */
-    int advance;
+    int                 advance;
 } font_fixture_outline;
 
 /** Characters the font maps, ascending. */
@@ -60,7 +60,7 @@ typedef struct font_fixture_pair {
     uint32_t left;
     uint32_t right;
     /** Font units, as planted: the XAdvance of the first glyph. */
-    int value;
+    int      value;
 } font_fixture_pair;
 
 /**

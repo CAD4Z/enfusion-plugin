@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { DDS_HEADER_BYTES = 128 };
+enum {
+    DDS_HEADER_BYTES = 128
+};
 
 static void put_u32(uint8_t *at, uint32_t value) {
     at[0] = (uint8_t)value;
@@ -37,10 +39,10 @@ static uint32_t crc32(const uint8_t *bytes, size_t size) {
 }
 
 static uint32_t adler32(const uint8_t *bytes, size_t size) {
-    uint32_t first = 1;
+    uint32_t first  = 1;
     uint32_t second = 0;
     for (size_t at = 0; at < size; ++at) {
-        first = (first + bytes[at]) % 65521u;
+        first  = (first + bytes[at]) % 65521u;
         second = (second + first) % 65521u;
     }
     return (second << 16) | first;
@@ -57,12 +59,12 @@ static size_t png_chunk(uint8_t *output, const char type[4], const uint8_t *data
 }
 
 static void header(
-    uint8_t *bytes,
-    uint32_t width,
-    uint32_t height,
-    uint32_t mips,
+    uint8_t   *bytes,
+    uint32_t   width,
+    uint32_t   height,
+    uint32_t   mips,
     const char four_cc[4],
-    uint32_t alpha_mask) {
+    uint32_t   alpha_mask) {
     memset(bytes, 0, DDS_HEADER_BYTES);
     memcpy(bytes, "DDS ", 4);
     put_u32(bytes + 4, 124);
@@ -113,13 +115,13 @@ test_bytes fixture_copy_bgra(void) {
 }
 
 static size_t literal_block(uint8_t *output, const uint8_t *raw, size_t length) {
-    size_t at = 0;
+    size_t at        = 0;
     size_t remaining = length > 15u ? length - 15u : 0u;
-    output[at++] = (uint8_t)((length < 15u ? length : 15u) << 4);
+    output[at++]     = (uint8_t)((length < 15u ? length : 15u) << 4);
     if (length >= 15u) {
         while (remaining >= 255u) {
-            output[at++] = 255u;
-            remaining -= 255u;
+            output[at++]  = 255u;
+            remaining    -= 255u;
         }
         output[at++] = (uint8_t)remaining;
     }
@@ -129,10 +131,10 @@ static size_t literal_block(uint8_t *output, const uint8_t *raw, size_t length) 
 
 test_bytes fixture_lz4_bgrx(void) {
     static const uint8_t raw[] = { 3, 2, 1, 0, 6, 5, 4, 17 };
-    uint8_t compressed[32];
-    const size_t compressed_size = literal_block(compressed, raw, sizeof raw);
-    const uint32_t stored = (uint32_t)(4u + 4u + compressed_size);
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 8u + stored);
+    uint8_t              compressed[32];
+    const size_t         compressed_size = literal_block(compressed, raw, sizeof raw);
+    const uint32_t       stored          = (uint32_t)(4u + 4u + compressed_size);
+    test_bytes           fixture         = allocated(DDS_HEADER_BYTES + 8u + stored);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -147,16 +149,18 @@ test_bytes fixture_lz4_bgrx(void) {
 }
 
 test_bytes fixture_lz4_streaming_bgrx(void) {
-    enum { RAW_BYTES = 256 * 65 * 4,
-        FIRST_BYTES = 65536 };
+    enum {
+        RAW_BYTES   = 256 * 65 * 4,
+        FIRST_BYTES = 65536
+    };
 
-    uint8_t *raw = malloc(RAW_BYTES);
-    uint8_t *first = malloc(FIRST_BYTES + 300u);
-    size_t first_size;
+    uint8_t             *raw   = malloc(RAW_BYTES);
+    uint8_t             *first = malloc(FIRST_BYTES + 300u);
+    size_t               first_size;
     static const uint8_t second[] = { 0x0f, 0x04, 0x00, 0xff, 0xff, 0xff, 0xf0 };
-    test_bytes fixture;
-    size_t payload;
-    size_t at;
+    test_bytes           fixture;
+    size_t               payload;
+    size_t               at;
 
     if (raw == NULL || first == NULL) {
         free(raw);
@@ -166,14 +170,14 @@ test_bytes fixture_lz4_streaming_bgrx(void) {
         return fixture;
     }
     for (size_t index = 0; index < RAW_BYTES; index += 4u) {
-        raw[index] = 3;
+        raw[index]      = 3;
         raw[index + 1u] = 2;
         raw[index + 2u] = 1;
         raw[index + 3u] = 99;
     }
     first_size = literal_block(first, raw, FIRST_BYTES);
-    payload = 4u + 4u + first_size + 4u + sizeof second;
-    fixture = allocated(DDS_HEADER_BYTES + 8u + payload);
+    payload    = 4u + 4u + first_size + 4u + sizeof second;
+    fixture    = allocated(DDS_HEADER_BYTES + 8u + payload);
     if (fixture.data != NULL) {
         header(fixture.data, 256, 65, 1, "\0\0\0\0", 0u);
         memcpy(fixture.data + 128, "LZ4 ", 4);
@@ -195,8 +199,8 @@ test_bytes fixture_lz4_streaming_bgrx(void) {
 }
 
 test_bytes fixture_dx10_bgrx(void) {
-    static const uint8_t raw[] = { 30, 20, 10, 77, 60, 50, 40, 88 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u + 8u + sizeof raw);
+    static const uint8_t raw[]   = { 30, 20, 10, 77, 60, 50, 40, 88 };
+    test_bytes           fixture = allocated(DDS_HEADER_BYTES + 20u + 8u + sizeof raw);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -214,7 +218,7 @@ test_bytes fixture_dx10_bgrx(void) {
 
 test_bytes fixture_dxt1(void) {
     static const uint8_t block[8] = { 0 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 8u + sizeof block);
+    test_bytes           fixture  = allocated(DDS_HEADER_BYTES + 8u + sizeof block);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -248,9 +252,9 @@ test_bytes fixture_dds_bgrx_mips(void) {
         15, 14, 13, 0, 18, 17, 16, 0, 21, 20, 19, 0, 24, 23, 22, 0
     };
     static const uint8_t middle[] = { 33, 22, 11, 0, 66, 55, 44, 0 };
-    static const uint8_t last[] = { 99, 88, 77, 0 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
-    size_t at = DDS_HEADER_BYTES;
+    static const uint8_t last[]   = { 99, 88, 77, 0 };
+    test_bytes           fixture  = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
+    size_t               at       = DDS_HEADER_BYTES;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -283,7 +287,7 @@ test_bytes fixture_dds_bgrx_top(void) {
 
 test_bytes fixture_dds_dxt1_top(void) {
     static const uint8_t block[8] = { 0 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof block);
+    test_bytes           fixture  = allocated(DDS_HEADER_BYTES + sizeof block);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -297,7 +301,7 @@ test_bytes fixture_dds_dxt1_top(void) {
 
 test_bytes fixture_dds_dxt5_top(void) {
     static const uint8_t block[16] = { 0 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof block);
+    test_bytes           fixture   = allocated(DDS_HEADER_BYTES + sizeof block);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -315,9 +319,9 @@ test_bytes fixture_dds_bgra_alpha_mips(void) {
         15, 14, 13, 255, 18, 17, 16, 255, 21, 20, 19, 255, 24, 23, 22, 255
     };
     static const uint8_t middle[] = { 33, 22, 11, 128, 66, 55, 44, 128 };
-    static const uint8_t last[] = { 99, 88, 77, 64 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
-    size_t at = DDS_HEADER_BYTES;
+    static const uint8_t last[]   = { 99, 88, 77, 64 };
+    test_bytes           fixture  = allocated(DDS_HEADER_BYTES + sizeof top + sizeof middle + sizeof last);
+    size_t               at       = DDS_HEADER_BYTES;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -332,12 +336,12 @@ test_bytes fixture_dds_bgra_alpha_mips(void) {
 }
 
 test_bytes fixture_dds_dx10_top(
-    uint32_t dxgi_format,
+    uint32_t       dxgi_format,
     const uint8_t *payload,
-    size_t payload_size,
-    uint32_t bytes_per_pixel) {
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u + payload_size);
-    const int compressed = bytes_per_pixel == 0u;
+    size_t         payload_size,
+    uint32_t       bytes_per_pixel) {
+    test_bytes fixture    = allocated(DDS_HEADER_BYTES + 20u + payload_size);
+    const int  compressed = bytes_per_pixel == 0u;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -353,12 +357,12 @@ test_bytes fixture_dds_dx10_top(
 }
 
 test_bytes fixture_dds_dx10_r8_mips(void) {
-    static const uint8_t top[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    static const uint8_t top[]    = { 1, 2, 3, 4, 5, 6, 7, 8 };
     static const uint8_t middle[] = { 11, 22 };
-    static const uint8_t last[] = { 33 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u +
-        sizeof top + sizeof middle + sizeof last);
-    size_t at = DDS_HEADER_BYTES + 20u;
+    static const uint8_t last[]   = { 33 };
+    test_bytes           fixture  = allocated(DDS_HEADER_BYTES + 20u +
+                   sizeof top + sizeof middle + sizeof last);
+    size_t               at       = DDS_HEADER_BYTES + 20u;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -377,9 +381,9 @@ test_bytes fixture_dds_dx10_r8_mips(void) {
 }
 
 test_bytes fixture_odd_fourcc(void) {
-    static const char odd_fourcc[4] = { 'Q', '"', '\\', '\1' };
-    static const uint8_t block[8] = { 0 };
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 8u + sizeof block);
+    static const char    odd_fourcc[4] = { 'Q', '"', '\\', '\1' };
+    static const uint8_t block[8]      = { 0 };
+    test_bytes           fixture       = allocated(DDS_HEADER_BYTES + 8u + sizeof block);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -407,18 +411,18 @@ static void fixture_bits(uint8_t *bytes, size_t *bit, unsigned value, unsigned c
 
 test_bytes fixture_png_flat(uint32_t side) {
     const uint32_t filtered = (side * 4u + 1u) * side;
-    const size_t capacity = (size_t)filtered / 258u * 2u + 2048u;
-    test_bytes fixture;
-    uint8_t *idat;
-    uint8_t ihdr[13] = { 0 };
-    size_t bit = 16u;
-    size_t at = 8u;
-    uint32_t remaining = filtered - 1u;
+    const size_t   capacity = (size_t)filtered / 258u * 2u + 2048u;
+    test_bytes     fixture;
+    uint8_t       *idat;
+    uint8_t        ihdr[13]  = { 0 };
+    size_t         bit       = 16u;
+    size_t         at        = 8u;
+    uint32_t       remaining = filtered - 1u;
     if (side == 0u || side > 4096u) {
         return (test_bytes){ NULL, 0 };
     }
     fixture = allocated(capacity + 64u);
-    idat = calloc(1u, capacity);
+    idat    = calloc(1u, capacity);
     if (fixture.data == NULL || idat == NULL) {
         fixture_free(fixture);
         free(idat);
@@ -426,11 +430,11 @@ test_bytes fixture_png_flat(uint32_t side) {
     }
     idat[0] = 0x78;
     idat[1] = 0x01;
-    fixture_bits(idat, &bit, 3u, 3u); /* Final block, fixed Huffman. */
+    fixture_bits(idat, &bit, 3u, 3u);  /* Final block, fixed Huffman. */
     fixture_bits(idat, &bit, 12u, 8u); /* Literal zero. */
     while (remaining >= 258u) {
         fixture_bits(idat, &bit, 163u, 8u); /* Length 258. */
-        fixture_bits(idat, &bit, 0u, 5u); /* Distance one. */
+        fixture_bits(idat, &bit, 0u, 5u);   /* Distance one. */
         remaining -= 258u;
     }
     while (remaining-- > 0u) {
@@ -441,12 +445,12 @@ test_bytes fixture_png_flat(uint32_t side) {
     memcpy(fixture.data, "\x89PNG\r\n\x1a\n", 8u);
     put_u32be(ihdr, side);
     put_u32be(ihdr + 4u, side);
-    ihdr[8] = 8u;
-    ihdr[9] = 6u;
-    at += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
-    at += png_chunk(fixture.data + at, "IDAT", idat, (uint32_t)((bit + 7u) / 8u + 4u));
-    at += png_chunk(fixture.data + at, "IEND", NULL, 0u);
-    fixture.size = at;
+    ihdr[8]       = 8u;
+    ihdr[9]       = 6u;
+    at           += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
+    at           += png_chunk(fixture.data + at, "IDAT", idat, (uint32_t)((bit + 7u) / 8u + 4u));
+    at           += png_chunk(fixture.data + at, "IEND", NULL, 0u);
+    fixture.size  = at;
     free(idat);
     return fixture;
 }
@@ -456,10 +460,10 @@ test_bytes fixture_png_rgba(void) {
         0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120,
         0, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220
     };
-    uint8_t ihdr[13] = { 0 };
-    uint8_t idat[2u + 5u + sizeof filtered + 4u];
+    uint8_t    ihdr[13] = { 0 };
+    uint8_t    idat[2u + 5u + sizeof filtered + 4u];
     test_bytes fixture = allocated(8u + 25u + 12u + sizeof idat + 12u);
-    size_t at = 0;
+    size_t     at      = 0;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -467,34 +471,34 @@ test_bytes fixture_png_rgba(void) {
     at += 8;
     put_u32be(ihdr, 3);
     put_u32be(ihdr + 4, 2);
-    ihdr[8] = 8;
-    ihdr[9] = 6;
-    at += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
-    idat[0] = 0x78;
-    idat[1] = 0x01;
-    idat[2] = 0x01;
-    idat[3] = (uint8_t)sizeof filtered;
-    idat[4] = 0;
-    idat[5] = (uint8_t)(~(uint32_t)sizeof filtered & 0xffu);
-    idat[6] = 0xff;
+    ihdr[8]  = 8;
+    ihdr[9]  = 6;
+    at      += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
+    idat[0]  = 0x78;
+    idat[1]  = 0x01;
+    idat[2]  = 0x01;
+    idat[3]  = (uint8_t)sizeof filtered;
+    idat[4]  = 0;
+    idat[5]  = (uint8_t)(~(uint32_t)sizeof filtered & 0xffu);
+    idat[6]  = 0xff;
     memcpy(idat + 7, filtered, sizeof filtered);
     put_u32be(idat + 7u + sizeof filtered, adler32(filtered, sizeof filtered));
-    at += png_chunk(fixture.data + at, "IDAT", idat, sizeof idat);
-    at += png_chunk(fixture.data + at, "IEND", NULL, 0);
-    fixture.size = at;
+    at           += png_chunk(fixture.data + at, "IDAT", idat, sizeof idat);
+    at           += png_chunk(fixture.data + at, "IEND", NULL, 0);
+    fixture.size  = at;
     return fixture;
 }
 
 test_bytes fixture_png_rgb_keyed(void) {
     /* Two RGB pixels, (10,20,30) and (40,50,60); the first is the transparent key. */
     static const uint8_t filtered[] = { 0, 10, 20, 30, 40, 50, 60 };
-    static const uint8_t palette[] = { 1, 2, 3, 4, 5, 6 };
-    static const uint8_t key[] = { 0, 10, 0, 20, 0, 30 };
-    uint8_t ihdr[13] = { 0 };
-    uint8_t idat[2u + 5u + sizeof filtered + 4u];
+    static const uint8_t palette[]  = { 1, 2, 3, 4, 5, 6 };
+    static const uint8_t key[]      = { 0, 10, 0, 20, 0, 30 };
+    uint8_t              ihdr[13]   = { 0 };
+    uint8_t              idat[2u + 5u + sizeof filtered + 4u];
     /* Every byte of the zlib stream in an IDAT of its own: one stream, many consecutive chunks. */
-    test_bytes fixture = allocated(8u + 25u + 18u + 18u + sizeof idat * 13u + 12u);
-    size_t at = 0;
+    test_bytes           fixture = allocated(8u + 25u + 18u + 18u + sizeof idat * 13u + 12u);
+    size_t               at      = 0;
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -502,33 +506,33 @@ test_bytes fixture_png_rgb_keyed(void) {
     at += 8;
     put_u32be(ihdr, 2);
     put_u32be(ihdr + 4, 1);
-    ihdr[8] = 8;
-    ihdr[9] = 2;
-    at += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
-    at += png_chunk(fixture.data + at, "PLTE", palette, sizeof palette);
-    at += png_chunk(fixture.data + at, "tRNS", key, sizeof key);
-    idat[0] = 0x78;
-    idat[1] = 0x01;
-    idat[2] = 0x01;
-    idat[3] = (uint8_t)sizeof filtered;
-    idat[4] = 0;
-    idat[5] = (uint8_t)(~(uint32_t)sizeof filtered & 0xffu);
-    idat[6] = 0xff;
+    ihdr[8]  = 8;
+    ihdr[9]  = 2;
+    at      += png_chunk(fixture.data + at, "IHDR", ihdr, sizeof ihdr);
+    at      += png_chunk(fixture.data + at, "PLTE", palette, sizeof palette);
+    at      += png_chunk(fixture.data + at, "tRNS", key, sizeof key);
+    idat[0]  = 0x78;
+    idat[1]  = 0x01;
+    idat[2]  = 0x01;
+    idat[3]  = (uint8_t)sizeof filtered;
+    idat[4]  = 0;
+    idat[5]  = (uint8_t)(~(uint32_t)sizeof filtered & 0xffu);
+    idat[6]  = 0xff;
     memcpy(idat + 7, filtered, sizeof filtered);
     put_u32be(idat + 7u + sizeof filtered, adler32(filtered, sizeof filtered));
     for (size_t part = 0; part < sizeof idat; ++part) {
         at += png_chunk(fixture.data + at, "IDAT", idat + part, 1u);
     }
-    at += png_chunk(fixture.data + at, "IEND", NULL, 0);
-    fixture.size = at;
+    at           += png_chunk(fixture.data + at, "IEND", NULL, 0);
+    fixture.size  = at;
     return fixture;
 }
 
 test_bytes fixture_png_rgba_gamma(void) {
-    test_bytes base = fixture_png_rgba();
+    test_bytes base    = fixture_png_rgba();
     test_bytes fixture = allocated(base.size + 16u);
-    uint8_t gamma[4];
-    size_t at = 33u;
+    uint8_t    gamma[4];
+    size_t     at = 33u;
     if (base.data == NULL || fixture.data == NULL) {
         fixture_free(base);
         fixture_free(fixture);
@@ -558,22 +562,24 @@ test_bytes fixture_tga_bgrx(void) {
 }
 
 test_bytes fixture_tga_gpu_gradient(void) {
-    enum { WIDTH = 9,
-        HEIGHT = 5 };
+    enum {
+        WIDTH  = 9,
+        HEIGHT = 5
+    };
 
-    uint8_t bgra[WIDTH * HEIGHT * 4];
+    uint8_t    bgra[WIDTH * HEIGHT * 4];
     test_bytes fixture = allocated(18u + sizeof bgra);
     if (fixture.data == NULL) {
         return fixture;
     }
     for (uint32_t y = 0; y < HEIGHT; ++y) {
         for (uint32_t x = 0; x < WIDTH; ++x) {
-            uint8_t *pixel = bgra + ((size_t)y * WIDTH + x) * 4u;
-            const uint8_t red = (uint8_t)((x * 255u) / (WIDTH - 1u));
-            pixel[0] = (uint8_t)(255u - red);
-            pixel[1] = (uint8_t)((y * 255u) / (HEIGHT - 1u));
-            pixel[2] = red;
-            pixel[3] = (uint8_t)(((x + y) * 255u) / (WIDTH + HEIGHT - 2u));
+            uint8_t      *pixel = bgra + ((size_t)y * WIDTH + x) * 4u;
+            const uint8_t red   = (uint8_t)((x * 255u) / (WIDTH - 1u));
+            pixel[0]            = (uint8_t)(255u - red);
+            pixel[1]            = (uint8_t)((y * 255u) / (HEIGHT - 1u));
+            pixel[2]            = red;
+            pixel[3]            = (uint8_t)(((x + y) * 255u) / (WIDTH + HEIGHT - 2u));
         }
     }
     fixture.size = fixture_tga_build(fixture.data, fixture.size, WIDTH, HEIGHT, 1, bgra);
@@ -581,21 +587,23 @@ test_bytes fixture_tga_gpu_gradient(void) {
 }
 
 test_bytes fixture_tga_gpu_flat(void) {
-    enum { SIDE = 16 };
+    enum {
+        SIDE = 16
+    };
 
-    uint8_t bgra[SIDE * SIDE * 4];
+    uint8_t    bgra[SIDE * SIDE * 4];
     test_bytes fixture = allocated(18u + sizeof bgra);
     if (fixture.data == NULL) {
         return fixture;
     }
     for (uint32_t y = 0; y < SIDE; ++y) {
         for (uint32_t x = 0; x < SIDE; ++x) {
-            uint8_t *pixel = bgra + ((size_t)y * SIDE + x) * 4u;
+            uint8_t       *pixel    = bgra + ((size_t)y * SIDE + x) * 4u;
             const uint32_t quadrant = (x < SIDE / 2u ? 0u : 1u) + (y < SIDE / 2u ? 0u : 2u);
-            pixel[0] = (uint8_t)(30u + quadrant * 60u);
-            pixel[1] = (uint8_t)(200u - quadrant * 50u);
-            pixel[2] = (uint8_t)(80u + quadrant * 40u);
-            pixel[3] = (uint8_t)(255u - quadrant * 30u);
+            pixel[0]                = (uint8_t)(30u + quadrant * 60u);
+            pixel[1]                = (uint8_t)(200u - quadrant * 50u);
+            pixel[2]                = (uint8_t)(80u + quadrant * 40u);
+            pixel[3]                = (uint8_t)(255u - quadrant * 30u);
         }
     }
     fixture.size = fixture_tga_build(fixture.data, fixture.size, SIDE, SIDE, 1, bgra);
@@ -607,18 +615,18 @@ size_t fixture_tga_bytes(uint32_t width, uint32_t height, int with_alpha) {
 }
 
 size_t fixture_tga_build(
-    uint8_t *output,
-    size_t capacity,
-    uint32_t width,
-    uint32_t height,
-    int with_alpha,
+    uint8_t       *output,
+    size_t         capacity,
+    uint32_t       width,
+    uint32_t       height,
+    int            with_alpha,
     const uint8_t *bgra) {
     const size_t total = fixture_tga_bytes(width, height, with_alpha);
     if (output == NULL || capacity < total) {
         return 0;
     }
     memset(output, 0, 18);
-    output[2] = 2;
+    output[2]  = 2;
     output[12] = (uint8_t)(width & 0xffu);
     output[13] = (uint8_t)(width >> 8);
     output[14] = (uint8_t)(height & 0xffu);
@@ -642,16 +650,16 @@ size_t fixture_tiff_ifd_end(size_t tag_count) {
 }
 
 size_t fixture_tiff_build(
-    uint8_t *output,
-    size_t capacity,
-    int big_endian,
+    uint8_t                *output,
+    size_t                  capacity,
+    int                     big_endian,
     const fixture_tiff_tag *tags,
-    size_t tag_count,
-    const uint8_t *trailing,
-    size_t trailing_size) {
+    size_t                  tag_count,
+    const uint8_t          *trailing,
+    size_t                  trailing_size) {
     const size_t ifd_end = fixture_tiff_ifd_end(tag_count);
-    const size_t total = ifd_end + trailing_size;
-    size_t at;
+    const size_t total   = ifd_end + trailing_size;
+    size_t       at;
     if (output == NULL || capacity < total) {
         return 0;
     }
@@ -667,11 +675,11 @@ size_t fixture_tiff_build(
         output[9] = (uint8_t)(tag_count >> 8);
     }
     for (at = 0; at < tag_count; ++at) {
-        uint8_t *entry = output + 10u + at * 12u;
-        const uint32_t element = tags[at].type == 1u || tags[at].type == 2u ? 1u
-            : tags[at].type == 3u                                           ? 2u
-                                                                            : 4u;
-        const int inline_short = tags[at].count == 1u && element == 2u;
+        uint8_t       *entry        = output + 10u + at * 12u;
+        const uint32_t element      = tags[at].type == 1u || tags[at].type == 2u ? 1u
+                 : tags[at].type == 3u                                           ? 2u
+                                                                                 : 4u;
+        const int      inline_short = tags[at].count == 1u && element == 2u;
         if (big_endian) {
             entry[0] = (uint8_t)(tags[at].tag >> 8);
             entry[1] = (uint8_t)tags[at].tag;
@@ -705,14 +713,14 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
      * block decodes to a flat sample a test can predict exactly: coefficient / 8 + 128.
      */
     static const uint8_t quantisation[65] = { 0 };
-    static const uint8_t dc_table[20] = {
+    static const uint8_t dc_table[20]     = {
         0x00, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x09, 0x0a
     };
     static const uint8_t ac_table[18] = {
         0x10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00
     };
     const uint8_t components = spec->component_count;
-    size_t at = 0;
+    size_t        at         = 0;
     if (output == NULL || components == 0u || components > 3u) {
         return 0;
     }
@@ -737,17 +745,17 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
     for (size_t entry = 1; entry <= 64u; ++entry) {
         output[at + entry] = 1;
     }
-    at += sizeof quantisation;
-    output[at++] = 0xff;
-    output[at++] = spec->frame_marker;
+    at           += sizeof quantisation;
+    output[at++]  = 0xff;
+    output[at++]  = spec->frame_marker;
     put_u16be(output + at, (uint16_t)(8u + (size_t)components * 3u));
-    at += 2;
-    output[at++] = spec->precision;
+    at           += 2;
+    output[at++]  = spec->precision;
     put_u16be(output + at, spec->height);
     at += 2;
     put_u16be(output + at, spec->width);
-    at += 2;
-    output[at++] = components;
+    at           += 2;
+    output[at++]  = components;
     for (uint8_t component = 0; component < components; ++component) {
         output[at++] = (uint8_t)(component + 1u);
         output[at++] = component == 0u ? spec->luma_sampling : 0x11u;
@@ -758,9 +766,9 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
     put_u16be(output + at, (uint16_t)(sizeof dc_table + 2u));
     at += 2;
     memcpy(output + at, dc_table, sizeof dc_table);
-    at += sizeof dc_table;
-    output[at++] = 0xff;
-    output[at++] = 0xc4;
+    at           += sizeof dc_table;
+    output[at++]  = 0xff;
+    output[at++]  = 0xc4;
     put_u16be(output + at, (uint16_t)(sizeof ac_table + 2u));
     at += 2;
     memcpy(output + at, ac_table, sizeof ac_table);
@@ -776,8 +784,8 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
     output[at++] = 0xff;
     output[at++] = 0xda;
     put_u16be(output + at, (uint16_t)(6u + (size_t)components * 2u));
-    at += 2;
-    output[at++] = components;
+    at           += 2;
+    output[at++]  = components;
     for (uint8_t component = 0; component < components; ++component) {
         output[at++] = (uint8_t)(component + 1u);
         output[at++] = 0x00;
@@ -797,8 +805,8 @@ size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_s
 /** 16x8 in two flat DC-only MCUs: grey 78 on the left, grey 178 on the right. */
 test_bytes fixture_jpeg_ycbcr(void) {
     static const uint8_t entropy[] = { 0x8d, 0xe0, 0xf2, 0x00, 0x7f };
-    fixture_jpeg_spec spec = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
-    test_bytes fixture = allocated(512);
+    fixture_jpeg_spec    spec      = { .frame_marker = 0xc0, .precision = 8, .width = 16, .height = 8, .component_count = 3, .luma_sampling = 0x11, .entropy = entropy, .entropy_size = sizeof entropy };
+    test_bytes           fixture   = allocated(512);
     if (fixture.data == NULL) {
         return fixture;
     }
@@ -816,9 +824,9 @@ test_bytes fixture_tiff_rgb(void) {
         10, 20, 30, 40, 50, 60, 70, 80, 90,
         100, 110, 120, 130, 140, 150, 160, 170, 180
     };
-    const uint32_t bits_at = (uint32_t)fixture_tiff_ifd_end(9);
-    const uint32_t pixels_at = bits_at + 6u;
-    const fixture_tiff_tag tags[9] = {
+    const uint32_t         bits_at   = (uint32_t)fixture_tiff_ifd_end(9);
+    const uint32_t         pixels_at = bits_at + 6u;
+    const fixture_tiff_tag tags[9]   = {
         { 256, 3, 1, 3 },
         { 257, 3, 1, 2 },
         { 258, 3, 3, bits_at },
@@ -829,7 +837,7 @@ test_bytes fixture_tiff_rgb(void) {
         { 278, 3, 1, 2 },
         { 279, 4, 1, (uint32_t)sizeof pixels }
     };
-    uint8_t trailing[6 + sizeof pixels];
+    uint8_t    trailing[6 + sizeof pixels];
     test_bytes fixture = allocated(pixels_at + sizeof pixels);
     memset(trailing, 0, sizeof trailing);
     trailing[0] = 8;
@@ -852,7 +860,7 @@ void fixture_free(test_bytes fixture) {
 }
 
 int fixture_write(const char *path, test_bytes fixture) {
-    FILE *file = fopen(path, "wb");
+    FILE  *file = fopen(path, "wb");
     size_t written;
     if (file == NULL) {
         return 0;

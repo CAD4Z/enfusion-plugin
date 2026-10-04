@@ -19,9 +19,9 @@
 
 enum {
     JPEG_MAX_COMPONENTS = 3,
-    JPEG_QUANT_TABLES = 4,
+    JPEG_QUANT_TABLES   = 4,
     JPEG_HUFFMAN_TABLES = 2,
-    JPEG_BLOCK_SAMPLES = 64
+    JPEG_BLOCK_SAMPLES  = 64
 };
 
 static const uint8_t zigzag[JPEG_BLOCK_SAMPLES] = {
@@ -32,47 +32,47 @@ static const uint8_t zigzag[JPEG_BLOCK_SAMPLES] = {
 };
 
 typedef struct jpeg_huffman {
-    int defined;
-    uint8_t counts[17];
-    uint8_t values[256];
+    int      defined;
+    uint8_t  counts[17];
+    uint8_t  values[256];
     uint32_t total;
-    int32_t min_code[17];
-    int32_t max_code[17];
+    int32_t  min_code[17];
+    int32_t  max_code[17];
     uint32_t value_index[17];
 } jpeg_huffman;
 
 typedef struct jpeg_component {
-    uint8_t id;
+    uint8_t  id;
     uint32_t horizontal;
     uint32_t vertical;
     uint32_t quant_table;
     uint32_t dc_table;
     uint32_t ac_table;
-    int32_t dc_prediction;
+    int32_t  dc_prediction;
     uint32_t stride;
     uint32_t rows;
     uint8_t *plane;
 } jpeg_component;
 
 typedef struct jpeg_frame {
-    uint32_t width;
-    uint32_t height;
-    uint32_t component_count;
-    uint32_t horizontal_max;
-    uint32_t vertical_max;
-    uint32_t mcus_x;
-    uint32_t mcus_y;
+    uint32_t       width;
+    uint32_t       height;
+    uint32_t       component_count;
+    uint32_t       horizontal_max;
+    uint32_t       vertical_max;
+    uint32_t       mcus_x;
+    uint32_t       mcus_y;
     jpeg_component components[JPEG_MAX_COMPONENTS];
 } jpeg_frame;
 
 /** Entropy-coded bytes with JPEG's own stuffing removed, stopping dead at the next real marker. */
 typedef struct jpeg_entropy {
     const uint8_t *bytes;
-    size_t size;
-    size_t at;
-    uint32_t bits;
-    unsigned count;
-    int ended;
+    size_t         size;
+    size_t         at;
+    uint32_t       bits;
+    unsigned       count;
+    int            ended;
 } jpeg_entropy;
 
 /** cos(index * pi / 16) for any index, folded from one quarter turn so the table stays exact. */
@@ -114,9 +114,9 @@ static void jpeg_basis(double basis[8][8]) {
 
 static void jpeg_idct(
     const int32_t block[JPEG_BLOCK_SAMPLES],
-    double basis[8][8],
-    uint8_t *output,
-    size_t stride) {
+    double        basis[8][8],
+    uint8_t      *output,
+    size_t        stride) {
     double rows[JPEG_BLOCK_SAMPLES];
     for (uint32_t y = 0; y < 8u; ++y) {
         for (uint32_t x = 0; x < 8u; ++x) {
@@ -130,7 +130,7 @@ static void jpeg_idct(
     for (uint32_t x = 0; x < 8u; ++x) {
         for (uint32_t y = 0; y < 8u; ++y) {
             double sum = 0.0;
-            long rounded;
+            long   rounded;
             for (uint32_t frequency = 0; frequency < 8u; ++frequency) {
                 sum += basis[frequency][y] * rows[frequency * 8u + x];
             }
@@ -147,20 +147,20 @@ static void jpeg_idct(
 }
 
 static int jpeg_build_huffman(jpeg_huffman *table) {
-    uint32_t code = 0;
+    uint32_t code  = 0;
     uint32_t index = 0;
     for (uint32_t bits = 1; bits <= 16u; ++bits) {
-        table->value_index[bits] = index;
-        table->min_code[bits] = (int32_t)code;
-        code += table->counts[bits];
-        index += table->counts[bits];
+        table->value_index[bits]  = index;
+        table->min_code[bits]     = (int32_t)code;
+        code                     += table->counts[bits];
+        index                    += table->counts[bits];
         if (code > (1u << bits)) {
             return 0;
         }
-        table->max_code[bits] = table->counts[bits] == 0u ? -1 : (int32_t)(code - 1u);
-        code <<= 1;
+        table->max_code[bits]   = table->counts[bits] == 0u ? -1 : (int32_t)(code - 1u);
+        code                  <<= 1;
     }
-    table->total = index;
+    table->total   = index;
     table->defined = 1;
     return 1;
 }
@@ -183,14 +183,14 @@ static int jpeg_fill(jpeg_entropy *reader) {
         if (probe >= reader->size || reader->bytes[probe] != 0x00u) {
             /* A real marker. Leave the reader standing on its introducing 0xFF. */
             reader->ended = 1;
-            reader->at = probe >= reader->size ? reader->size : probe - 1u;
+            reader->at    = probe >= reader->size ? reader->size : probe - 1u;
             return 0;
         }
         reader->at = probe + 1u;
     } else {
         reader->at += 1u;
     }
-    reader->bits = (reader->bits << 8) | byte;
+    reader->bits   = (reader->bits << 8) | byte;
     reader->count += 8u;
     return 1;
 }
@@ -205,7 +205,7 @@ static int jpeg_take_bits(jpeg_entropy *reader, unsigned count, uint32_t *value)
             return 0;
         }
     }
-    *value = (reader->bits >> (reader->count - count)) & ((1u << count) - 1u);
+    *value         = (reader->bits >> (reader->count - count)) & ((1u << count) - 1u);
     reader->count -= count;
     return 1;
 }
@@ -253,9 +253,9 @@ static int jpeg_receive_extend(jpeg_entropy *reader, unsigned length, int32_t *v
 
 /** Byte-aligns on the expected RSTn and refuses a scan whose restart markers do not line up. */
 static int jpeg_restart(jpeg_entropy *reader, uint32_t index) {
-    size_t at = reader->at;
+    size_t at     = reader->at;
     size_t marker = at;
-    reader->bits = 0;
+    reader->bits  = 0;
     reader->count = 0;
     while (marker < reader->size && reader->bytes[marker] == 0xffu) {
         ++marker;
@@ -264,38 +264,38 @@ static int jpeg_restart(jpeg_entropy *reader, uint32_t index) {
         reader->bytes[marker] != (uint8_t)(0xd0u + (index % 8u))) {
         return 0;
     }
-    reader->at = marker + 1u;
+    reader->at    = marker + 1u;
     reader->ended = 0;
     return 1;
 }
 
 static int jpeg_decode_block(
-    jpeg_entropy *reader,
-    jpeg_component *component,
+    jpeg_entropy       *reader,
+    jpeg_component     *component,
     const jpeg_huffman *dc,
     const jpeg_huffman *ac,
-    const uint16_t *quant,
-    double basis[8][8],
-    uint8_t *output,
-    size_t stride) {
-    int32_t block[JPEG_BLOCK_SAMPLES] = { 0 };
-    uint8_t symbol;
-    int32_t difference;
+    const uint16_t     *quant,
+    double              basis[8][8],
+    uint8_t            *output,
+    size_t              stride) {
+    int32_t  block[JPEG_BLOCK_SAMPLES] = { 0 };
+    uint8_t  symbol;
+    int32_t  difference;
     uint32_t at = 1;
     if (!jpeg_decode_symbol(reader, dc, &symbol) || symbol > 16u ||
         !jpeg_receive_extend(reader, symbol, &difference)) {
         return 0;
     }
     component->dc_prediction += difference;
-    block[0] = component->dc_prediction * (int32_t)quant[0];
+    block[0]                  = component->dc_prediction * (int32_t)quant[0];
     while (at < JPEG_BLOCK_SAMPLES) {
         uint32_t run;
         uint32_t size;
-        int32_t value;
+        int32_t  value;
         if (!jpeg_decode_symbol(reader, ac, &symbol)) {
             return 0;
         }
-        run = (uint32_t)symbol >> 4;
+        run  = (uint32_t)symbol >> 4;
         size = (uint32_t)symbol & 0x0fu;
         if (size == 0u) {
             if (run != 15u) {
@@ -321,15 +321,15 @@ static int jpeg_decode_block(
  * left alone rather than turned into a refusal of its own.
  */
 static int jpeg_exif_orientation_supported(const uint8_t *segment, size_t size) {
-    int big_endian;
-    uint32_t ifd;
-    uint32_t entries;
+    int            big_endian;
+    uint32_t       ifd;
+    uint32_t       entries;
     const uint8_t *tiff;
-    size_t tiff_size;
+    size_t         tiff_size;
     if (size < 6u + 8u || memcmp(segment, "Exif\0\0", 6) != 0) {
         return 1;
     }
-    tiff = segment + 6u;
+    tiff      = segment + 6u;
     tiff_size = size - 6u;
     if (memcmp(tiff, "II\x2a\0", 4) == 0) {
         big_endian = 0;
@@ -348,8 +348,8 @@ static int jpeg_exif_orientation_supported(const uint8_t *segment, size_t size) 
     }
     for (uint32_t at = 0; at < entries; ++at) {
         const uint8_t *entry = tiff + ifd + 2u + (size_t)at * 12u;
-        const uint32_t tag = big_endian ? edds_u16be(entry) : edds_u16le(entry);
-        const uint32_t type = big_endian ? edds_u16be(entry + 2) : edds_u16le(entry + 2);
+        const uint32_t tag   = big_endian ? edds_u16be(entry) : edds_u16le(entry);
+        const uint32_t type  = big_endian ? edds_u16be(entry + 2) : edds_u16le(entry + 2);
         const uint32_t count = big_endian ? edds_u32be(entry + 4) : edds_u32le(entry + 4);
         if (tag != 274u || type != 3u || count != 1u) {
             continue;
@@ -361,9 +361,9 @@ static int jpeg_exif_orientation_supported(const uint8_t *segment, size_t size) 
 
 static edds_status jpeg_read_frame(
     const uint8_t *segment,
-    size_t size,
-    jpeg_frame *frame,
-    edds_error *error) {
+    size_t         size,
+    jpeg_frame    *frame,
+    edds_error    *error) {
     if (size < 6u) {
         edds_fail(error, "malformed-jpeg-frame", "The JPEG frame header is truncated.");
         return EDDS_INVALID_INPUT;
@@ -373,8 +373,8 @@ static edds_status jpeg_read_frame(
             "Only 8-bit sample precision is supported; this frame declares %u.", segment[0]);
         return EDDS_UNSUPPORTED_FORMAT;
     }
-    frame->height = edds_u16be(segment + 1);
-    frame->width = edds_u16be(segment + 3);
+    frame->height          = edds_u16be(segment + 1);
+    frame->width           = edds_u16be(segment + 3);
     frame->component_count = segment[5];
     if (frame->component_count != 1u && frame->component_count != 3u) {
         edds_fail(error, "unsupported-jpeg-components",
@@ -393,16 +393,16 @@ static edds_status jpeg_read_frame(
         return EDDS_INVALID_INPUT;
     }
     frame->horizontal_max = 1;
-    frame->vertical_max = 1;
+    frame->vertical_max   = 1;
     for (uint32_t at = 0; at < frame->component_count; ++at) {
         jpeg_component *component = &frame->components[at];
-        const uint8_t *entry = segment + 6u + (size_t)at * 3u;
-        component->id = entry[0];
-        component->horizontal = (uint32_t)entry[1] >> 4;
-        component->vertical = (uint32_t)entry[1] & 0x0fu;
-        component->quant_table = entry[2];
-        component->dc_prediction = 0;
-        component->plane = NULL;
+        const uint8_t  *entry     = segment + 6u + (size_t)at * 3u;
+        component->id             = entry[0];
+        component->horizontal     = (uint32_t)entry[1] >> 4;
+        component->vertical       = (uint32_t)entry[1] & 0x0fu;
+        component->quant_table    = entry[2];
+        component->dc_prediction  = 0;
+        component->plane          = NULL;
         if (component->quant_table >= JPEG_QUANT_TABLES) {
             edds_fail(error, "malformed-jpeg-frame",
                 "A JPEG component names quantisation table %u.", component->quant_table);
@@ -459,16 +459,16 @@ static edds_status jpeg_read_frame(
 static edds_status jpeg_allocate_planes(jpeg_frame *frame, edds_error *error) {
     for (uint32_t at = 0; at < frame->component_count; ++at) {
         jpeg_component *component = &frame->components[at];
-        const uint64_t stride = (uint64_t)frame->mcus_x * component->horizontal * 8u;
-        const uint64_t rows = (uint64_t)frame->mcus_y * component->vertical * 8u;
+        const uint64_t  stride    = (uint64_t)frame->mcus_x * component->horizontal * 8u;
+        const uint64_t  rows      = (uint64_t)frame->mcus_y * component->vertical * 8u;
         if (stride * rows > (uint64_t)EDDS_MAX_PREVIEW_BYTES) {
             edds_fail(error, "jpeg-decoded-size-limit",
                 "The JPEG component planes exceed the decoded-image limit.");
             return EDDS_INVALID_INPUT;
         }
         component->stride = (uint32_t)stride;
-        component->rows = (uint32_t)rows;
-        component->plane = edds_calloc((size_t)(stride * rows), 1u);
+        component->rows   = (uint32_t)rows;
+        component->plane  = edds_calloc((size_t)(stride * rows), 1u);
         if (component->plane == NULL) {
             edds_fail(error, "allocation-failed",
                 "Memory for the decoded JPEG could not be allocated.");
@@ -498,11 +498,11 @@ static void jpeg_resolve_pixels(const jpeg_frame *frame, uint8_t *rgba) {
     for (uint32_t y = 0; y < frame->height; ++y) {
         for (uint32_t x = 0; x < frame->width; ++x) {
             const size_t output_at = ((size_t)y * frame->width + x) * 4u;
-            uint8_t sample[JPEG_MAX_COMPONENTS];
+            uint8_t      sample[JPEG_MAX_COMPONENTS];
             for (uint32_t at = 0; at < frame->component_count; ++at) {
                 const jpeg_component *component = &frame->components[at];
-                uint32_t source_x = x * component->horizontal / frame->horizontal_max;
-                uint32_t source_y = y * component->vertical / frame->vertical_max;
+                uint32_t              source_x  = x * component->horizontal / frame->horizontal_max;
+                uint32_t              source_y  = y * component->vertical / frame->vertical_max;
                 if (source_x >= component->stride) {
                     source_x = component->stride - 1u;
                 }
@@ -512,14 +512,14 @@ static void jpeg_resolve_pixels(const jpeg_frame *frame, uint8_t *rgba) {
                 sample[at] = component->plane[(size_t)source_y * component->stride + source_x];
             }
             if (frame->component_count == 1u) {
-                rgba[output_at] = sample[0];
+                rgba[output_at]      = sample[0];
                 rgba[output_at + 1u] = sample[0];
                 rgba[output_at + 2u] = sample[0];
             } else {
-                const double luma = sample[0];
-                const double blue = (double)sample[1] - 128.0;
-                const double red = (double)sample[2] - 128.0;
-                rgba[output_at] = jpeg_clamp(luma + 1.402 * red);
+                const double luma    = sample[0];
+                const double blue    = (double)sample[1] - 128.0;
+                const double red     = (double)sample[2] - 128.0;
+                rgba[output_at]      = jpeg_clamp(luma + 1.402 * red);
                 rgba[output_at + 1u] = jpeg_clamp(luma - 0.344136 * blue - 0.714136 * red);
                 rgba[output_at + 2u] = jpeg_clamp(luma + 1.772 * blue);
             }
@@ -529,22 +529,22 @@ static void jpeg_resolve_pixels(const jpeg_frame *frame, uint8_t *rgba) {
 }
 
 typedef struct jpeg_state {
-    jpeg_frame frame;
-    uint16_t quant[JPEG_QUANT_TABLES][JPEG_BLOCK_SAMPLES];
-    int quant_defined[JPEG_QUANT_TABLES];
+    jpeg_frame   frame;
+    uint16_t     quant[JPEG_QUANT_TABLES][JPEG_BLOCK_SAMPLES];
+    int          quant_defined[JPEG_QUANT_TABLES];
     jpeg_huffman dc[JPEG_HUFFMAN_TABLES];
     jpeg_huffman ac[JPEG_HUFFMAN_TABLES];
-    uint32_t restart_interval;
-    int saw_frame;
-    int saw_scan;
-    int adobe_transform;
+    uint32_t     restart_interval;
+    int          saw_frame;
+    int          saw_scan;
+    int          adobe_transform;
 } jpeg_state;
 
 static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, size_t size, edds_error *error) {
     size_t at = 0;
     while (at < size) {
         const uint32_t precision = (uint32_t)segment[at] >> 4;
-        const uint32_t slot = (uint32_t)segment[at] & 0x0fu;
+        const uint32_t slot      = (uint32_t)segment[at] & 0x0fu;
         ++at;
         if (precision != 0u) {
             edds_fail(error, "unsupported-jpeg-quantisation",
@@ -558,8 +558,8 @@ static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, si
         for (uint32_t entry = 0; entry < JPEG_BLOCK_SAMPLES; ++entry) {
             state->quant[slot][entry] = segment[at + entry];
         }
-        state->quant_defined[slot] = 1;
-        at += JPEG_BLOCK_SAMPLES;
+        state->quant_defined[slot]  = 1;
+        at                         += JPEG_BLOCK_SAMPLES;
     }
     return EDDS_OK;
 }
@@ -567,9 +567,9 @@ static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, si
 static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, size_t size, edds_error *error) {
     size_t at = 0;
     while (at < size) {
-        uint32_t kind;
-        uint32_t slot;
-        uint32_t total = 0;
+        uint32_t      kind;
+        uint32_t      slot;
+        uint32_t      total = 0;
         jpeg_huffman *table;
         if (size - at < 17u) {
             edds_fail(error, "malformed-jpeg-huffman", "A JPEG Huffman table is truncated.");
@@ -585,8 +585,8 @@ static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, 
         table = kind == 0u ? &state->dc[slot] : &state->ac[slot];
         memset(table, 0, sizeof *table);
         for (uint32_t bits = 1; bits <= 16u; ++bits) {
-            table->counts[bits] = segment[at + bits];
-            total += table->counts[bits];
+            table->counts[bits]  = segment[at + bits];
+            total               += table->counts[bits];
         }
         if (total > 256u || size - at - 17u < total) {
             edds_fail(error, "malformed-jpeg-huffman", "A JPEG Huffman table declares more codes than it carries.");
@@ -603,20 +603,20 @@ static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, 
 }
 
 static edds_status jpeg_read_scan(
-    jpeg_state *state,
+    jpeg_state    *state,
     const uint8_t *segment,
-    size_t size,
+    size_t         size,
     const uint8_t *file,
-    size_t file_size,
-    size_t scan_at,
-    size_t *resume_at,
-    edds_error *error) {
-    jpeg_frame *frame = &state->frame;
+    size_t         file_size,
+    size_t         scan_at,
+    size_t        *resume_at,
+    edds_error    *error) {
+    jpeg_frame  *frame = &state->frame;
     jpeg_entropy reader;
-    double basis[8][8];
-    uint32_t declared;
-    uint32_t named = 0;
-    uint64_t total_mcus;
+    double       basis[8][8];
+    uint32_t     declared;
+    uint32_t     named = 0;
+    uint64_t     total_mcus;
     if (size < 1u) {
         edds_fail(error, "malformed-jpeg-scan", "The JPEG scan header is truncated.");
         return EDDS_INVALID_INPUT;
@@ -628,8 +628,8 @@ static edds_status jpeg_read_scan(
         return EDDS_UNSUPPORTED_FORMAT;
     }
     for (uint32_t at = 0; at < declared; ++at) {
-        const uint8_t id = segment[1u + (size_t)at * 2u];
-        const uint8_t tables = segment[2u + (size_t)at * 2u];
+        const uint8_t   id        = segment[1u + (size_t)at * 2u];
+        const uint8_t   tables    = segment[2u + (size_t)at * 2u];
         jpeg_component *component = NULL;
         for (uint32_t candidate = 0; candidate < frame->component_count; ++candidate) {
             if (frame->components[candidate].id == id) {
@@ -638,8 +638,8 @@ static edds_status jpeg_read_scan(
                         "The JPEG scan names the same component twice.");
                     return EDDS_INVALID_INPUT;
                 }
-                named |= 1u << candidate;
-                component = &frame->components[candidate];
+                named     |= 1u << candidate;
+                component  = &frame->components[candidate];
             }
         }
         if (component == NULL) {
@@ -669,12 +669,12 @@ static edds_status jpeg_read_scan(
 
     jpeg_basis(basis);
     reader.bytes = file;
-    reader.size = file_size;
-    reader.at = scan_at;
-    reader.bits = 0;
+    reader.size  = file_size;
+    reader.at    = scan_at;
+    reader.bits  = 0;
     reader.count = 0;
     reader.ended = 0;
-    total_mcus = (uint64_t)frame->mcus_x * frame->mcus_y;
+    total_mcus   = (uint64_t)frame->mcus_x * frame->mcus_y;
     for (uint64_t mcu = 0; mcu < total_mcus; ++mcu) {
         if (state->restart_interval != 0u && mcu != 0u && mcu % state->restart_interval == 0u) {
             if (!jpeg_restart(&reader, (uint32_t)((mcu / state->restart_interval - 1u) % 8u))) {
@@ -718,13 +718,13 @@ static edds_status jpeg_read_scan(
 }
 
 edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error *error) {
-    uint8_t *file = NULL;
-    size_t file_size = 0;
-    size_t at = 2;
-    uint8_t *rgba = NULL;
-    jpeg_state *state = NULL;
-    edds_status status = EDDS_INVALID_INPUT;
-    int saw_end = 0;
+    uint8_t    *file      = NULL;
+    size_t      file_size = 0;
+    size_t      at        = 2;
+    uint8_t    *rgba      = NULL;
+    jpeg_state *state     = NULL;
+    edds_status status    = EDDS_INVALID_INPUT;
+    int         saw_end   = 0;
 
     if (!edds_read_all(input, &file, &file_size, error)) {
         return EDDS_INVALID_INPUT;
@@ -741,10 +741,10 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         goto done;
     }
     while (at < file_size) {
-        uint8_t marker;
-        uint32_t length;
+        uint8_t        marker;
+        uint32_t       length;
         const uint8_t *segment;
-        size_t payload;
+        size_t         payload;
         if (file[at] != 0xffu) {
             edds_fail(error, "malformed-jpeg-marker", "A JPEG marker segment does not start with 0xFF.");
             goto done;
@@ -778,9 +778,9 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
             edds_fail(error, "truncated-jpeg-marker", "A JPEG marker segment extends beyond the input.");
             goto done;
         }
-        segment = file + at + 2u;
-        payload = length - 2u;
-        at += length;
+        segment  = file + at + 2u;
+        payload  = length - 2u;
+        at      += length;
         if (marker == 0xc0u) {
             if (state->saw_frame) {
                 edds_fail(error, "malformed-jpeg-frame", "The JPEG declares more than one frame.");
@@ -842,7 +842,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
                 goto done;
             }
             state->saw_scan = 1;
-            at = resume_at;
+            at              = resume_at;
         } else if (marker == 0xe1u) {
             if (!jpeg_exif_orientation_supported(segment, payload)) {
                 edds_fail(error, "unsupported-jpeg-orientation",
@@ -873,19 +873,19 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         goto done;
     }
     status = EDDS_INVALID_INPUT;
-    rgba = edds_alloc((size_t)state->frame.width * state->frame.height * 4u);
+    rgba   = edds_alloc((size_t)state->frame.width * state->frame.height * 4u);
     if (rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded JPEG could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
         goto done;
     }
     jpeg_resolve_pixels(&state->frame, rgba);
-    image->width = state->frame.width;
-    image->height = state->frame.height;
+    image->width     = state->frame.width;
+    image->height    = state->frame.height;
     image->has_alpha = 0;
-    image->rgba = rgba;
-    rgba = NULL;
-    status = EDDS_OK;
+    image->rgba      = rgba;
+    rgba             = NULL;
+    status           = EDDS_OK;
 
 done:
     edds_free(file);

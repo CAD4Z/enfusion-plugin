@@ -22,41 +22,41 @@
 #include <string.h>
 
 enum {
-    TIFF_TAG_WIDTH = 256,
-    TIFF_TAG_HEIGHT = 257,
-    TIFF_TAG_BITS_PER_SAMPLE = 258,
-    TIFF_TAG_COMPRESSION = 259,
-    TIFF_TAG_PHOTOMETRIC = 262,
-    TIFF_TAG_FILL_ORDER = 266,
-    TIFF_TAG_STRIP_OFFSETS = 273,
-    TIFF_TAG_ORIENTATION = 274,
-    TIFF_TAG_SAMPLES_PER_PIXEL = 277,
-    TIFF_TAG_ROWS_PER_STRIP = 278,
-    TIFF_TAG_STRIP_BYTE_COUNTS = 279,
+    TIFF_TAG_WIDTH                = 256,
+    TIFF_TAG_HEIGHT               = 257,
+    TIFF_TAG_BITS_PER_SAMPLE      = 258,
+    TIFF_TAG_COMPRESSION          = 259,
+    TIFF_TAG_PHOTOMETRIC          = 262,
+    TIFF_TAG_FILL_ORDER           = 266,
+    TIFF_TAG_STRIP_OFFSETS        = 273,
+    TIFF_TAG_ORIENTATION          = 274,
+    TIFF_TAG_SAMPLES_PER_PIXEL    = 277,
+    TIFF_TAG_ROWS_PER_STRIP       = 278,
+    TIFF_TAG_STRIP_BYTE_COUNTS    = 279,
     TIFF_TAG_PLANAR_CONFIGURATION = 284,
-    TIFF_TAG_PREDICTOR = 317,
-    TIFF_TAG_TILE_WIDTH = 322,
-    TIFF_TAG_TILE_LENGTH = 323,
-    TIFF_TAG_TILE_OFFSETS = 324,
-    TIFF_TAG_TILE_BYTE_COUNTS = 325,
-    TIFF_TAG_EXTRA_SAMPLES = 338,
-    TIFF_TAG_SAMPLE_FORMAT = 339
+    TIFF_TAG_PREDICTOR            = 317,
+    TIFF_TAG_TILE_WIDTH           = 322,
+    TIFF_TAG_TILE_LENGTH          = 323,
+    TIFF_TAG_TILE_OFFSETS         = 324,
+    TIFF_TAG_TILE_BYTE_COUNTS     = 325,
+    TIFF_TAG_EXTRA_SAMPLES        = 338,
+    TIFF_TAG_SAMPLE_FORMAT        = 339
 };
 
 enum {
-    TIFF_COMPRESSION_NONE = 1,
-    TIFF_COMPRESSION_LZW = 5,
-    TIFF_COMPRESSION_DEFLATE = 8,
+    TIFF_COMPRESSION_NONE        = 1,
+    TIFF_COMPRESSION_LZW         = 5,
+    TIFF_COMPRESSION_DEFLATE     = 8,
     TIFF_COMPRESSION_DEFLATE_OLD = 32946,
-    TIFF_COMPRESSION_PACKBITS = 32773
+    TIFF_COMPRESSION_PACKBITS    = 32773
 };
 
 typedef struct tiff_reader {
     const uint8_t *bytes;
-    size_t size;
-    int big_endian;
+    size_t         size;
+    int            big_endian;
     const uint8_t *entries;
-    uint32_t entry_count;
+    uint32_t       entry_count;
 } tiff_reader;
 
 static uint32_t tiff_u16(const tiff_reader *reader, const uint8_t *at) {
@@ -84,16 +84,16 @@ static uint32_t tiff_entry_count(const tiff_reader *reader, const uint8_t *entry
 /** One value out of a tag, inline or through its offset, with the bounds checked either way. */
 static int tiff_value_of(
     const tiff_reader *reader,
-    const uint8_t *entry,
-    uint32_t index,
-    uint32_t *value) {
-    const uint32_t type = tiff_u16(reader, entry + 2);
-    const uint32_t count = tiff_entry_count(reader, entry);
+    const uint8_t     *entry,
+    uint32_t           index,
+    uint32_t          *value) {
+    const uint32_t type    = tiff_u16(reader, entry + 2);
+    const uint32_t count   = tiff_entry_count(reader, entry);
     const uint32_t element = type == 1u || type == 2u ? 1u : type == 3u ? 2u
         : type == 4u                                                    ? 4u
                                                                         : 0u;
     const uint8_t *base;
-    uint64_t total;
+    uint64_t       total;
     if (element == 0u || index >= count) {
         return 0;
     }
@@ -107,18 +107,18 @@ static int tiff_value_of(
         }
         base = reader->bytes + offset;
     }
-    base += (size_t)index * element;
-    *value = element == 1u ? base[0] : element == 2u ? tiff_u16(reader, base)
-                                                     : tiff_u32(reader, base);
+    base   += (size_t)index * element;
+    *value  = element == 1u ? base[0] : element == 2u ? tiff_u16(reader, base)
+                                                      : tiff_u32(reader, base);
     return 1;
 }
 
 /** A tag that may be absent, in which case the baseline default stands in for it. */
 static int tiff_scalar_or(
     const tiff_reader *reader,
-    uint32_t tag,
-    uint32_t fallback,
-    uint32_t *value) {
+    uint32_t           tag,
+    uint32_t           fallback,
+    uint32_t          *value) {
     const uint8_t *entry = tiff_entry_of(reader, tag);
     if (entry == NULL) {
         *value = fallback;
@@ -128,7 +128,7 @@ static int tiff_scalar_or(
 }
 
 static int tiff_packbits(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
-    size_t at = 0;
+    size_t at      = 0;
     size_t written = 0;
     while (at < input_size && written < output_size) {
         const int control = (int)(int8_t)input[at++];
@@ -138,7 +138,7 @@ static int tiff_packbits(const uint8_t *input, size_t input_size, uint8_t *outpu
                 return 0;
             }
             memcpy(output + written, input + at, run);
-            at += run;
+            at      += run;
             written += run;
         } else if (control != -128) {
             const size_t run = (size_t)(1 - control);
@@ -153,17 +153,17 @@ static int tiff_packbits(const uint8_t *input, size_t input_size, uint8_t *outpu
 }
 
 enum {
-    LZW_CLEAR = 256,
-    LZW_END = 257,
-    LZW_FIRST = 258,
-    LZW_CODES = 4096,
+    LZW_CLEAR     = 256,
+    LZW_END       = 257,
+    LZW_FIRST     = 258,
+    LZW_CODES     = 4096,
     LZW_MAX_WIDTH = 12
 };
 
 typedef struct lzw_dictionary {
     uint16_t prefix[LZW_CODES];
-    uint8_t suffix[LZW_CODES];
-    uint8_t stack[LZW_CODES];
+    uint8_t  suffix[LZW_CODES];
+    uint8_t  stack[LZW_CODES];
 } lzw_dictionary;
 
 /**
@@ -181,29 +181,29 @@ static int lzw_string(lzw_dictionary *dictionary, uint32_t code, uint32_t next, 
         code = dictionary->prefix[code];
     }
     dictionary->stack[LZW_CODES - 1u - written] = (uint8_t)code;
-    *length = written + 1u;
+    *length                                     = written + 1u;
     return 1;
 }
 
 /** TIFF LZW: MSB-first codes, the early code-width change, and no reliance on a trailing EOI. */
 static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
     lzw_dictionary *dictionary = edds_calloc(1, sizeof *dictionary);
-    uint64_t bit_at = 0;
-    const uint64_t bits = (uint64_t)input_size * 8u;
-    uint32_t next = LZW_FIRST;
-    uint32_t width = 9;
-    uint32_t previous = LZW_CODES;
-    size_t written = 0;
-    int ok = 0;
+    uint64_t        bit_at     = 0;
+    const uint64_t  bits       = (uint64_t)input_size * 8u;
+    uint32_t        next       = LZW_FIRST;
+    uint32_t        width      = 9;
+    uint32_t        previous   = LZW_CODES;
+    size_t          written    = 0;
+    int             ok         = 0;
     if (dictionary == NULL) {
         return 0;
     }
     while (bit_at + width <= bits) {
-        uint32_t code = 0;
+        uint32_t code   = 0;
         uint32_t length = 0;
         for (uint32_t bit = 0; bit < width; ++bit) {
             const uint64_t position = bit_at + bit;
-            code = (code << 1) |
+            code                    = (code << 1) |
                 ((input[position / 8u] >> (7u - (uint32_t)(position % 8u))) & 1u);
         }
         bit_at += width;
@@ -212,8 +212,8 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
             break;
         }
         if (code == LZW_CLEAR) {
-            next = LZW_FIRST;
-            width = 9;
+            next     = LZW_FIRST;
+            width    = 9;
             previous = LZW_CODES;
             continue;
         }
@@ -222,7 +222,7 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
                 break;
             }
             dictionary->stack[LZW_CODES - 1u] = (uint8_t)code;
-            length = 1;
+            length                            = 1;
         } else if (code < next) {
             if (!lzw_string(dictionary, code, next, &length)) {
                 break;
@@ -240,7 +240,7 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
             memmove(dictionary->stack + LZW_CODES - previous_length - 1u,
                 dictionary->stack + LZW_CODES - previous_length, previous_length);
             dictionary->stack[LZW_CODES - 1u] = dictionary->stack[LZW_CODES - previous_length - 1u];
-            length = previous_length + 1u;
+            length                            = previous_length + 1u;
         } else {
             break;
         }
@@ -271,11 +271,11 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
 }
 
 static int tiff_decompress(
-    uint32_t compression,
+    uint32_t       compression,
     const uint8_t *input,
-    size_t input_size,
-    uint8_t *output,
-    size_t output_size) {
+    size_t         input_size,
+    uint8_t       *output,
+    size_t         output_size) {
     switch (compression) {
         case TIFF_COMPRESSION_NONE:
             if (input_size != output_size) {
@@ -302,19 +302,19 @@ typedef struct tiff_layout {
     uint32_t compression;
     uint32_t rows_per_strip;
     uint32_t strips;
-    int has_alpha;
-    int greyscale;
+    int      has_alpha;
+    int      greyscale;
 } tiff_layout;
 
 static edds_status tiff_read_layout(
     const tiff_reader *reader,
-    tiff_layout *layout,
-    edds_error *error) {
+    tiff_layout       *layout,
+    edds_error        *error) {
     const uint8_t *bits_entry;
     const uint8_t *offsets;
     const uint8_t *counts;
-    uint32_t photometric = 0;
-    uint32_t value = 0;
+    uint32_t       photometric = 0;
+    uint32_t       value       = 0;
     if (!tiff_scalar_or(reader, TIFF_TAG_WIDTH, 0, &layout->width) ||
         !tiff_scalar_or(reader, TIFF_TAG_HEIGHT, 0, &layout->height) ||
         !tiff_scalar_or(reader, TIFF_TAG_SAMPLES_PER_PIXEL, 1, &layout->samples) ||
@@ -428,8 +428,8 @@ static edds_status tiff_read_layout(
         layout->rows_per_strip = layout->height;
     }
     layout->strips = (layout->height + layout->rows_per_strip - 1u) / layout->rows_per_strip;
-    offsets = tiff_entry_of(reader, TIFF_TAG_STRIP_OFFSETS);
-    counts = tiff_entry_of(reader, TIFF_TAG_STRIP_BYTE_COUNTS);
+    offsets        = tiff_entry_of(reader, TIFF_TAG_STRIP_OFFSETS);
+    counts         = tiff_entry_of(reader, TIFF_TAG_STRIP_BYTE_COUNTS);
     if (offsets == NULL || counts == NULL ||
         tiff_entry_count(reader, offsets) != layout->strips ||
         tiff_entry_count(reader, counts) != layout->strips) {
@@ -443,11 +443,11 @@ static edds_status tiff_read_layout(
 static edds_status tiff_read_strips(
     const tiff_reader *reader,
     const tiff_layout *layout,
-    uint8_t *samples,
-    edds_error *error) {
-    const uint8_t *offsets = tiff_entry_of(reader, TIFF_TAG_STRIP_OFFSETS);
-    const uint8_t *counts = tiff_entry_of(reader, TIFF_TAG_STRIP_BYTE_COUNTS);
-    const size_t row_bytes = (size_t)layout->width * layout->samples;
+    uint8_t           *samples,
+    edds_error        *error) {
+    const uint8_t *offsets   = tiff_entry_of(reader, TIFF_TAG_STRIP_OFFSETS);
+    const uint8_t *counts    = tiff_entry_of(reader, TIFF_TAG_STRIP_BYTE_COUNTS);
+    const size_t   row_bytes = (size_t)layout->width * layout->samples;
     for (uint32_t strip = 0; strip < layout->strips; ++strip) {
         uint32_t offset;
         uint32_t stored;
@@ -476,22 +476,22 @@ static edds_status tiff_read_strips(
 }
 
 edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error *error) {
-    uint8_t *file = NULL;
-    size_t file_size = 0;
-    uint8_t *samples = NULL;
-    uint8_t *rgba = NULL;
+    uint8_t    *file      = NULL;
+    size_t      file_size = 0;
+    uint8_t    *samples   = NULL;
+    uint8_t    *rgba      = NULL;
     tiff_reader reader;
     tiff_layout layout;
-    uint32_t directory;
+    uint32_t    directory;
     edds_status status = EDDS_INVALID_INPUT;
 
     if (!edds_read_all(input, &file, &file_size, error)) {
         return EDDS_INVALID_INPUT;
     }
     memset(&layout, 0, sizeof layout);
-    reader.bytes = file;
-    reader.size = file_size;
-    reader.entries = NULL;
+    reader.bytes       = file;
+    reader.size        = file_size;
+    reader.entries     = NULL;
     reader.entry_count = 0;
     if (file_size < 8u) {
         edds_fail(error, "truncated-tiff-header", "The TIFF header is truncated.");
@@ -528,9 +528,9 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     if (status != EDDS_OK) {
         goto done;
     }
-    status = EDDS_INVALID_INPUT;
+    status  = EDDS_INVALID_INPUT;
     samples = edds_alloc((size_t)layout.width * layout.height * layout.samples);
-    rgba = edds_alloc((size_t)layout.width * layout.height * 4u);
+    rgba    = edds_alloc((size_t)layout.width * layout.height * 4u);
     if (samples == NULL || rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded TIFF could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -542,18 +542,18 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     }
     for (size_t pixel = 0; pixel < (size_t)layout.width * layout.height; ++pixel) {
         const uint8_t *source = samples + pixel * layout.samples;
-        uint8_t *target = rgba + pixel * 4u;
-        target[0] = source[0];
-        target[1] = layout.greyscale ? source[0] : source[1];
-        target[2] = layout.greyscale ? source[0] : source[2];
-        target[3] = layout.has_alpha ? source[3] : 255u;
+        uint8_t       *target = rgba + pixel * 4u;
+        target[0]             = source[0];
+        target[1]             = layout.greyscale ? source[0] : source[1];
+        target[2]             = layout.greyscale ? source[0] : source[2];
+        target[3]             = layout.has_alpha ? source[3] : 255u;
     }
-    image->width = layout.width;
-    image->height = layout.height;
+    image->width     = layout.width;
+    image->height    = layout.height;
     image->has_alpha = layout.has_alpha;
-    image->rgba = rgba;
-    rgba = NULL;
-    status = EDDS_OK;
+    image->rgba      = rgba;
+    rgba             = NULL;
+    status           = EDDS_OK;
 
 done:
     edds_free(file);

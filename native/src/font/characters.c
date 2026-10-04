@@ -12,24 +12,24 @@ static int separates(uint32_t code) {
 /** One UTF-8 scalar value; 0 at a byte sequence that is not one. */
 static size_t decode(const uint8_t *text, size_t size, uint32_t *code) {
     const uint8_t lead = text[0];
-    size_t length;
-    uint32_t value;
-    uint32_t smallest;
+    size_t        length;
+    uint32_t      value;
+    uint32_t      smallest;
     if (lead < 0x80u) {
         *code = lead;
         return 1;
     }
     if ((lead & 0xE0u) == 0xC0u) {
-        length = 2;
-        value = lead & 0x1Fu;
+        length   = 2;
+        value    = lead & 0x1Fu;
         smallest = 0x80u;
     } else if ((lead & 0xF0u) == 0xE0u) {
-        length = 3;
-        value = lead & 0x0Fu;
+        length   = 3;
+        value    = lead & 0x0Fu;
         smallest = 0x800u;
     } else if ((lead & 0xF8u) == 0xF0u) {
-        length = 4;
-        value = lead & 0x07u;
+        length   = 4;
+        value    = lead & 0x07u;
         smallest = 0x10000u;
     } else {
         return 0;
@@ -74,13 +74,13 @@ static edds_status finish(uint32_t *codes, size_t count, font_characters *charac
 }
 
 edds_status font_characters_parse(
-    const uint8_t *text,
-    size_t size,
+    const uint8_t   *text,
+    size_t           size,
     font_characters *characters,
-    edds_error *error) {
+    edds_error      *error) {
     uint32_t *codes;
-    size_t count = 0;
-    size_t at = 0;
+    size_t    count = 0;
+    size_t    at    = 0;
     if (characters == NULL || (text == NULL && size != 0)) {
         font_fail(error, "invalid-api-argument", "The character text and set are required.");
         return EDDS_INTERNAL_FAILURE;
@@ -100,7 +100,7 @@ edds_status font_characters_parse(
         at = 3;
     }
     while (at < size) {
-        uint32_t code = 0;
+        uint32_t     code   = 0;
         const size_t length = decode(text + at, size - at, &code);
         if (length == 0) {
             free(codes);
@@ -118,8 +118,8 @@ edds_status font_characters_parse(
 
 edds_status font_characters_builtin(font_characters *characters, edds_error *error) {
     static const uint32_t ranges[][2] = { { 0x20u, 0x7Eu }, { 0xA0u, 0xFFu }, { 0x400u, 0x45Fu } };
-    uint32_t *codes = malloc(512u * sizeof *codes);
-    size_t count = 0;
+    uint32_t             *codes       = malloc(512u * sizeof *codes);
+    size_t                count       = 0;
     if (characters == NULL) {
         free(codes);
         font_fail(error, "invalid-api-argument", "The character set is required.");

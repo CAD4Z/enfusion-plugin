@@ -20,12 +20,12 @@ typedef struct edds_decoded_mip {
 
 /** One decoded source image, always straight RGBA8 with alpha declared by the source itself. */
 typedef struct edds_decoded_source {
-    uint32_t width;
-    uint32_t height;
-    int has_alpha;
-    uint8_t *rgba;
+    uint32_t         width;
+    uint32_t         height;
+    int              has_alpha;
+    uint8_t         *rgba;
     /** Zero for ordinary images; DDS supplies a complete chain including level zero. */
-    uint32_t supplied_mip_count;
+    uint32_t         supplied_mip_count;
     edds_decoded_mip supplied_mips[EDDS_MAX_MIPS];
 } edds_decoded_source;
 

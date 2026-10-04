@@ -20,9 +20,9 @@ static uint32_t png_crc32(const uint8_t *bytes, size_t size) {
 }
 
 static uint8_t paeth(uint8_t left, uint8_t above, uint8_t upper_left) {
-    const int estimate = (int)left + above - upper_left;
-    const int left_distance = abs(estimate - left);
-    const int above_distance = abs(estimate - above);
+    const int estimate        = (int)left + above - upper_left;
+    const int left_distance   = abs(estimate - left);
+    const int above_distance  = abs(estimate - above);
     const int corner_distance = abs(estimate - upper_left);
     if (left_distance <= above_distance && left_distance <= corner_distance) {
         return left;
@@ -43,7 +43,7 @@ static size_t idat_total_from(const uint8_t *file, size_t file_size, size_t at) 
             break;
         }
         total += length;
-        at += 12u + length;
+        at    += 12u + length;
     }
     return total;
 }
@@ -61,29 +61,29 @@ static int append_idat(
 }
 
 edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error *error) {
-    static const uint8_t signature[8] = { 0x89, 'P', 'N', 'G', 13, 10, 26, 10 };
-    uint8_t *file = NULL;
-    size_t file_size = 0;
-    size_t at = 8;
-    uint8_t *idat = NULL;
-    size_t idat_size = 0;
-    size_t idat_capacity = 0;
+    static const uint8_t signature[8]  = { 0x89, 'P', 'N', 'G', 13, 10, 26, 10 };
+    uint8_t             *file          = NULL;
+    size_t               file_size     = 0;
+    size_t               at            = 8;
+    uint8_t             *idat          = NULL;
+    size_t               idat_size     = 0;
+    size_t               idat_capacity = 0;
     /* A truecolor image's tRNS names one colour that is fully transparent wherever it occurs. */
-    int keyed = 0;
-    uint8_t key[3] = { 0, 0, 0 };
-    uint32_t width = 0;
-    uint32_t height = 0;
-    uint32_t channels = 0;
-    int saw_ihdr = 0;
-    int saw_idat = 0;
-    int ended_idat = 0;
-    int saw_iend = 0;
-    uint8_t *filtered = NULL;
-    uint8_t *raw = NULL;
-    uint8_t *rgba = NULL;
-    size_t row_bytes;
-    size_t filtered_size;
-    edds_status status = EDDS_INVALID_INPUT;
+    int                  keyed         = 0;
+    uint8_t              key[3]        = { 0, 0, 0 };
+    uint32_t             width         = 0;
+    uint32_t             height        = 0;
+    uint32_t             channels      = 0;
+    int                  saw_ihdr      = 0;
+    int                  saw_idat      = 0;
+    int                  ended_idat    = 0;
+    int                  saw_iend      = 0;
+    uint8_t             *filtered      = NULL;
+    uint8_t             *raw           = NULL;
+    uint8_t             *rgba          = NULL;
+    size_t               row_bytes;
+    size_t               filtered_size;
+    edds_status          status = EDDS_INVALID_INPUT;
 
     if (!edds_read_all(input, &file, &file_size, error)) {
         return EDDS_INVALID_INPUT;
@@ -93,7 +93,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         goto done;
     }
     while (at < file_size) {
-        uint32_t length;
+        uint32_t       length;
         const uint8_t *type;
         const uint8_t *data;
         if (file_size - at < 12u) {
@@ -101,8 +101,8 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             goto done;
         }
         length = edds_u32be(file + at);
-        type = file + at + 4u;
-        data = file + at + 8u;
+        type   = file + at + 4u;
+        data   = file + at + 8u;
         if ((size_t)length > file_size - at - 12u) {
             edds_fail(error, "truncated-png-chunk", "A PNG chunk extends beyond the input boundary.");
             goto done;
@@ -117,8 +117,8 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
                 goto done;
             }
             saw_ihdr = 1;
-            width = edds_u32be(data);
-            height = edds_u32be(data + 4);
+            width    = edds_u32be(data);
+            height   = edds_u32be(data + 4);
             if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION ||
                 height > EDDS_MAX_DIMENSION) {
                 edds_fail(error, "png-dimension-limit", "PNG dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
@@ -139,7 +139,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             }
             if (!saw_idat) {
                 idat_capacity = idat_total_from(file, file_size, at);
-                idat = edds_alloc(idat_capacity == 0 ? 1u : idat_capacity);
+                idat          = edds_alloc(idat_capacity == 0 ? 1u : idat_capacity);
                 if (idat == NULL) {
                     edds_fail(error, "allocation-failed", "Memory for the PNG image data could not be allocated.");
                     status = EDDS_INTERNAL_FAILURE;
@@ -164,7 +164,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             }
             if (type[0] == 't' && channels == 3u && length == 6u &&
                 data[0] == 0u && data[2] == 0u && data[4] == 0u) {
-                keyed = 1;
+                keyed  = 1;
                 key[0] = data[1];
                 key[1] = data[3];
                 key[2] = data[5];
@@ -196,15 +196,15 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         edds_fail(error, "png-size-overflow", "The PNG decoded size overflows the supported address space.");
         goto done;
     }
-    row_bytes = (size_t)width * channels;
+    row_bytes     = (size_t)width * channels;
     filtered_size = (row_bytes + 1u) * height;
     if ((uint64_t)width * height * 4u > EDDS_MAX_PREVIEW_BYTES) {
         edds_fail(error, "png-decoded-size-limit", "The PNG exceeds the decoded-image limit.");
         goto done;
     }
     filtered = edds_alloc(filtered_size);
-    raw = edds_alloc(row_bytes * height);
-    rgba = edds_alloc((size_t)width * height * 4u);
+    raw      = edds_alloc(row_bytes * height);
+    rgba     = edds_alloc((size_t)width * height * 4u);
     if (filtered == NULL || raw == NULL || rgba == NULL) {
         edds_fail(error, "allocation-failed", "Memory for the decoded PNG could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
@@ -215,19 +215,19 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         goto done;
     }
     for (uint32_t y = 0; y < height; ++y) {
-        const uint8_t filter = filtered[(row_bytes + 1u) * y];
+        const uint8_t  filter  = filtered[(row_bytes + 1u) * y];
         const uint8_t *encoded = filtered + (row_bytes + 1u) * y + 1u;
-        uint8_t *decoded = raw + row_bytes * y;
-        const uint8_t *above = y == 0 ? NULL : decoded - row_bytes;
+        uint8_t       *decoded = raw + row_bytes * y;
+        const uint8_t *above   = y == 0 ? NULL : decoded - row_bytes;
         if (filter > 4u) {
             edds_fail(error, "unsupported-png-filter", "The PNG scanline uses an unknown filter type.");
             goto done;
         }
         for (size_t x = 0; x < row_bytes; ++x) {
-            const uint8_t left = x < channels ? 0 : decoded[x - channels];
-            const uint8_t up = above == NULL ? 0 : above[x];
-            const uint8_t corner = above == NULL || x < channels ? 0 : above[x - channels];
-            uint8_t predictor = 0;
+            const uint8_t left      = x < channels ? 0 : decoded[x - channels];
+            const uint8_t up        = above == NULL ? 0 : above[x];
+            const uint8_t corner    = above == NULL || x < channels ? 0 : above[x - channels];
+            uint8_t       predictor = 0;
             if (filter == 1) {
                 predictor = left;
             } else if (filter == 2) {
@@ -244,9 +244,9 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         for (uint32_t x = 0; x < width; ++x) {
             const size_t source_at = ((size_t)y * width + x) * channels;
             const size_t output_at = ((size_t)y * width + x) * 4u;
-            rgba[output_at] = raw[source_at];
-            rgba[output_at + 1u] = raw[source_at + 1u];
-            rgba[output_at + 2u] = raw[source_at + 2u];
+            rgba[output_at]        = raw[source_at];
+            rgba[output_at + 1u]   = raw[source_at + 1u];
+            rgba[output_at + 2u]   = raw[source_at + 2u];
             if (channels == 4) {
                 rgba[output_at + 3u] = raw[source_at + 3u];
             } else {
@@ -256,12 +256,12 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             }
         }
     }
-    image->width = width;
-    image->height = height;
+    image->width     = width;
+    image->height    = height;
     image->has_alpha = channels == 4 || keyed;
-    image->rgba = rgba;
-    rgba = NULL;
-    status = EDDS_OK;
+    image->rgba      = rgba;
+    rgba             = NULL;
+    status           = EDDS_OK;
 
 done:
     edds_free(file);

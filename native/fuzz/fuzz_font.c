@@ -13,23 +13,23 @@
 static uint32_t codes[] = { 0x20, 0x41, 0x48, 0x4F, 0x54, 0x56, 0x61, 0x6F, 0xC4, 0xC5, 0x1DE, 0x426, 0x2C6F, 0x1F600 };
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    font_characters set = { codes, sizeof codes / sizeof codes[0] };
-    font_characters parsed;
+    font_characters  set = { codes, sizeof codes / sizeof codes[0] };
+    font_characters  parsed;
     font_source_info info;
-    font_request request;
-    font_output output;
-    font_recipe recipe;
-    font_info inspected;
-    char guid[EDDS_METADATA_GUID_BYTES];
-    edds_error error;
-    FILE *file;
+    font_request     request;
+    font_output      output;
+    font_recipe      recipe;
+    font_info        inspected;
+    char             guid[EDDS_METADATA_GUID_BYTES];
+    edds_error       error;
+    FILE            *file;
 
     (void)font_source_describe(data, size, &info, &error);
-    request.data = data;
-    request.size = size;
+    request.data       = data;
+    request.size       = size;
     request.characters = &set;
-    request.font_size = FONT_MIN_SIZE;
-    request.name = "SDF_Fuzz";
+    request.font_size  = FONT_MIN_SIZE;
+    request.name       = "SDF_Fuzz";
     if (font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK) {
         font_output_free(&output);
     }
