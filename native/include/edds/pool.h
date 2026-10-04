@@ -1,3 +1,11 @@
+/*
+ * The one worker pool a batch is allowed to own.
+ *
+ * A converter that spawned a process per image, or that let every image start its own threads,
+ * would see all the cores and all the memory as its own and could not be held to either. So the
+ * batch runs its images over a single bounded pool: at most `EDDS_POOL_MAX_WORKERS` threads, and
+ * one shared byte budget every image must fit inside before it starts decoding.
+ */
 #ifndef EDDS_POOL_H
 #define EDDS_POOL_H
 
@@ -8,15 +16,7 @@
 extern "C" {
 #endif
 
-/**
- * The one worker pool a batch is allowed to own.
- *
- * A converter that spawned a process per image, or that let every image start its own threads,
- * would see all the cores and all the memory as its own and could not be held to either. So the
- * batch runs its images over a single bounded pool: at most `EDDS_POOL_MAX_WORKERS` threads, and
- * one shared byte budget every image must fit inside before it starts decoding.
- */
-
+/** The most workers one pool runs; the thread that calls edds_pool_run is one of them. */
 #define EDDS_POOL_MAX_WORKERS 8u
 
 /** The whole budget one batch process may hold in flight across every worker at once. */
@@ -28,14 +28,17 @@ extern "C" {
  */
 uint64_t edds_pool_charge_of(uint64_t source_bytes);
 
+/** A running pool. Tasks get it from edds_pool_run and hand it back to the calls below. */
 typedef struct edds_pool edds_pool;
+
+/** One task: `context` is what the caller passed to edds_pool_run, `index` which task this is. */
+typedef void (*edds_pool_task_fn)(void *context, uint32_t index, edds_pool *pool);
 
 /**
  * Runs `count` tasks over the pool. `index` is the task's own, so a task touches only what belongs
  * to it. Every task runs exactly once, and the call returns when the last one has finished.
+ * A `memory_budget` of 0 means EDDS_POOL_MEMORY_BUDGET. Returns EDDS_OK once every task has run.
  */
-typedef void (*edds_pool_task_fn)(void *context, uint32_t index, edds_pool *pool);
-
 edds_status edds_pool_run(
     uint32_t          count,
     uint64_t          memory_budget,
@@ -47,6 +50,7 @@ edds_status edds_pool_run(
  * Holds `bytes` of the shared budget until the matching release. A charge larger than the whole
  * budget is admitted alone rather than refused, so one enormous image still converts; every other
  * worker waits for it. Returns nothing to check: the wait is the whole contract.
+ * edds_pool_release gives the bytes back.
  */
 void edds_pool_reserve(edds_pool *pool, uint64_t bytes);
 void edds_pool_release(edds_pool *pool, uint64_t bytes);
@@ -56,9 +60,11 @@ void edds_pool_release(edds_pool *pool, uint64_t bytes);
  * small, the failed attempt releases its allocations and temps before retrying with more room.
  * An operation exceeding the entire budget runs alone. Cancellation is checked after waiting for
  * admission and before every attempt; ordinary input/IO/allocator failures are never retried.
+ * Returns the status of the last attempt, or EDDS_CANCELLED when cancellation stopped one from
+ * starting.
  */
-edds_status edds_pool_execute(
-    edds_pool *pool, uint64_t initial_charge, edds_memory_operation_fn operation, void *context,
+edds_status edds_pool_execute(edds_pool *pool, uint64_t initial_charge,
+    edds_memory_operation_fn operation, void *context,
     edds_cancelled_fn cancelled, void *cancel_context, edds_error *error);
 
 /**
