@@ -1,0 +1,36 @@
+# The C style of the native executable, kept by clang-format 19 rather than by memory.
+#
+# Every if, else, for, while and do has braces, and every body sits on lines of its own. Line
+# breaks are otherwise the author's (ColumnLimit 0): a continuation is indented once, and a long
+# call is not reflowed to a column.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+ColumnLimit: 0
+BreakBeforeBraces: Attach
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+IndentCaseLabels: true
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments:
+  Kind: Leave
+AlignEscapedNewlines: DontAlign
+Cpp11BracedListStyle: false
+PointerAlignment: Right
+SortIncludes: Never
+IncludeBlocks: Preserve
+SeparateDefinitionBlocks: Always
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
+  AtStartOfFile: false
+ReflowComments: false
+IndentPPDirectives: None

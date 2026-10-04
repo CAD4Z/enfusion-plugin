@@ -18,6 +18,7 @@
 #define FONT_MAX_COMPONENT_DEPTH 16u
 #define FONT_MAX_COMPONENTS 4096u
 #define FONT_MAX_PAIRS ((size_t)1 << 20)
+#define FONT_MAX_PAIR_SUBTABLES 4096u
 
 void font_fail(edds_error *error, const char *code, const char *format, ...);
 
@@ -76,8 +77,7 @@ edds_status font_face_contours(
     uint32_t glyph,
     font_contours *contours,
     uint32_t *advance,
-    edds_error *error
-);
+    edds_error *error);
 
 void font_contours_free(font_contours *contours);
 
@@ -100,8 +100,7 @@ edds_status font_face_kerning(
     double scale,
     font_pair **pairs,
     size_t *pair_count,
-    edds_error *error
-);
+    edds_error *error);
 
 /* --- Shapes ----------------------------------------------------------------------------------- */
 
@@ -133,8 +132,7 @@ edds_status font_shape_of_contours(
     const font_contours *contours,
     double scale,
     font_shape *shape,
-    edds_error *error
-);
+    edds_error *error);
 
 /**
  * The boundary of the area the shape fills under the nonzero rule, as closed loops with the inside
@@ -177,8 +175,7 @@ edds_status font_field_render(
     const font_placement *placement,
     uint8_t *atlas,
     uint32_t atlas_width,
-    edds_error *error
-);
+    edds_error *error);
 
 /* --- FNT5 ------------------------------------------------------------------------------------- */
 
@@ -209,7 +206,6 @@ edds_status font_fnt_write(
     uint8_t **bytes,
     size_t *size,
     uint32_t *range_count,
-    edds_error *error
-);
+    edds_error *error);
 
 #endif

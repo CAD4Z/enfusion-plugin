@@ -69,14 +69,18 @@ static int add_rectangle(font_contours *contours, double x0, double y0, double x
     if (contours->count + 4u > contours->capacity) {
         const size_t capacity = contours->capacity + 8u;
         points = realloc(contours->points, capacity * sizeof *points);
-        if (points == NULL) return 0;
+        if (points == NULL) {
+            return 0;
+        }
         contours->points = points;
         contours->capacity = capacity;
     }
     if (contours->contour_count == contours->contour_capacity) {
         const size_t capacity = contours->contour_capacity + 4u;
         ends = realloc(contours->ends, capacity * sizeof *ends);
-        if (ends == NULL) return 0;
+        if (ends == NULL) {
+            return 0;
+        }
         contours->ends = ends;
         contours->contour_capacity = capacity;
     }
@@ -89,7 +93,9 @@ static int add_rectangle(font_contours *contours, double x0, double y0, double x
     points[2].y = y1;
     points[3].x = clockwise ? x1 : x0;
     points[3].y = clockwise ? y0 : y1;
-    for (int at = 0; at < 4; ++at) points[at].on_curve = 1;
+    for (int at = 0; at < 4; ++at) {
+        points[at].on_curve = 1;
+    }
     contours->count += 4u;
     contours->ends[contours->contour_count++] = contours->count;
     return 1;
@@ -99,7 +105,9 @@ static edds_status job_contours(const font_face *face, glyph_job *job, font_cont
     uint32_t *advance, edds_error *error) {
     const double em = face->units_per_em;
     memset(contours, 0, sizeof *contours);
-    if (job->origin == FROM_FONT) return font_face_contours(face, job->glyph, contours, advance, error);
+    if (job->origin == FROM_FONT) {
+        return font_face_contours(face, job->glyph, contours, advance, error);
+    }
     if (job->origin == DRAWN_SPACE) {
         *advance = (uint32_t)rounded(made_up_space * em);
         return EDDS_OK;
@@ -125,11 +133,17 @@ static edds_status prepare_job(const font_face *face, glyph_job *job, double sca
     uint32_t advance = 0;
     double box[4];
     edds_status status = job_contours(face, job, &contours, &advance, error);
-    if (status != EDDS_OK) return status;
+    if (status != EDDS_OK) {
+        return status;
+    }
     status = font_shape_of_contours(&contours, scale, &job->shape, error);
     font_contours_free(&contours);
-    if (status == EDDS_OK) status = font_shape_union(&job->shape, &job->boundary, error);
-    if (status != EDDS_OK) return status;
+    if (status == EDDS_OK) {
+        status = font_shape_union(&job->shape, &job->boundary, error);
+    }
+    if (status != EDDS_OK) {
+        return status;
+    }
     job->advance = (int32_t)rounded(advance * scale);
     if (font_shape_bounds(&job->boundary, box)) {
         job->box_x = (int32_t)floor(box[0]);
@@ -146,7 +160,9 @@ static edds_status prepare_job(const font_face *face, glyph_job *job, double sca
 }
 
 static void free_jobs(glyph_job *jobs, size_t count) {
-    if (jobs == NULL) return;
+    if (jobs == NULL) {
+        return;
+    }
     for (size_t at = 0; at < count; ++at) {
         font_shape_free(&jobs[at].shape);
         font_shape_free(&jobs[at].boundary);
@@ -161,7 +177,9 @@ static int choose_atlas(size_t cells, uint32_t cell, uint32_t *width, uint32_t *
         for (int height_bits = (int)(area_bits / 2u); height_bits >= 0; --height_bits) {
             const uint32_t width_bits = area_bits - (uint32_t)height_bits;
             uint32_t across, down;
-            if (width_bits > 12u) break;
+            if (width_bits > 12u) {
+                break;
+            }
             /* One pixel of zeros between cells; the last cell of a row may touch the edge. */
             across = ((1u << width_bits) + 1u) / (cell + 1u);
             down = ((1u << (uint32_t)height_bits) + 1u) / (cell + 1u);
@@ -188,7 +206,9 @@ static void render_task(void *context, uint32_t index, edds_pool *pool) {
     }
     edds_pool_lock_output(pool);
     ++run->finished;
-    if (run->progress != NULL) run->progress(run->progress_context, 0.1 + 0.85 * (double)run->finished / (double)run->count);
+    if (run->progress != NULL) {
+        run->progress(run->progress_context, 0.1 + 0.85 * (double)run->finished / (double)run->count);
+    }
     edds_pool_unlock_output(pool);
 }
 
@@ -199,7 +219,9 @@ static int ascending(const void *left, const void *right) {
 
 static int push_code(uint32_t **list, size_t *count, uint32_t code) {
     uint32_t *grown = realloc(*list, (*count + 1u) * sizeof *grown);
-    if (grown == NULL) return 0;
+    if (grown == NULL) {
+        return 0;
+    }
     grown[(*count)++] = code;
     *list = grown;
     return 1;
@@ -223,12 +245,16 @@ static edds_status cap_height_of(const font_face *face, double scale, float *cap
         memset(&job, 0, sizeof job);
         job.origin = FROM_FONT;
         job.glyph = font_face_glyph(face, probes[probe]);
-        if (job.glyph == 0) continue;
+        if (job.glyph == 0) {
+            continue;
+        }
         status = prepare_job(face, &job, scale, error);
         inked = status == EDDS_OK && font_shape_bounds(&job.boundary, box);
         font_shape_free(&job.shape);
         font_shape_free(&job.boundary);
-        if (status != EDDS_OK) return status;
+        if (status != EDDS_OK) {
+            return status;
+        }
         if (inked) {
             *cap_height = (float)rounded(box[3]);
             return EDDS_OK;
@@ -245,8 +271,7 @@ edds_status font_generate(
     void *cancel_context,
     edds_progress_fn progress,
     void *progress_context,
-    edds_error *error
-) {
+    edds_error *error) {
     font_face face;
     font_characters builtin = { NULL, 0 };
     const font_characters *wanted;
@@ -270,13 +295,17 @@ edds_status font_generate(
         return EDDS_UNSUPPORTED_FORMAT;
     }
     status = font_face_open(&face, request->data, request->size, error);
-    if (status != EDDS_OK) return status;
+    if (status != EDDS_OK) {
+        return status;
+    }
     font_face_names(&face, &output->source);
     output->source.units_per_em = face.units_per_em;
     output->source.glyph_count = face.glyph_count;
     if (request->characters == NULL) {
         status = font_characters_builtin(&builtin, error);
-        if (status != EDDS_OK) return status;
+        if (status != EDDS_OK) {
+            return status;
+        }
         wanted = &builtin;
     } else {
         wanted = request->characters;
@@ -286,7 +315,9 @@ edds_status font_generate(
     /* The wanted set and the two characters every font carries, each once, in ascending order. */
     characters = malloc((wanted->count + 2u) * sizeof *characters);
     jobs = calloc(wanted->count + 2u, sizeof *jobs);
-    if (characters == NULL || jobs == NULL) goto out_of_memory;
+    if (characters == NULL || jobs == NULL) {
+        goto out_of_memory;
+    }
     characters[character_count++].code = FONT_SPACE;
     characters[character_count++].code = FONT_MISSING_BOX;
     for (size_t at = 0; at < wanted->count; ++at) {
@@ -302,13 +333,19 @@ edds_status font_generate(
             const int mandatory = characters[at].code == FONT_SPACE || characters[at].code == FONT_MISSING_BOX;
             size_t job = job_count;
             if (glyph == 0 && !mandatory) {
-                if (!push_code(&output->missing, &output->missing_count, characters[at].code)) goto out_of_memory;
+                if (!push_code(&output->missing, &output->missing_count, characters[at].code)) {
+                    goto out_of_memory;
+                }
                 continue;
             }
-            if (glyph == 0 && !push_code(&output->drawn, &output->drawn_count, characters[at].code)) goto out_of_memory;
+            if (glyph == 0 && !push_code(&output->drawn, &output->drawn_count, characters[at].code)) {
+                goto out_of_memory;
+            }
             /* Characters that share a glyph share its cell. */
             for (size_t seen = 0; glyph != 0 && seen < job_count; ++seen) {
-                if (jobs[seen].origin == FROM_FONT && jobs[seen].glyph == glyph) job = seen;
+                if (jobs[seen].origin == FROM_FONT && jobs[seen].glyph == glyph) {
+                    job = seen;
+                }
             }
             if (job == job_count) {
                 jobs[job].origin = glyph != 0 ? FROM_FONT : (characters[at].code == FONT_SPACE ? DRAWN_SPACE : DRAWN_BOX);
@@ -322,7 +359,9 @@ edds_status font_generate(
         }
         character_count = kept;
     }
-    if (progress != NULL) progress(progress_context, 0.02);
+    if (progress != NULL) {
+        progress(progress_context, 0.02);
+    }
 
     for (size_t at = 0; at < job_count; ++at) {
         if (cancelled != NULL && cancelled(cancel_context)) {
@@ -331,11 +370,19 @@ edds_status font_generate(
             goto done;
         }
         status = prepare_job(&face, &jobs[at], scale, error);
-        if (status != EDDS_OK) goto done;
-        if (jobs[at].width > largest) largest = jobs[at].width;
-        if (jobs[at].height > largest) largest = jobs[at].height;
+        if (status != EDDS_OK) {
+            goto done;
+        }
+        if (jobs[at].width > largest) {
+            largest = jobs[at].width;
+        }
+        if (jobs[at].height > largest) {
+            largest = jobs[at].height;
+        }
     }
-    if (progress != NULL) progress(progress_context, 0.1);
+    if (progress != NULL) {
+        progress(progress_context, 0.1);
+    }
 
     output->cell = largest + CELL_MARGIN;
     if (!choose_atlas(job_count, output->cell, &output->atlas_width, &output->atlas_height, &columns)) {
@@ -355,8 +402,12 @@ edds_status font_generate(
         placement->height = jobs[at].height;
     }
     output->atlas = calloc((size_t)output->atlas_width * output->atlas_height, 4u);
-    if (output->atlas == NULL) goto out_of_memory;
-    for (size_t at = 3; at < (size_t)output->atlas_width * output->atlas_height * 4u; at += 4u) output->atlas[at] = 255u;
+    if (output->atlas == NULL) {
+        goto out_of_memory;
+    }
+    for (size_t at = 3; at < (size_t)output->atlas_width * output->atlas_height * 4u; at += 4u) {
+        output->atlas[at] = 255u;
+    }
     {
         render_run run;
         run.jobs = jobs;
@@ -369,7 +420,9 @@ edds_status font_generate(
         run.progress_context = progress_context;
         run.finished = 0;
         status = edds_pool_run((uint32_t)job_count, EDDS_POOL_MEMORY_BUDGET, render_task, &run, error);
-        if (status != EDDS_OK) goto done;
+        if (status != EDDS_OK) {
+            goto done;
+        }
         for (size_t at = 0; at < job_count; ++at) {
             if (jobs[at].status != EDDS_OK) {
                 status = jobs[at].status;
@@ -382,7 +435,9 @@ edds_status font_generate(
     codes = malloc(character_count * sizeof *codes);
     glyphs = malloc(character_count * sizeof *glyphs);
     entries = malloc(character_count * sizeof *entries);
-    if (codes == NULL || glyphs == NULL || entries == NULL) goto out_of_memory;
+    if (codes == NULL || glyphs == NULL || entries == NULL) {
+        goto out_of_memory;
+    }
     for (size_t at = 0; at < character_count; ++at) {
         const glyph_job *job = &jobs[characters[at].job];
         codes[at] = characters[at].code;
@@ -397,20 +452,26 @@ edds_status font_generate(
         entries[at].advance = (int16_t)job->advance;
     }
     status = font_face_kerning(&face, codes, glyphs, character_count, scale, &pairs, &pair_count, error);
-    if (status != EDDS_OK) goto done;
+    if (status != EDDS_OK) {
+        goto done;
+    }
     {
         font_header header;
         header.name = request->name;
         header.size = request->font_size;
         header.cell = output->cell;
         status = cap_height_of(&face, scale, &header.cap_height, error);
-        if (status != EDDS_OK) goto done;
+        if (status != EDDS_OK) {
+            goto done;
+        }
         status = font_fnt_write(&header, entries, character_count, pairs, pair_count,
             &output->fnt, &output->fnt_size, &output->range_count, error);
     }
     output->glyph_count = (uint32_t)character_count;
     output->pair_count = (uint32_t)pair_count;
-    if (progress != NULL && status == EDDS_OK) progress(progress_context, 1.0);
+    if (progress != NULL && status == EDDS_OK) {
+        progress(progress_context, 1.0);
+    }
     goto done;
 
 out_of_memory:
@@ -425,12 +486,16 @@ done:
     free(glyphs);
     free(pairs);
     font_characters_free(&builtin);
-    if (status != EDDS_OK) font_output_free(output);
+    if (status != EDDS_OK) {
+        font_output_free(output);
+    }
     return status;
 }
 
 void font_output_free(font_output *output) {
-    if (output == NULL) return;
+    if (output == NULL) {
+        return;
+    }
     free(output->fnt);
     free(output->atlas);
     free(output->missing);
@@ -447,7 +512,9 @@ edds_status font_source_describe(const uint8_t *data, size_t size, font_source_i
     }
     memset(info, 0, sizeof *info);
     status = font_face_open(&face, data, size, error);
-    if (status != EDDS_OK) return status;
+    if (status != EDDS_OK) {
+        return status;
+    }
     font_face_names(&face, info);
     info->units_per_em = face.units_per_em;
     info->glyph_count = face.glyph_count;

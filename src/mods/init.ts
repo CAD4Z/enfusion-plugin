@@ -137,7 +137,7 @@ export function initPlanOf(name: ModName, layout: Layout): InitPlan {
       { path: GITIGNORE_FILE, content: GITIGNORE },
       { path: `${main}/${CONFIG_FILE}`, content: configOf(name, layout) },
       { path: `${name}/${MOD_CPP}`, content: modCppOf(name) },
-      { path: `${main}/${STRINGTABLE_FILE}`, content: STRINGTABLE },
+      { path: `${main}/${STRINGTABLE_FILE}`, content: stringtableOf(name) },
       { path: `${name}/${SCRIPTS}/${INPUTS}`, content: INPUTS_XML },
       ...MODULES.map((module) => ({
         path: `${name}/${SCRIPTS}/${module.folder}/${name}.c`,
@@ -406,6 +406,9 @@ ${fieldLine('author', fields.author, 'Who made it.')}
   "launch": {
     // Where the built mod goes, counted from this file: ${BUILT}\\@${mod}.
     "modsDirectory": "${BUILT}",
+    // What every target loads, in load order: nothing is added to this list on the way to the
+    // game, so the mod itself is named here, and any mod it needs goes in front of it.
+    "mods": [${quoted(`@${fields.name}`)}],
     "targets": [
       {
         // The client alone, which loads the vanilla offline mission of the map: a mod is seen
@@ -546,14 +549,26 @@ const INPUTS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 </modded_inputs>
 `;
 
+/** The columns of a stringtable, in the order the game's own tables have them. */
+const STRINGTABLE_LANGUAGES = [
+  'original', 'english', 'czech', 'german', 'russian', 'polish', 'hungarian', 'italian', 'spanish',
+  'french', 'chinese', 'japanese', 'portuguese', 'chinesesimp',
+];
+
 /**
- * The header row of a stringtable, which is the whole of an empty one. It goes in the root of the
- * main addon because the root of the pbo is where the engine reads one from, and it is tab
- * separated because that is what the engine parses.
+ * A stringtable with the mod's name as its one string. It goes in the root of the main addon,
+ * because the root of the pbo is where the engine reads one from. Every field is quoted and comma
+ * separated, the way the game's own tables are: a table of tabs, or one with a header and no rows,
+ * is what the server reports as `Invalid StringTable`.
  */
-const STRINGTABLE =
-  'Language\toriginal\tenglish\tczech\tgerman\trussian\tpolish\thungarian\titalian\tspanish\t' +
-  'french\tchinese\tjapanese\tportuguese\tchinesesimp\n';
+function stringtableOf(name: string): string {
+  const row = (fields: readonly string[]): string =>
+    fields.map((field) => `"${field.replace(/"/g, '""')}"`).join(',') + ',\r\n';
+  const translated = STRINGTABLE_LANGUAGES.map((language) =>
+    language === 'original' || language === 'english' ? name : '');
+
+  return row(['Language', ...STRINGTABLE_LANGUAGES]) + row([`STR_${name}_Name`, ...translated]);
+}
 
 /** What never belongs in a repository: what the build makes, what the game writes, and the key. */
 const GITIGNORE = `# What the build makes.

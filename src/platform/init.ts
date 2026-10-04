@@ -44,14 +44,27 @@ export async function requireAddon(
   config: vscode.Uri,
   requirement: AddonRequirement,
 ): Promise<boolean> {
-  const source = new TextDecoder().decode(await vscode.workspace.fs.readFile(config));
-  const written = requiringAddon(source, requirement);
+  const bytes = await vscode.workspace.fs.readFile(config);
+  // Written back only in the encoding it was read in. A config saved in a code page rather than in
+  // UTF-8 would have every byte outside ASCII replaced for good, so it is refused instead; a BOM
+  // it had is kept.
+  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  let source: string;
+  try {
+    source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new Error(
+      `${config.fsPath} is not UTF-8, so the new addon was not written into its requiredAddons: ` +
+        'add it there by hand, or save the file as UTF-8 first.',
+    );
+  }
+  const written = requiringAddon(bom ? source.slice(1) : source, requirement);
 
   if (written === undefined) {
     return false;
   }
 
-  await vscode.workspace.fs.writeFile(config, new TextEncoder().encode(written));
+  await vscode.workspace.fs.writeFile(config, new TextEncoder().encode(bom ? String.fromCharCode(0xfeff) + written : written));
   return true;
 }
 

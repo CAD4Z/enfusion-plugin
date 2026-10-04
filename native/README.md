@@ -16,6 +16,29 @@ ctest --test-dir native/.build -C Release --output-on-failure
 cmake --install native/.build --config Release --prefix dist/native/win32-x64
 ```
 
+## Layout
+
+```text
+include/edds/     the texture library's API: EDDS, batches, the worker pool, the memory budget
+include/font/     the font library's API
+src/cli/          the executable: the area dispatch, the edds and font commands, the publish transaction
+src/edds/         edds_core: the EDDS container, the mip pipeline, GPU encoders, metadata, the pool
+src/edds/decode/  the source decoders, one per resource class: png, tga, jpeg, tiff, dds
+src/font/         font_core: TrueType reading, kerning, outlines, the MSDF field, FNT5
+tests/edds/       EDDS fixtures, the independent reference reader, core and black-box CLI tests
+tests/font/       font fixtures, the independent reference, core and black-box CLI tests
+tests/workbench/  captures from DayZ Workbench and fontTools that the tests are held to
+fuzz/             libFuzzer targets for both areas
+```
+
+The code is formatted by `clang-format -i` with `native/.clang-format` (clang-format 19, the one
+Visual Studio 2022 Build Tools carry): every branch and loop has braces and a body on lines of its
+own, and line breaks are otherwise the author's.
+
+A library's own headers sit beside its sources and are included by name; another area's are
+reached only through `include/`. The one exception is the meta text reader in `src/edds`, which
+`font_core` and the executable also see: both areas write their recipes in that format.
+
 Set `ENFUSION_BUILD_FUZZER=ON` with Clang to build the libFuzzer/AddressSanitizer/UBSan target. The
 synthetic fixtures and their independent expected reader live under `native/tests`; production
 code is not used to create expected values. CI materializes those fixtures, including a maximum-
@@ -26,15 +49,19 @@ integer boundary case, as an owned seed corpus and passes the corpus directory t
 ```text
 enfusion protocol --machine
 enfusion edds inspect --machine --protocol 1 --input PATH
-enfusion edds inspect --machine --protocol 1 --input PATH --metadata PATH.edds.meta
+enfusion edds inspect --machine --protocol 1 --input PATH --metadata PATH.edds.meta [--identity-only]
 enfusion edds preview --machine --protocol 1 --mip N --input PATH
-enfusion edds batch --machine --protocol 1 < jobs.ndjson
+enfusion edds batch --machine --protocol 1 [--cancel-file PATH] < jobs.ndjson
 enfusion edds convert --machine --protocol 1 --input SOURCE.png --output RESULT.edds \
   --target-format enfusion-dds --format-compress fastest --compress-threshold 80 \
   --remove-mips 0 --conversion color-hq-compression --conversion-quality 0.403 \
   --swizzling none --contains-mips false --generate-mips true --normalize false \
-  --mipmap-function filter --mipmap-filter box --tiled-texture true
+  --mipmap-function filter --mipmap-filter box --tiled-texture true [--cancel-file PATH]
 ```
+
+`--identity-only` reads a metadata file whose recipe this converter cannot run for its identity
+alone: the GUID and the names are validated as always, and the unsupported recipe is reported
+under `unsupportedMetadata` instead of refusing the whole inspection.
 
 `protocol` answers for the whole executable: the protocol version and, per area, its commands.
 An area owns its commands, flags and JSON; a new area is a new first-level subcommand and changes
@@ -58,11 +85,13 @@ is not a process RSS limit: bounded job records, thread stacks and the C runtime
 `EDDS_CONVERT_WORKERS` pins the worker count for a test or a diagnostic run; it is not a protocol
 field and never a texture-profile one.
 
-The extension passes a private cancellation-file control to the process; the codec polls it at its
-existing cancellation points, then the extension force-kills only after a grace period and removes
-any matching sibling transaction temps. Diagnostics are also written for a human on stderr. Exit
-categories are stable: `0` success, `2` invalid invocation, `3` invalid input, `4` unsupported
-preview format, `5` cancellation and `6` internal failure.
+The extension passes a private cancellation file to `convert` and `batch` alike; the codec polls it
+at its existing cancellation points, then the extension force-kills only after a grace period and
+recovers whatever pair the process left under its own id (see the publish transaction below). A
+batch the converter refuses as a whole — its header, a job line, the stream — is answered with one
+`error` record, the same shape a single command refuses with. Diagnostics are also written for a
+human on stderr. Exit categories are stable: `0` success, `2` invalid invocation, `3` invalid
+input, `4` unsupported preview format, `5` cancellation and `6` internal failure.
 
 ## EDDS: supported slice and hard limits
 
@@ -93,6 +122,9 @@ largest-to-smallest chain. Any other subtype is
 refused by its own code rather than decoded on a guess, and an extension outside that set — `.jpeg`
 and `.tif` included, which Workbench does not register — is `unsupported-source-extension` before
 anything is read. JPEG carries no alpha; TIFF alpha comes from the file, never from the profile.
+A PNG `tRNS` colour key on an RGB image makes the pixels of that colour transparent and the image
+one with alpha; a suggested `PLTE` on RGB or RGBA changes no pixel and is passed over. However
+many IDAT chunks a PNG splits its image data into, the data is assembled with one allocation.
 
 It writes EnfusionDDS with a floor-halved NPOT Box or Kaiser mip chain. Supplied DDS levels are used
 only with `--contains-mips true --generate-mips false`; otherwise only the decoded top level enters
@@ -136,9 +168,23 @@ choices with an explanation; a mixed batch reports source-specific failures inde
 Registration is explicit: supplying `--metadata`, `--resource-name`, `--source-file` and `--guid`
 together publishes a canonical EDDS/metadata pair; omitting all four publishes only EDDS and
 refuses an existing sibling metadata file. The optional `--expect-*-revision size:mtime` (or
-`missing`) triplet lets a caller bind the publish step to the filesystem snapshot it presented.
+`missing`) triplet lets a caller bind the publish step to the filesystem snapshot it presented; the
+time is in milliseconds, and one millisecond either way is the same write, because a caller reading
+it through a JavaScript `Date` gets it rounded where this side truncates. The size must match
+exactly. Metadata names and source files are written between quotes as they are, so a backslash in
+one — a path written the Windows way — is refused; resource paths use forward slashes.
 Both artifacts are built and flushed in sibling temporary files, then replaced with rollback.
-`EDDS_CONVERT_FAIL` is reserved for the black-box transaction tests.
+A process-owned `pending` marker is flushed before originals move to backups; renaming it to
+`committed` records publication of the complete pair. The marker is removed after the backups.
+After a converter process dies — a `convert` as much as a `batch` — the host restores a pending pair
+(including removing newly created members) or retains a committed pair, and it looks after every
+batch, too, for the journal of a job whose own rollback failed. Recovery keeps backups until both
+members are restored and reports a recovery failure instead of deleting the only surviving
+originals. The input and the output must be different files, which on Windows is decided by the
+system's own resolution of both paths and by the identity of a file that exists: a trailing dot
+or space, an 8.3 name or a junction does not make the source its own destination.
+`EDDS_CONVERT_FAIL` is a fault-injection hook for the black-box transaction tests; nothing in the
+extension sets it.
 
 ## Fonts: SDF fonts from TrueType
 
@@ -217,7 +263,10 @@ What the engine is given:
   `edds_core` in the same process.
 
 The three files are built and flushed in sibling temporaries and replaced together, with rollback
-on any failure; the black-box tests make that transaction fail through the same
+on any failure, and a rollback that could not put everything back says so and keeps the previous
+files beside the new ones. There is no crash journal as there is for textures: a process killed
+in the middle of the swap can leave the new atlas beside the old `.fnt`, with the old files kept
+as `.enfusion-old` temporaries. The black-box tests make that transaction fail through the same
 `EDDS_CONVERT_FAIL`, at stages named `font-*`. A font that cannot be made is refused with its
 reason: CFF or CFF2 outlines (`unsupported-outline-format`), a variable font
 (`variable-font-unsupported`), a collection (`font-collection-unsupported`), a `FontSize` outside 8
@@ -226,7 +275,8 @@ exit categories are those of `edds`. Every offset and length in the TrueType fil
 before it is followed. Hard limits: a font file of 64 MiB (`font-file-limit`); 16384 points, 4096
 contours and 4096 components per glyph, components nested 16 deep (`glyph-size-limit`); 8192
 characters (`character-set-limit`) and a character file of 1 MiB (`character-file-limit`); 2^20
-kerning pairs (`kerning-limit`). A glyph whose box does not fit an atlas is `glyph-too-large`.
+kerning pairs and 4096 pair subtables in the `kern` feature (`kerning-limit`). A glyph whose box
+does not fit an atlas is `glyph-too-large`.
 
 A made font is reported as `font-generate` with its `guid`, `glyphCount`, `rangeCount`,
 `pairCount`, `cell`, `atlasWidth` and `atlasHeight`, the code points the font lacks (`missing`)

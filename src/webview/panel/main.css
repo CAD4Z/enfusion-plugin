@@ -1,0 +1,310 @@
+/*
+ * The Mods panel's own look. What it shares with the form over a `.enf` — the theme variables on
+ * the body, the row that is a button, the way a problem reads — is in `shared.css`.
+ *
+ * The panel is a column of rows under a row of buttons, indented by what a thing belongs to: the
+ * workspace file at the edge, its mods a step in, and each mod's addons a step in from that.
+ */
+
+@import '../shared.css';
+
+/*
+ * The buttons that act on the whole workspace. They stay put while the mods scroll: the one thing
+ * this panel is opened to press should not be somewhere off the top of it.
+ */
+.tools {
+  display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, transparent);
+  background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--vscode-widget-shadow, transparent) 18%, transparent);
+}
+
+.tool-group {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tool-heading {
+  color: var(--vscode-sideBarTitle-foreground, var(--vscode-descriptionForeground));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tool-row {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Carries the tooltip for the button inside it, which when disabled takes no pointer events. */
+.tools .holds {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/*
+ * The two lists say what the buttons under them are about, so they stand in the buttons' own
+ * columns: the target over Start and Add client, the build over Build. Three columns of the same
+ * gap, one of them spanned — rather than a width of its own, which would line up with the row
+ * under it at one panel width and at no other.
+ *
+ * The columns come out the same size as the flex row's by construction: three tracks of `1fr` with
+ * a 4px gap and three items of `flex: 1 1 0` with a 4px gap both leave a third of what is left
+ * after the gaps. Spanning two takes the gap between them with it, which is the 4px that makes the
+ * list end exactly where Add client does.
+ */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+
+.holds.target {
+  grid-column: span 2;
+}
+
+.choice {
+  width: 100%;
+  min-width: 0;
+}
+
+.tool {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tool:hover:not(:disabled) {
+  background-color: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+}
+
+/* The action that opens a run is the one visual anchor; the rest stay quiet until pointed at. */
+.tool.primary {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.tool.primary:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.tool:active:not(:disabled) {
+  background-color: var(
+    --vscode-toolbar-activeBackground,
+    var(--vscode-list-activeSelectionBackground)
+  );
+}
+
+.tool.primary:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tool:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.tool .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool svg {
+  flex: none;
+  pointer-events: none;
+}
+
+.empty {
+  padding: 12px 20px;
+  color: var(--vscode-foreground);
+  line-height: 1.5;
+}
+
+.empty p {
+  margin: 0 0 12px;
+}
+
+/* An empty workspace has one thing to do and one thing to try, so both sit under the sentence. */
+.empty .buttons {
+  display: flex;
+  gap: 6px;
+  padding: 0;
+}
+
+.workspace,
+.mod {
+  display: flex;
+  flex-direction: column;
+  margin: 0 6px;
+  padding: 3px 0;
+}
+
+.row {
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+/* The bar of a file: the workspace's, and each mod's — one click, one manifest. */
+.row.bar {
+  min-height: 28px;
+  padding: 4px 8px;
+  gap: 6px;
+}
+
+.row.bar .name {
+  font-weight: 600;
+}
+
+/* A mod belongs to the workspace above it, and its addons to the mod. */
+.mod > .row.bar {
+  padding-left: 16px;
+}
+
+.mod > .row.addon,
+.mod > .row.add,
+.mod > .row.problem {
+  padding-left: 28px;
+}
+
+.workspace > .row.problem {
+  padding-left: 20px;
+}
+
+.row .name {
+  white-space: nowrap;
+}
+
+.row .tag {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.row .patch {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No room in a side panel for a sentence to wrap, so it is cut rather than allowed to. */
+.row.problem .message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A row with nothing behind it to open: a mod that has no manifest to be opened yet. */
+.row.static {
+  cursor: default;
+}
+
+.row.static:hover {
+  background-color: transparent;
+}
+
+/*
+ * An addon is two things at once — a config.cpp to open and an addon to pack — so its row holds
+ * two buttons rather than being one. The opening half takes the width, and the action sits at the
+ * end of it.
+ */
+.row.addon {
+  cursor: default;
+}
+
+.row.addon:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.row .open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Quiet until the row is pointed at: one Build per addon would otherwise shout down the names. */
+.row .action {
+  flex: none;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.row:hover .action,
+.row .action:focus-visible {
+  border-color: var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.row .action:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.row .open:focus-visible,
+.row .action:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* The way to add an addon sits under the addons, quiet: it is an offer, not one of the mod's own. */
+.row.add .name {
+  color: var(--vscode-descriptionForeground);
+  font-weight: normal;
+}
+
+.row.add:hover .name {
+  color: var(--vscode-foreground);
+}

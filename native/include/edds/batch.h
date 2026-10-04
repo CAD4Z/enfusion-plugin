@@ -45,8 +45,7 @@ edds_status edds_batch_parse_line(
     const char *line,
     size_t size,
     edds_batch_record *record,
-    edds_error *error
-);
+    edds_error *error);
 
 /**
  * Frames NDJSON lines out of a byte stream. Where a read happened to split is not something the
@@ -78,8 +77,7 @@ edds_batch_line edds_batch_reader_push(
     const char *data,
     size_t data_size,
     size_t *consumed,
-    size_t *size
-);
+    size_t *size);
 
 /** The last line of a stream that ended without a newline; PENDING when nothing was left. */
 edds_batch_line edds_batch_reader_finish(edds_batch_reader *reader, size_t *size);

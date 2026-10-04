@@ -66,18 +66,19 @@ const extension = {
 };
 
 /**
- * The two browser bundles — the Mods panel and the form over a `.enf` — as ESM, each with its
- * stylesheet coming out beside it under the same name. Bundled apart rather than together: an
- * editor tab loads the form alone, and a panel that is only a list has no business carrying it.
+ * The browser bundles — the Mods panel, the form over a `.enf`, the EDDS preview and the two
+ * texture conversion editors — as ESM, each with its stylesheet coming out beside it under the
+ * same name. Bundled apart rather than together: an editor tab loads its own page alone, and a
+ * panel that is only a list has no business carrying a form.
  */
 const webview = {
   ...shared,
   entryPoints: {
-    webview: 'src/webview/main.ts',
-    form: 'src/webview/form.ts',
-    texture: 'src/webview/texture.ts',
-    'texture-conversion': 'src/webview/textureConversion.ts',
-    'texture-batch': 'src/webview/textureBatch.ts',
+    webview: 'src/webview/panel/main.ts',
+    form: 'src/webview/form/form.ts',
+    texture: 'src/webview/texture/texture.ts',
+    'texture-conversion': 'src/webview/texture/textureConversion.ts',
+    'texture-batch': 'src/webview/texture/textureBatch.ts',
   },
   outdir: 'dist',
   format: 'esm',
@@ -93,6 +94,7 @@ function testBuild() {
     entryPoints,
     outbase: 'test',
     outdir: 'out/test',
+    external: ['esbuild'],
     format: 'cjs',
     platform: 'node',
     target: 'node20',

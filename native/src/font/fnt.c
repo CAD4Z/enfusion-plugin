@@ -21,11 +21,15 @@ typedef struct bytes {
 } bytes;
 
 static void append(bytes *out, const void *data, size_t size) {
-    if (out->failed) return;
+    if (out->failed) {
+        return;
+    }
     if (out->size + size > out->capacity) {
         size_t capacity = out->capacity == 0 ? 1024u : out->capacity;
         uint8_t *grown;
-        while (capacity < out->size + size) capacity *= 2u;
+        while (capacity < out->size + size) {
+            capacity *= 2u;
+        }
         grown = realloc(out->data, capacity);
         if (grown == NULL) {
             out->failed = 1;
@@ -60,7 +64,9 @@ static void byte8(bytes *out, uint32_t value) {
 }
 
 static void be32_at(bytes *out, size_t at, size_t value) {
-    if (out->failed) return;
+    if (out->failed) {
+        return;
+    }
     out->data[at] = (uint8_t)(value >> 24);
     out->data[at + 1u] = (uint8_t)(value >> 16);
     out->data[at + 2u] = (uint8_t)(value >> 8);
@@ -88,8 +94,7 @@ edds_status font_fnt_write(
     uint8_t **data,
     size_t *size,
     uint32_t *range_count,
-    edds_error *error
-) {
+    edds_error *error) {
     bytes out = { NULL, 0, 0, 0 };
     const size_t name_size = strlen(header->name);
     size_t ranges = 0;
@@ -130,7 +135,9 @@ edds_status font_fnt_write(
     le32(&out, 0);
     for (size_t at = 0; at < entry_count;) {
         size_t run = 1;
-        while (at + run < entry_count && entries[at + run].code == entries[at].code + run && run < 0xFFFFu) ++run;
+        while (at + run < entry_count && entries[at + run].code == entries[at].code + run && run < 0xFFFFu) {
+            ++run;
+        }
         le32(&out, entries[at].code);
         le16(&out, (uint32_t)run);
         le16(&out, 0);
@@ -206,12 +213,16 @@ static edds_status malformed(edds_error *error, const char *what) {
 static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *info, edds_error *error) {
     uint32_t name_size;
     const uint8_t *at;
-    if (size < 4u) return malformed(error, "HEAD is truncated");
+    if (size < 4u) {
+        return malformed(error, "HEAD is truncated");
+    }
     name_size = read32(chunk);
     if (name_size == 0 || name_size > sizeof info->name || size < 4u + name_size + 29u) {
         return malformed(error, "the HEAD name");
     }
-    if (chunk[4u + name_size - 1u] != 0) return malformed(error, "the HEAD name is not terminated");
+    if (chunk[4u + name_size - 1u] != 0) {
+        return malformed(error, "the HEAD name is not terminated");
+    }
     memcpy(info->name, chunk + 4, name_size);
     at = chunk + 4u + name_size;
     info->size = (int32_t)read32(at);
@@ -231,10 +242,14 @@ static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *inf
 
 static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *info, edds_error *error) {
     uint64_t total = 0;
-    if (size < 16u) return malformed(error, "GLPS is truncated");
+    if (size < 16u) {
+        return malformed(error, "GLPS is truncated");
+    }
     info->glyph_count = read32(chunk + 8);
     info->range_count = read32(chunk + 12);
-    if ((uint64_t)size != 16u + 8u * (uint64_t)info->range_count) return malformed(error, "the GLPS ranges");
+    if ((uint64_t)size != 16u + 8u * (uint64_t)info->range_count) {
+        return malformed(error, "the GLPS ranges");
+    }
     info->ranges = malloc((info->range_count == 0 ? 1u : info->range_count) * sizeof *info->ranges);
     if (info->ranges == NULL) {
         font_fail(error, "allocation-failed", "Memory for the FNT ranges could not be allocated.");
@@ -245,7 +260,9 @@ static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *inf
         info->ranges[at].count = read16(chunk + 20u + 8u * at);
         total += info->ranges[at].count;
     }
-    if (total != info->glyph_count) return malformed(error, "the GLPS ranges do not add up to the glyph count");
+    if (total != info->glyph_count) {
+        return malformed(error, "the GLPS ranges do not add up to the glyph count");
+    }
     return EDDS_OK;
 }
 
@@ -302,7 +319,9 @@ edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
             ++boxes;
             box_bytes = chunk_size;
         } else if (memcmp(data + at, "KERN", 4) == 0) {
-            if (chunk_size % 8u != 0) status = malformed(error, "KERN is not whole pairs");
+            if (chunk_size % 8u != 0) {
+                status = malformed(error, "KERN is not whole pairs");
+            }
             info->pair_count = chunk_size / 8u;
         }
         at += 8u + chunk_size;
@@ -314,12 +333,16 @@ edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
         status = malformed(error, "TCRD does not hold one box per glyph");
     }
     free(data);
-    if (status != EDDS_OK) font_info_free(info);
+    if (status != EDDS_OK) {
+        font_info_free(info);
+    }
     return status;
 }
 
 void font_info_free(font_info *info) {
-    if (info == NULL) return;
+    if (info == NULL) {
+        return;
+    }
     free(info->ranges);
     info->ranges = NULL;
 }

@@ -34,7 +34,6 @@ typedef struct signed_distance {
     double dot;
 } signed_distance;
 
-
 static font_vec normalized(font_vec a) {
     const double size = vec_length(a);
     return size == 0 ? vec_of(0, 1) : vec_times(a, 1.0 / size);
@@ -86,9 +85,13 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
     size_t start = 0;
     size_t *corners = malloc((loops->count == 0 ? 1u : loops->count) * sizeof *corners);
     memset(colored, 0, sizeof *colored);
-    if (corners == NULL) goto failed;
+    if (corners == NULL) {
+        goto failed;
+    }
     colored->edges = malloc((loops->count * 3u + 3u) * sizeof *colored->edges);
-    if (colored->edges == NULL) goto failed;
+    if (colored->edges == NULL) {
+        goto failed;
+    }
     colored->capacity = loops->count * 3u + 3u;
     for (size_t loop = 0; loop < loops->loop_count; ++loop) {
         const size_t end = loops->loop_ends[loop];
@@ -98,14 +101,18 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
         for (size_t at = 0; at < count; ++at) {
             const font_vec before = normalized(edge_direction(&edges[(at + count - 1u) % count], 1.0));
             const font_vec after = normalized(edge_direction(&edges[at], 0.0));
-            if (is_corner(before, after, threshold)) corners[corner_count++] = at;
+            if (is_corner(before, after, threshold)) {
+                corners[corner_count++] = at;
+            }
         }
         if (corner_count == 0) {
             switch_color(&color, &seed, 0);
             for (size_t at = 0; at < count; ++at) {
                 font_edge edge = edges[at];
                 edge.color = color;
-                if (!font_shape_push(colored, &edge)) goto failed;
+                if (!font_shape_push(colored, &edge)) {
+                    goto failed;
+                }
             }
         } else if (corner_count == 1) {
             unsigned colors[3];
@@ -118,7 +125,9 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                 for (size_t at = 0; at < count; ++at) {
                     font_edge edge = edges[(corners[0] + at) % count];
                     edge.color = colors[1 + trichotomy(at, count)];
-                    if (!font_shape_push(colored, &edge)) goto failed;
+                    if (!font_shape_push(colored, &edge)) {
+                        goto failed;
+                    }
                 }
             } else {
                 /* Too few edges for three runs: every edge splits in thirds, starting at the corner. */
@@ -127,7 +136,9 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                     font_edge edge = edge_part(&edges[(corners[0] + at / 3u) % count],
                         (double)(at % 3u) / 3.0, (double)(at % 3u + 1u) / 3.0);
                     edge.color = colors[1 + trichotomy(at, parts)];
-                    if (!font_shape_push(colored, &edge)) goto failed;
+                    if (!font_shape_push(colored, &edge)) {
+                        goto failed;
+                    }
                 }
             }
         } else {
@@ -143,7 +154,9 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
                     switch_color(&color, &seed, spline == corner_count - 1u ? initial : 0u);
                 }
                 edge.color = color;
-                if (!font_shape_push(colored, &edge)) goto failed;
+                if (!font_shape_push(colored, &edge)) {
+                    goto failed;
+                }
             }
         }
         start = end;
@@ -175,8 +188,12 @@ static int solve_normed_cubic(double roots[3], double a, double b, double c) {
     const double shift = a / 3.0;
     if (r2 < q3) {
         double t = r / sqrt(q3);
-        if (t < -1) t = -1;
-        if (t > 1) t = 1;
+        if (t < -1) {
+            t = -1;
+        }
+        if (t > 1) {
+            t = 1;
+        }
         t = acos(t);
         q = -2.0 * sqrt(q);
         roots[0] = q * cos(t / 3.0) - shift;
@@ -200,7 +217,9 @@ static int solve_cubic(double roots[3], double a, double b, double c, double d) 
     if (a != 0) {
         const double normed = b / a;
         /* Beyond this ratio the cubic term is noise and the quadratic is the better answer. */
-        if (fabs(normed) < 1e6) return solve_normed_cubic(roots, normed, c / a, d / a);
+        if (fabs(normed) < 1e6) {
+            return solve_normed_cubic(roots, normed, c / a, d / a);
+        }
     }
     return quadratic_roots(roots, b, c, d);
 }
@@ -283,14 +302,18 @@ static double pseudo_distance(const font_edge *edge, font_vec origin, signed_dis
         const font_vec aq = vec_minus(origin, edge->p[0]);
         if (vec_dot(aq, direction) < 0) {
             const double pseudo = vec_cross(aq, direction);
-            if (fabs(pseudo) <= fabs(distance.distance)) return pseudo;
+            if (fabs(pseudo) <= fabs(distance.distance)) {
+                return pseudo;
+            }
         }
     } else if (param > 1) {
         const font_vec direction = normalized(edge_direction(edge, 1));
         const font_vec bq = vec_minus(origin, edge->p[2]);
         if (vec_dot(bq, direction) > 0) {
             const double pseudo = vec_cross(bq, direction);
-            if (fabs(pseudo) <= fabs(distance.distance)) return pseudo;
+            if (fabs(pseudo) <= fabs(distance.distance)) {
+                return pseudo;
+            }
         }
     }
     return distance.distance;
@@ -302,15 +325,21 @@ static double true_distance(const font_shape *edges, font_vec origin) {
     for (size_t at = 0; at < edges->count; ++at) {
         double param = 0;
         const double distance = fabs(edge_distance(&edges->edges[at], origin, &param).distance);
-        if (distance < nearest) nearest = distance;
+        if (distance < nearest) {
+            nearest = distance;
+        }
     }
     return nearest;
 }
 
 static uint8_t encoded(double distance) {
     double value = 0.5 + distance / FONT_FIELD_RANGE;
-    if (value < 0) value = 0;
-    if (value > 1) value = 1;
+    if (value < 0) {
+        value = 0;
+    }
+    if (value > 1) {
+        value = 1;
+    }
     return (uint8_t)floor(value * 255.0 + 0.5);
 }
 
@@ -363,12 +392,17 @@ static int check_block(cell_field *field, const font_shape *colored, const font_
     int inside_any = 0, outside_any = 0;
     for (int corner = 0; corner < 4; ++corner) {
         for (int channel = 0; channel < 3; ++channel) {
-            if (field->bytes[3u * corners[corner] + (size_t)channel] >= 128u) inside_any = 1;
-            else outside_any = 1;
+            if (field->bytes[3u * corners[corner] + (size_t)channel] >= 128u) {
+                inside_any = 1;
+            } else {
+                outside_any = 1;
+            }
         }
     }
     /* Every channel on one side at all four texels: no interpolation between them can cross over. */
-    if (!(inside_any && outside_any)) return 0;
+    if (!(inside_any && outside_any)) {
+        return 0;
+    }
     for (int sy = 0; sy < 4; ++sy) {
         for (int sx = 0; sx < 4; ++sx) {
             const double fx = 0.125 + 0.25 * sx, fy = 0.125 + 0.25 * sy;
@@ -412,30 +446,44 @@ static void correct(cell_field *field, const font_shape *colored, const font_sha
             settle(field, texel);
         }
     }
-    if (field->width < 2u || field->height < 2u) return;
+    if (field->width < 2u || field->height < 2u) {
+        return;
+    }
     recheck = malloc(texels);
     /* Without room to track which blocks changed, every pass simply checks them all. */
-    if (recheck != NULL) memset(recheck, 1, texels);
+    if (recheck != NULL) {
+        memset(recheck, 1, texels);
+    }
     for (int pass = 0; pass < MOST_CORRECTION_PASSES; ++pass) {
         int changed = 0;
         for (uint32_t v = 0; v + 1u < field->height; ++v) {
             for (uint32_t u = 0; u + 1u < field->width; ++u) {
                 const size_t block = (size_t)v * field->width + u;
-                if (recheck != NULL && !recheck[block]) continue;
-                if (check_block(field, colored, shape, u, v)) changed = 1;
+                if (recheck != NULL && !recheck[block]) {
+                    continue;
+                }
+                if (check_block(field, colored, shape, u, v)) {
+                    changed = 1;
+                }
             }
         }
-        if (!changed) break;
+        if (!changed) {
+            break;
+        }
         if (recheck != NULL) {
             /* A settled texel changes the four blocks it is a corner of. */
             memset(recheck, 0, texels);
             for (uint32_t v = 0; v < field->height; ++v) {
                 for (uint32_t u = 0; u < field->width; ++u) {
-                    if (field->disputed[(size_t)v * field->width + u] != 1) continue;
+                    if (field->disputed[(size_t)v * field->width + u] != 1) {
+                        continue;
+                    }
                     field->disputed[(size_t)v * field->width + u] = 2;
                     for (uint32_t dv = 0; dv < 2u; ++dv) {
                         for (uint32_t du = 0; du < 2u; ++du) {
-                            if (u >= du && v >= dv) recheck[(size_t)(v - dv) * field->width + (u - du)] = 1;
+                            if (u >= du && v >= dv) {
+                                recheck[(size_t)(v - dv) * field->width + (u - du)] = 1;
+                            }
                         }
                     }
                 }
@@ -451,15 +499,18 @@ edds_status font_field_render(
     const font_placement *placement,
     uint8_t *atlas,
     uint32_t atlas_width,
-    edds_error *error
-) {
+    edds_error *error) {
     font_shape colored;
     cell_field field;
     edds_status status;
     int32_t right, bottom;
-    if (boundary->count == 0) return EDDS_OK;
+    if (boundary->count == 0) {
+        return EDDS_OK;
+    }
     status = color_shape(boundary, &colored, error);
-    if (status != EDDS_OK) return status;
+    if (status != EDDS_OK) {
+        return status;
+    }
     memset(&field, 0, sizeof field);
     field.box_left = placement->cell_x + ((double)placement->cell - placement->width) * 0.5;
     field.box_top = placement->cell_y + ((double)placement->cell - placement->height) * 0.5;
@@ -469,10 +520,18 @@ edds_status font_field_render(
     field.top = (int32_t)floor(field.box_top - MARGIN);
     right = (int32_t)ceil(field.box_left + placement->width + MARGIN);
     bottom = (int32_t)ceil(field.box_top + placement->height + MARGIN);
-    if (field.left < (int32_t)placement->cell_x) field.left = (int32_t)placement->cell_x;
-    if (field.top < (int32_t)placement->cell_y) field.top = (int32_t)placement->cell_y;
-    if (right > (int32_t)(placement->cell_x + placement->cell)) right = (int32_t)(placement->cell_x + placement->cell);
-    if (bottom > (int32_t)(placement->cell_y + placement->cell)) bottom = (int32_t)(placement->cell_y + placement->cell);
+    if (field.left < (int32_t)placement->cell_x) {
+        field.left = (int32_t)placement->cell_x;
+    }
+    if (field.top < (int32_t)placement->cell_y) {
+        field.top = (int32_t)placement->cell_y;
+    }
+    if (right > (int32_t)(placement->cell_x + placement->cell)) {
+        right = (int32_t)(placement->cell_x + placement->cell);
+    }
+    if (bottom > (int32_t)(placement->cell_y + placement->cell)) {
+        bottom = (int32_t)(placement->cell_y + placement->cell);
+    }
     field.width = (uint32_t)(right - field.left);
     field.height = (uint32_t)(bottom - field.top);
     field.bytes = malloc((size_t)field.width * field.height * 3u);
@@ -492,12 +551,16 @@ edds_status font_field_render(
             const size_t texel = (size_t)v * field.width + u;
             nearest.distance = HUGE_VAL;
             nearest.dot = 0;
-            for (int channel = 0; channel < 3; ++channel) best[channel] = nearest;
+            for (int channel = 0; channel < 3; ++channel) {
+                best[channel] = nearest;
+            }
             for (size_t at = 0; at < colored.count; ++at) {
                 const font_edge *edge = &colored.edges[at];
                 double param = 0;
                 const signed_distance distance = edge_distance(edge, origin, &param);
-                if (fabs(distance.distance) < fabs(nearest.distance)) nearest = distance;
+                if (fabs(distance.distance) < fabs(nearest.distance)) {
+                    nearest = distance;
+                }
                 for (int channel = 0; channel < 3; ++channel) {
                     if ((edge->color & (1u << channel)) != 0 && closer(distance, best[channel])) {
                         best[channel] = distance;
@@ -507,8 +570,7 @@ edds_status font_field_render(
                 }
             }
             for (int channel = 0; channel < 3; ++channel) {
-                const double value = owners[channel] == NULL ? -HUGE_VAL :
-                    pseudo_distance(owners[channel], origin, best[channel], params[channel]);
+                const double value = owners[channel] == NULL ? -HUGE_VAL : pseudo_distance(owners[channel], origin, best[channel], params[channel]);
                 field.bytes[3u * texel + (size_t)channel] = encoded(value);
             }
             field.truth[texel] = (font_shape_winding(shape, origin) != 0 ? 1.0 : -1.0) * fabs(nearest.distance);

@@ -34,7 +34,7 @@ import {
   installDirOf,
   libraryCandidatesOf,
   libraryFoldersPath,
-} from '../mods/steam';
+} from '../mods/launch/steam';
 
 const run = promisify(execFile);
 
@@ -61,19 +61,23 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
     return typeof value === 'boolean' ? value : unset;
   };
 
+  // The Steam a developer named is the one whose libraries are read, the registry's only behind it.
+  const steam = text(SETTING.steam) || windowsish(await fromRegistry(STEAM));
+
   return {
-    dayz: text(SETTING.dayz) || (await installed(DAYZ, STEAM_APP.dayz)),
+    dayz: text(SETTING.dayz) || (await installed(DAYZ, steam, STEAM_APP.dayz)),
     dayzExperimental:
-      text(SETTING.dayzExperimental) || (await fromSteam(STEAM_APP.dayzExperimental)),
+      text(SETTING.dayzExperimental) || (await fromSteam(steam, STEAM_APP.dayzExperimental)),
     executable: text(SETTING.executable),
     // Through Steam alone: DayZ Server's installer writes no key of the kind the client's does,
     // so where it is is what Steam's own list of libraries says. A machine Steam cannot answer for
     // is left empty here, and `dayzServerRootOf` falls back to the folder beside DayZ.
-    dayzServer: text(SETTING.dayzServer) || (await fromSteam(STEAM_APP.dayzServer)),
+    dayzServer: text(SETTING.dayzServer) || (await fromSteam(steam, STEAM_APP.dayzServer)),
     dayzExperimentalServer:
       text(SETTING.dayzExperimentalServer) ||
-      (await fromSteam(STEAM_APP.dayzExperimentalServer)),
-    dayzTools: text(SETTING.dayzTools) || (await installed(DAYZ_TOOLS, STEAM_APP.dayzTools)),
+      (await fromSteam(steam, STEAM_APP.dayzExperimentalServer)),
+    dayzTools:
+      text(SETTING.dayzTools) || (await installed(DAYZ_TOOLS, steam, STEAM_APP.dayzTools)),
     pboProject: text(SETTING.pboProject) || (await fromRegistry(PBOPROJECT)),
     signing: flag(SETTING.signing, true),
     privateKey: text(SETTING.privateKey),
@@ -84,7 +88,7 @@ export async function readMachineSettings(reread = false): Promise<MachineSettin
     secondClient: {
       account: text(SETTING.secondAccount),
       sandboxie: text(SETTING.sandboxie) || (await fromRegistry(SANDBOXIE)),
-      steam: text(SETTING.steam) || windowsish(await fromRegistry(STEAM)),
+      steam,
     },
     builder: builderOf(text(SETTING.builder)),
   };
@@ -177,13 +181,17 @@ const SANDBOXIE: readonly RegistryValue[] = [
  * before it is settled for — and it is settled for in the end, because a wrong path a developer
  * can see in the log beats an empty one that says nothing at all.
  */
-async function installed(candidates: readonly RegistryValue[], appId: string): Promise<string> {
+async function installed(
+  candidates: readonly RegistryValue[],
+  steam: string,
+  appId: string,
+): Promise<string> {
   const recorded = await fromRegistry(candidates);
   if (recorded !== '' && (await exists(recorded))) {
     return recorded;
   }
 
-  const found = await fromSteam(appId);
+  const found = await fromSteam(steam, appId);
 
   return found === '' ? recorded : found;
 }
@@ -194,20 +202,20 @@ async function installed(candidates: readonly RegistryValue[], appId: string): P
  * Every step is a file that may not be there, and any of them missing means simply "not through
  * Steam, then".
  */
-async function fromSteam(appId: string): Promise<string> {
-  const remembered = steamed.get(appId);
+async function fromSteam(steam: string, appId: string): Promise<string> {
+  const id = `${steam}|${appId}`;
+  const remembered = steamed.get(id);
   if (remembered !== undefined) {
     return remembered;
   }
 
-  const found = await lookUpSteam(appId);
-  steamed.set(appId, found);
+  const found = await lookUpSteam(steam, appId);
+  steamed.set(id, found);
 
   return found;
 }
 
-async function lookUpSteam(appId: string): Promise<string> {
-  const steam = windowsish(await fromRegistry(STEAM));
+async function lookUpSteam(steam: string, appId: string): Promise<string> {
   if (steam === '') {
     return '';
   }

@@ -55,9 +55,6 @@ export function workDriveOf(letter: string, source: string, at: string): WorkDri
 /** The three things a developer does to the work drive; mount/unmount share one panel button. */
 export type WorkDriveAction = 'mount' | 'unmount' | 'link';
 
-/** In the order the panel puts the buttons in. */
-export const WORK_DRIVE_ACTIONS: readonly WorkDriveAction[] = ['mount', 'unmount', 'link'];
-
 /** The one stateful drive button: put a free letter up, or take an occupied one down. */
 export function currentWorkDriveAction(drive: WorkDrive): 'mount' | 'unmount' {
   return drive.at === '' ? 'mount' : 'unmount';

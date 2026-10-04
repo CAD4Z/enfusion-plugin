@@ -34,10 +34,10 @@ import {
   configOf,
   jobsOf,
   subjectOf,
-} from '../mods/build';
-import { type BuildRequest, isSameRequest, nameOf, queued } from '../mods/buildQueue';
+} from '../mods/build/build';
+import { type BuildRequest, isSameRequest, nameOf, queued } from '../mods/build/buildQueue';
 import type { MachineSettings } from '../mods/machine';
-import { fileOf, problemsOf } from '../mods/packingLog';
+import { fileOf, problemsOf } from '../mods/build/packingLog';
 import { type Link, isUnlinked } from '../mods/workDrive';
 import { type StepOutcome, runBuild } from '../platform/build';
 import { readMachineSettings } from '../platform/machine';

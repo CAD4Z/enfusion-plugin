@@ -34,12 +34,18 @@ static size_t decode(const uint8_t *text, size_t size, uint32_t *code) {
     } else {
         return 0;
     }
-    if (length > size) return 0;
+    if (length > size) {
+        return 0;
+    }
     for (size_t at = 1; at < length; ++at) {
-        if ((text[at] & 0xC0u) != 0x80u) return 0;
+        if ((text[at] & 0xC0u) != 0x80u) {
+            return 0;
+        }
         value = (value << 6) | (text[at] & 0x3Fu);
     }
-    if (value < smallest || value > 0x10FFFFu || (value >= 0xD800u && value <= 0xDFFFu)) return 0;
+    if (value < smallest || value > 0x10FFFFu || (value >= 0xD800u && value <= 0xDFFFu)) {
+        return 0;
+    }
     *code = value;
     return length;
 }
@@ -53,7 +59,9 @@ static edds_status finish(uint32_t *codes, size_t count, font_characters *charac
     size_t unique = 0;
     qsort(codes, count, sizeof *codes, ascending);
     for (size_t at = 0; at < count; ++at) {
-        if (unique == 0 || codes[unique - 1] != codes[at]) codes[unique++] = codes[at];
+        if (unique == 0 || codes[unique - 1] != codes[at]) {
+            codes[unique++] = codes[at];
+        }
     }
     if (unique > FONT_MAX_CHARACTERS) {
         free(codes);
@@ -69,8 +77,7 @@ edds_status font_characters_parse(
     const uint8_t *text,
     size_t size,
     font_characters *characters,
-    edds_error *error
-) {
+    edds_error *error) {
     uint32_t *codes;
     size_t count = 0;
     size_t at = 0;
@@ -89,7 +96,9 @@ edds_status font_characters_parse(
         font_fail(error, "allocation-failed", "Memory for the character set could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
-    if (size >= 3u && text[0] == 0xEFu && text[1] == 0xBBu && text[2] == 0xBFu) at = 3;
+    if (size >= 3u && text[0] == 0xEFu && text[1] == 0xBBu && text[2] == 0xBFu) {
+        at = 3;
+    }
     while (at < size) {
         uint32_t code = 0;
         const size_t length = decode(text + at, size - at, &code);
@@ -99,7 +108,9 @@ edds_status font_characters_parse(
                 "The character set is not valid UTF-8 at byte %llu.", (unsigned long long)at);
             return EDDS_INVALID_INPUT;
         }
-        if (!separates(code)) codes[count++] = code;
+        if (!separates(code)) {
+            codes[count++] = code;
+        }
         at += length;
     }
     return finish(codes, count, characters, error);
@@ -120,13 +131,17 @@ edds_status font_characters_builtin(font_characters *characters, edds_error *err
         return EDDS_INTERNAL_FAILURE;
     }
     for (size_t range = 0; range < sizeof ranges / sizeof ranges[0]; ++range) {
-        for (uint32_t code = ranges[range][0]; code <= ranges[range][1]; ++code) codes[count++] = code;
+        for (uint32_t code = ranges[range][0]; code <= ranges[range][1]; ++code) {
+            codes[count++] = code;
+        }
     }
     return finish(codes, count, characters, error);
 }
 
 void font_characters_free(font_characters *characters) {
-    if (characters == NULL) return;
+    if (characters == NULL) {
+        return;
+    }
     free(characters->codes);
     memset(characters, 0, sizeof *characters);
 }

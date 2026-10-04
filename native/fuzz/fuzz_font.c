@@ -30,19 +30,27 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     request.characters = &set;
     request.font_size = FONT_MIN_SIZE;
     request.name = "SDF_Fuzz";
-    if (font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK) font_output_free(&output);
+    if (font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK) {
+        font_output_free(&output);
+    }
 
     /* The same bytes as a character set, a recipe and an FNT file. */
-    if (font_characters_parse(data, size, &parsed, &error) == EDDS_OK) font_characters_free(&parsed);
+    if (font_characters_parse(data, size, &parsed, &error) == EDDS_OK) {
+        font_characters_free(&parsed);
+    }
     file = tmpfile();
-    if (file == NULL) return 0;
+    if (file == NULL) {
+        return 0;
+    }
     if (size == 0 || fwrite(data, 1, size, file) == size) {
         rewind(file);
         (void)font_recipe_parse(file, &recipe, &error);
         rewind(file);
         (void)font_recipe_guid(file, guid, &error);
         rewind(file);
-        if (font_inspect(file, &inspected, &error) == EDDS_OK) font_info_free(&inspected);
+        if (font_inspect(file, &inspected, &error) == EDDS_OK) {
+            font_info_free(&inspected);
+        }
     }
     fclose(file);
     return 0;

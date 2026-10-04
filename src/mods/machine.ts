@@ -5,8 +5,7 @@
  * drive is mounted from, where the file patching root is built, which builder packs: none of it
  * says anything about the mod, and a file under git is the wrong place for any of it — the private
  * key most of all. So it lives in the VS Code settings, contributed with `scope: machine`, which
- * the editor physically refuses to write into a workspace. See
- * `docs/adr/0002-enf-is-the-only-project-configuration.md`.
+ * the editor physically refuses to write into a workspace.
  *
  * In the ordinary case none of it is typed at all: the paths to DayZ and DayZ Tools are what the
  * installers wrote to the registry, and a missing entry is an empty value rather than a failure.

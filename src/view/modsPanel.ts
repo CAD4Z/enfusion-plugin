@@ -11,7 +11,7 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import { type LaunchTarget, targetsOf } from '../mods/launch';
+import { type LaunchTarget, targetsOf } from '../mods/launch/launch';
 import {
   type GameBuild,
   GAME_BUILDS,
@@ -43,7 +43,7 @@ import type {
   PanelRequest,
   PickerView,
   ToolsView,
-} from '../webview/protocol';
+} from '../webview/panel/protocol';
 import { BUILD_COMMAND, type BuildTarget } from './build';
 import { INIT_COMMAND } from './init';
 import {
@@ -71,6 +71,8 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
   private uris: ReadonlyMap<string, vscode.Uri> = new Map();
   /** What the current webview holds; a hidden panel is thrown away and resolved again on return. */
   private attached: vscode.Disposable | undefined;
+  /** How many scans have started, so that one overtaken by a later one is not the one shown. */
+  private scans = 0;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -196,12 +198,17 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       return;
     }
 
+    // A `ready` and a settled refresh can scan at once; only the one asked for last is shown.
+    const scan = ++this.scans;
     const [found, settings] = await Promise.all([findMods(), readMachineSettings(reread)]);
     const [entries, drive] = await Promise.all([
       readEnvironment(settings),
       readWorkDrive(settings),
     ]);
     const links = await readLinks(drive, prefixesOf(found));
+    if (scan !== this.scans) {
+      return;
+    }
 
     this.uris = found.uris;
     this.log.info(`${found.mods.length} mod(s): ${found.mods.map((mod) => mod.name).join(', ')}`);
@@ -318,23 +325,34 @@ function toolsOf(
     targets.length === 0
       ? `Nothing to launch: no "targets" in the ${MANIFEST_FILE} of this workspace.`
       : undefined;
+  // In the words the commands refuse with, so that a disabled button says what pressing it would.
+  const trusted = vscode.workspace.isTrusted;
+  const untrustedLaunch = trusted
+    ? undefined
+    : `Launching starts the game with paths out of this workspace’s ${MANIFEST_FILE}, so it needs the workspace to be trusted.`;
+  const untrustedBuild = trusted
+    ? undefined
+    : `Building runs the builder with paths out of this workspace’s ${MANIFEST_FILE}, so it needs the workspace to be trusted.`;
+  const nothingUp = launching.running()
+    ? undefined
+    : 'A second client joins the launch that is already up, so there has to be one: press Start first.';
 
   return {
     target: targetPickerOf(targets, chosen, nothing),
     gameBuild: buildPickerOf(chosen.build),
     start: {
       title: `Put the game up: ${sayChoice(chosen)}`,
-      refusal: nothing,
+      refusal: nothing ?? untrustedLaunch,
     },
     secondClient: {
       title:
         'Add a second client to the launch that is up: its own profile, its own debugger port, ' +
         'and whatever the machine settings put in front of it',
-      refusal: nothing,
+      refusal: nothing ?? untrustedLaunch ?? nothingUp,
     },
     build: {
       title: 'Pack every addon of this workspace into its pbo, in dependency order',
-      refusal: addons === 0 ? 'No addon of this workspace can be built.' : undefined,
+      refusal: addons === 0 ? 'No addon of this workspace can be built.' : untrustedBuild,
     },
     workDrive: driveActions.map((action) => ({
       action,

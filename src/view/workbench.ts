@@ -1,7 +1,7 @@
 /** The palette and panel command that opens the selected target mod in DayZ Workbench. */
 
 import * as vscode from 'vscode';
-import { targetsOf } from '../mods/launch';
+import { targetsOf } from '../mods/launch/launch';
 import { workbenchExecutableOf } from '../mods/machine';
 import { startWorkbench } from '../platform/workbench';
 import {

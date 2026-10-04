@@ -17,7 +17,7 @@ import {
   workspaceFor,
 } from '../mods/enf';
 import { sameName } from '../mods/config';
-import type { LaunchMod, TargetSource } from '../mods/launch';
+import type { LaunchMod, TargetSource } from '../mods/launch/launch';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan, pboNameOf } from '../mods/model';
 import { folderOf, nameOf, windowsFolder } from '../mods/paths';
 import { projectOf } from '../mods/workbench';

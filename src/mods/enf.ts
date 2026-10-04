@@ -13,9 +13,9 @@
  *
  * The cascade rule is the one thing this file decides rather than reads: when a `workspace.enf`
  * exists it owns the launch block **whole**, and the block in `mod.enf` is ignored rather than
- * merged into it. Levels that merge are levels nobody can trace a setting through. See
- * `docs/adr/0002-enf-is-the-only-project-configuration.md`. The other is what a workspace sees at
- * all, which is everything outside the folders its `ignore` names — see `unignored`.
+ * merged into it. Levels that merge are levels nobody can trace a setting through. The other is
+ * what a workspace sees at all, which is everything outside the folders its `ignore` names — see
+ * `unignored`.
  *
  * The same shape is written out three times on purpose: here, for the extension, and once per file
  * in `schemas/`, for the editor. The schema is what the developer sees while typing; this is what

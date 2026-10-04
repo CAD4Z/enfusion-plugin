@@ -17,8 +17,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     uint8_t *rgba = NULL;
     size_t rgba_size = 0;
     if (file == NULL || output == NULL) {
-        if (file != NULL) fclose(file);
-        if (output != NULL) fclose(output);
+        if (file != NULL) {
+            fclose(file);
+        }
+        if (output != NULL) {
+            fclose(output);
+        }
         return 0;
     }
     if (size != 0 && fwrite(data, 1, size, file) != size) {
@@ -62,9 +66,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         profile.generate_mips = size > 3u ? (data[3] & 1u) != 0u : 1;
         profile.normalize = size > 4u ? (data[4] & 1u) != 0u : 0;
         profile.mipmap_function = size > 5u && (data[5] & 1u) != 0u
-            ? EDDS_MIPMAP_NORMALIZE : EDDS_MIPMAP_FILTER;
+            ? EDDS_MIPMAP_NORMALIZE
+            : EDDS_MIPMAP_FILTER;
         profile.mipmap_filter = size > 6u && (data[6] & 1u) != 0u
-            ? EDDS_FILTER_KAISER : EDDS_FILTER_BOX;
+            ? EDDS_FILTER_KAISER
+            : EDDS_FILTER_BOX;
         /* The owned DDS seed has an odd low flag bit and a complete three-level chain. */
         profile.contains_mips = size > 8u && (data[8] & 1u) != 0u;
         if (profile.contains_mips) {
@@ -104,7 +110,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                     size_t line_size = 0;
                     const edds_batch_line line =
                         edds_batch_reader_push(reader, chunk, remaining, &consumed, &line_size);
-                    if (consumed == 0u) break;
+                    if (consumed == 0u) {
+                        break;
+                    }
                     chunk += consumed;
                     remaining -= consumed;
                     if (line == EDDS_BATCH_LINE_READY) {

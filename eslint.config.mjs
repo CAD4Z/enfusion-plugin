@@ -17,7 +17,7 @@ import tseslint from 'typescript-eslint';
 const HOST_FREE = ['src/mods/**', 'src/webview/**', 'test/mods/**', 'test/webview/**'];
 
 /** The host modules, named so neither layer can reach the disk behind the port's back. */
-const HOST_MODULES = ['**/platform/*', '**/view/*'];
+const HOST_MODULES = ['**/platform/**', '**/view/**'];
 
 export default tseslint.config(
   { ignores: ['dist/**', 'out/**', 'node_modules/**', '.vscode-test/**', '**/*.d.ts'] },

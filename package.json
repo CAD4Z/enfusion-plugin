@@ -8,7 +8,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/hurfy/enfusion-plugin.git"
+    "url": "https://github.com/CAD4Z/enfusion-plugin.git"
   },
   "engines": {
     "vscode": "^1.94.0"
@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "Mods are discovered by reading mod.enf, workspace.enf, config.cpp, and .gproj files; none of them is executed. EDDS preview and source-image preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed; draft previews write only under extension storage. Finding the DayZ installation runs reg; mounting the work drive runs DayZ Tools' fixed WorkDrive executable when available and subst otherwise. None of them takes an argument from the workspace. Linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building, launching, and opening Workbench put workspace paths on external command lines, so they wait for the workspace to be trusted."
+      "description": "Mods are discovered by reading mod.enf, workspace.enf, config.cpp, and .gproj files; none of them is executed. EDDS preview and source-image preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed, and puts the previous pair back if the converter stops before it has published the new one; draft previews write only under extension storage. Finding the DayZ installation runs reg; mounting the work drive runs DayZ Tools' fixed WorkDrive executable when available and subst otherwise. None of them takes an argument from the workspace. Linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building, launching, and opening Workbench put workspace paths on external command lines, so they wait for the workspace to be trusted."
     }
   },
   "contributes": {
@@ -221,6 +221,15 @@
           },
           {
             "filenamePattern": "*.[tT][gG][aA]"
+          },
+          {
+            "filenamePattern": "*.[jJ][pP][gG]"
+          },
+          {
+            "filenamePattern": "*.[tT][iI][fF][fF]"
+          },
+          {
+            "filenamePattern": "*.[dD][dD][sS]"
           }
         ],
         "priority": "option"
@@ -244,7 +253,7 @@
           "default": "",
           "scope": "machine",
           "order": 1,
-          "markdownDescription": "Where DayZ is installed — the folder holding `DayZDiag_x64.exe`. Left empty, it is read from the registry, which is where the installer put it."
+          "markdownDescription": "Where DayZ is installed — the folder holding `DayZDiag_x64.exe`. Left empty, it is read from the registry, which is where the installer put it, and from Steam's own list of libraries when the registry has no path or one nothing is at."
         },
         "enfusion.dayzExperimental.path": {
           "type": "string",
@@ -279,7 +288,7 @@
           "default": "",
           "scope": "machine",
           "order": 6,
-          "markdownDescription": "Where DayZ Tools is installed — the folder holding `bin\\AddonBuilder` and `bin\\DSUtils`. Left empty, it is read from the registry."
+          "markdownDescription": "Where DayZ Tools is installed — the folder holding `bin\\AddonBuilder` and `bin\\DSUtils`. Left empty, it is read from the registry, and from Steam's own list of libraries when the registry has no path or one nothing is at."
         },
         "enfusion.signing.enabled": {
           "type": "boolean",
@@ -323,7 +332,7 @@
           "default": "",
           "scope": "machine",
           "order": 12,
-          "markdownDescription": "Where the profiles a launch builds are put, as `<this>\\<Mod>\\client` and `<this>\\<Mod>\\server`. Left empty, they go inside the run folder beside the file patching root. It is the one part of a launch that gets read rather than only run — the `.RPT`, the `.ADM`, whatever a server mod keeps its configuration in — so it is worth being able to put somewhere reachable. `P:\\Profiles` is where the Workbench plugins put theirs, and pointing this at the same folder leaves one profile for both instead of two that drift. Only the profiles move: the file patching root stays in the run folder whatever this says, because it mirrors the whole game installation and the work drive is the one place that must not be."
+          "markdownDescription": "Where the profiles a launch builds are put, as `<this>\\<Mod>\\client`, `<this>\\<Mod>\\client2` for a second client, and `<this>\\<Mod>\\server`. Left empty, they go inside the run folder beside the file patching root. It is the one part of a launch that gets read rather than only run — the `.RPT`, the `.ADM`, whatever a server mod keeps its configuration in — so it is worth being able to put somewhere reachable. `P:\\Profiles` is where the Workbench plugins put theirs, and pointing this at the same folder leaves one profile for both instead of two that drift. Only the profiles move: the file patching root stays in the run folder whatever this says, because it mirrors the whole game installation and the work drive is the one place that must not be."
         },
         "enfusion.builder": {
           "type": "string",
@@ -352,7 +361,7 @@
           "default": "",
           "scope": "machine",
           "order": 15,
-          "markdownDescription": "The Steam account the second client signs in as.\n\nTwo clients on one machine are two Steam accounts, and Steam signs one account in per Windows session — so the second client is run inside the Sandboxie box `steam2`, which has a Steam of its own. All that is needed for that is Sandboxie-Plus installed: the box is made the first time the second client is asked for, with Sandboxie's own defaults plus `NeverRemove` and `AutoDelete=n`, so that the sign-in inside it survives and is asked for once rather than once a launch. The first press shows that Steam's login window; every press after it goes straight to the game.\n\nLeft empty, the second client is simply another client: useful for offline missions, and unable to join a server the first one is already signed in to."
+          "markdownDescription": "The Steam account the second client signs in as.\n\nTwo clients on one machine are two Steam accounts, and Steam signs one account in per Windows session — so the second client is run inside the Sandboxie box `steam2`, which has a Steam of its own. All that is needed for that is Sandboxie-Plus installed: the box is made the first time the second client is asked for, with Sandboxie's own defaults plus `NeverRemove` and `AutoDelete=n`, so that the sign-in inside it survives and is asked for once rather than once a launch. The first press shows that Steam's login window; every press after it goes straight to the game.\n\nLeft empty, the second client is simply another client: on a client target it plays the same offline mission as the first, and it is unable to join a server the first one is already signed in to."
         },
         "enfusion.sandboxie.path": {
           "type": "string",
@@ -381,6 +390,14 @@
               "target": {
                 "type": "string",
                 "description": "The target to launch, by its name in the \"targets\" of mod.enf or workspace.enf. Left out, the one chosen on the status bar is launched."
+              },
+              "build": {
+                "type": "string",
+                "enum": [
+                  "Debug",
+                  "Release"
+                ],
+                "description": "Debug starts the diag build with file patching; Release starts the shipped retail executables. Left out, the build chosen on the status bar is launched."
               }
             }
           }
@@ -418,11 +435,6 @@
   "activationEvents": [
     "workspaceContains:**/mod.enf",
     "workspaceContains:**/workspace.enf",
-    "onView:enfusion.mods",
-    "onCommand:enfusion.edds.openPreview",
-    "onCommand:enfusion.texture.convert",
-    "onCustomEditor:enfusion.eddsPreview",
-    "onCustomEditor:enfusion.textureConversion",
     "onDebugResolve:enfusion",
     "onDebugDynamicConfigurations:enfusion"
   ]

@@ -19,8 +19,6 @@
  *
  * Nothing here goes near a document, an editor or a disk: a move in comes out as the spans of the
  * file to replace, which is what makes the whole of it comparable in a test.
- *
- * See `docs/adr/0003-form-edits-the-text.md`.
  */
 
 import {

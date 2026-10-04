@@ -13,7 +13,9 @@
  * them the way they were written — DayZ's own is `MAIN` under one key and `main` under another.
  */
 export function registryValue(output: string, name: string): string {
-  for (const line of output.split('\n')) {
+  // `reg` ends its lines the Windows way, and a `\r` left on one would keep the pattern's `$` from
+  // matching anything at all.
+  for (const line of output.split(/\r?\n/)) {
     const found = VALUE.exec(line);
 
     if (found && found[1]?.toLowerCase() === name.toLowerCase()) {

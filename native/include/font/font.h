@@ -82,8 +82,7 @@ edds_status font_characters_parse(
     const uint8_t *text,
     size_t size,
     font_characters *characters,
-    edds_error *error
-);
+    edds_error *error);
 
 /** Basic Latin, Latin-1 and Cyrillic U+0400–U+045F. */
 edds_status font_characters_builtin(font_characters *characters, edds_error *error);
@@ -102,8 +101,7 @@ edds_status font_source_describe(
     const uint8_t *data,
     size_t size,
     font_source_info *info,
-    edds_error *error
-);
+    edds_error *error);
 
 typedef struct font_request {
     const uint8_t *data;
@@ -142,8 +140,7 @@ edds_status font_generate(
     void *cancel_context,
     edds_progress_fn progress,
     void *progress_context,
-    edds_error *error
-);
+    edds_error *error);
 
 void font_output_free(font_output *output);
 

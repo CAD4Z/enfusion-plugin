@@ -18,7 +18,7 @@
 import { execFile, exec as execWithShell } from 'node:child_process';
 import { copyFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import type { BuildPlan, BuildStep, CopyStep, PackStep, SignStep } from '../mods/build';
+import type { BuildPlan, BuildStep, CopyStep, PackStep, SignStep } from '../mods/build/build';
 import { windowsFolder, windowsName, windowsPath } from '../mods/paths';
 
 const run = promisify(execFile);
@@ -62,7 +62,7 @@ export async function runBuild(
     }
 
     onStep(step, index);
-    const outcome = await runStep(step);
+    const outcome = await runStep(step, cancelled);
 
     if (outcome.state === 'failed' && step.kind === 'pack') {
       unpacked.add(step.subject);
@@ -73,10 +73,10 @@ export async function runBuild(
   return outcomes;
 }
 
-async function runStep(step: BuildStep): Promise<StepOutcome> {
+async function runStep(step: BuildStep, cancelled: () => boolean): Promise<StepOutcome> {
   switch (step.kind) {
     case 'pack':
-      return pack(step);
+      return pack(step, cancelled);
     case 'sign':
       return sign(step);
     case 'copy':
@@ -88,7 +88,7 @@ async function runStep(step: BuildStep): Promise<StepOutcome> {
  * The build itself: the folders made, the old pbo taken off, the builder run — and then the one
  * question worth asking, which is whether the pbo is there.
  */
-async function pack(step: PackStep): Promise<StepOutcome> {
+async function pack(step: PackStep, cancelled: () => boolean): Promise<StepOutcome> {
   try {
     for (const folder of step.folders) {
       await mkdir(folder, { recursive: true });
@@ -109,6 +109,10 @@ async function pack(step: PackStep): Promise<StepOutcome> {
 
   for (let attempt = 1; attempt <= step.attempts; attempt += 1) {
     if (attempt > 1) {
+      // A build cancelled while its first attempt ran is not given a second one.
+      if (cancelled()) {
+        break;
+      }
       await pause(step.pauseMs);
     }
 

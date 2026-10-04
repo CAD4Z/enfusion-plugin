@@ -12,6 +12,13 @@ HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Bohemia Interactive\\DayZ
   assert.equal(registryValue(output, 'main'), 'F:\\SteamLibrary\\steamapps\\common\\DayZ');
 });
 
+test('reads what reg printed with the line endings Windows gives it', () => {
+  const output =
+    '\r\nHKEY_CURRENT_USER\\SOFTWARE\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/program files (x86)/steam\r\n\r\n';
+
+  assert.equal(registryValue(output, 'SteamPath'), 'c:/program files (x86)/steam');
+});
+
 test('a key that is not there is an empty value, not something to fail over', () => {
   assert.equal(registryValue('', 'main'), '');
   assert.equal(

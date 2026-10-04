@@ -41,8 +41,7 @@ edds_status edds_pool_run(
     uint64_t memory_budget,
     edds_pool_task_fn task,
     void *context,
-    edds_error *error
-);
+    edds_error *error);
 
 /**
  * Holds `bytes` of the shared budget until the matching release. A charge larger than the whole

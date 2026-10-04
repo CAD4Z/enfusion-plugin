@@ -6,7 +6,9 @@
 
 void font_fail(edds_error *error, const char *code, const char *format, ...) {
     va_list arguments;
-    if (error == NULL) return;
+    if (error == NULL) {
+        return;
+    }
     memset(error, 0, sizeof *error);
     (void)snprintf(error->code, sizeof error->code, "%s", code);
     va_start(arguments, format);
@@ -27,9 +29,13 @@ static edds_status malformed(edds_error *error, const char *what) {
 
 static int size_value(const char *text, uint32_t *value) {
     uint32_t parsed = 0;
-    if (*text == '\0') return 0;
+    if (*text == '\0') {
+        return 0;
+    }
     for (; *text != '\0'; ++text) {
-        if (*text < '0' || *text > '9' || parsed > 100000u) return 0;
+        if (*text < '0' || *text > '9' || parsed > 100000u) {
+            return 0;
+        }
         parsed = parsed * 10u + (uint32_t)(*text - '0');
     }
     *value = parsed;
@@ -42,17 +48,28 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
         const meta_token key = meta_next_token(scan);
         meta_token value;
         uint32_t bit = 0;
-        if (key.kind == META_TOKEN_CLOSE) break;
-        if (key.kind != META_TOKEN_WORD) return malformed(error, "the PC configuration");
+        if (key.kind == META_TOKEN_CLOSE) {
+            break;
+        }
+        if (key.kind != META_TOKEN_WORD) {
+            return malformed(error, "the PC configuration");
+        }
         value = meta_next_token(scan);
         if (value.kind == META_TOKEN_OPEN) {
-            if (!meta_skip_open_block(scan)) return malformed(error, "a block is not closed");
+            if (!meta_skip_open_block(scan)) {
+                return malformed(error, "a block is not closed");
+            }
             continue;
         }
-        if (strcmp(key.text, "SourceFile") == 0) bit = SETTING_SOURCE;
-        else if (strcmp(key.text, "Characters") == 0) bit = SETTING_CHARACTERS;
-        else if (strcmp(key.text, "FontSize") == 0) bit = SETTING_SIZE;
-        else continue;
+        if (strcmp(key.text, "SourceFile") == 0) {
+            bit = SETTING_SOURCE;
+        } else if (strcmp(key.text, "Characters") == 0) {
+            bit = SETTING_CHARACTERS;
+        } else if (strcmp(key.text, "FontSize") == 0) {
+            bit = SETTING_SIZE;
+        } else {
+            continue;
+        }
         if ((seen & bit) != 0) {
             font_fail(error, "duplicate-setting", "Font recipe setting %s occurs more than once in PC.", key.text);
             return EDDS_INVALID_INPUT;
@@ -85,16 +102,26 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
         const meta_token resource = meta_next_token(scan);
         meta_token platform;
         meta_token next;
-        if (resource.kind == META_TOKEN_CLOSE) break;
-        if (resource.kind != META_TOKEN_WORD) return malformed(error, "the Configurations block");
+        if (resource.kind == META_TOKEN_CLOSE) {
+            break;
+        }
+        if (resource.kind != META_TOKEN_WORD) {
+            return malformed(error, "the Configurations block");
+        }
         platform = meta_next_token(scan);
-        if (platform.kind != META_TOKEN_WORD) return malformed(error, "the Configurations block");
+        if (platform.kind != META_TOKEN_WORD) {
+            return malformed(error, "the Configurations block");
+        }
         next = meta_next_token(scan);
         if (next.kind == META_TOKEN_COLON) {
-            if (meta_next_token(scan).kind != META_TOKEN_WORD) return malformed(error, "a platform parent");
+            if (meta_next_token(scan).kind != META_TOKEN_WORD) {
+                return malformed(error, "a platform parent");
+            }
             next = meta_next_token(scan);
         }
-        if (next.kind != META_TOKEN_OPEN) return malformed(error, "the Configurations block");
+        if (next.kind != META_TOKEN_OPEN) {
+            return malformed(error, "the Configurations block");
+        }
         if (strcmp(resource.text, "FNTResourceClass") == 0 && strcmp(platform.text, "PC") == 0) {
             edds_status status;
             if (found_pc) {
@@ -103,7 +130,9 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
             }
             found_pc = 1;
             status = parse_pc(scan, recipe, error);
-            if (status != EDDS_OK) return status;
+            if (status != EDDS_OK) {
+                return status;
+            }
         } else if (!meta_skip_open_block(scan)) {
             return malformed(error, "a configuration is not closed");
         }
@@ -128,7 +157,9 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
     int found_configurations = 0;
     char name[EDDS_METADATA_PATH_BYTES];
     edds_status status = EDDS_INVALID_INPUT;
-    if (!meta_read_text(input, &source, &size, error)) return EDDS_INVALID_INPUT;
+    if (!meta_read_text(input, &source, &size, error)) {
+        return EDDS_INVALID_INPUT;
+    }
     scan.source = source;
     scan.size = size;
     scan.at = 0;
@@ -141,7 +172,9 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
     for (;;) {
         const meta_token key = meta_next_token(&scan);
         meta_token field;
-        if (key.kind == META_TOKEN_CLOSE) break;
+        if (key.kind == META_TOKEN_CLOSE) {
+            break;
+        }
         if (key.kind != META_TOKEN_WORD) {
             status = malformed(error, "the MetaFileClass block");
             goto done;
@@ -166,7 +199,9 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
             }
             found_configurations = 1;
             status = parse_configurations(&scan, recipe, error);
-            if (status != EDDS_OK) goto done;
+            if (status != EDDS_OK) {
+                goto done;
+            }
             status = EDDS_INVALID_INPUT;
         } else if (field.kind == META_TOKEN_OPEN && !meta_skip_open_block(&scan)) {
             status = malformed(error, "a block is not closed");
@@ -211,9 +246,13 @@ edds_status font_recipe_guid(FILE *input, char guid[EDDS_METADATA_GUID_BYTES], e
 }
 
 static int quotable(const char *value, int may_be_empty) {
-    if (*value == '\0') return may_be_empty;
+    if (*value == '\0') {
+        return may_be_empty;
+    }
     for (; *value != '\0'; ++value) {
-        if (*value == '"' || *value == '\\' || (unsigned char)*value < 0x20u) return 0;
+        if (*value == '"' || *value == '\\' || (unsigned char)*value < 0x20u) {
+            return 0;
+        }
     }
     return 1;
 }

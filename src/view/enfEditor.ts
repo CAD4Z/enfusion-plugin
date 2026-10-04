@@ -23,7 +23,7 @@ import { type FormEdit, type ManifestKind, changesOf, formOf } from '../mods/for
 import { MANIFEST_FILE } from '../mods/model';
 import { folderOf, nameOf } from '../mods/paths';
 import { launchOwnerOf } from '../platform/workspace';
-import type { FormRequest, ManifestMessage } from '../webview/formProtocol';
+import type { FormRequest, ManifestMessage } from '../webview/form/formProtocol';
 
 export class EnfEditor implements vscode.CustomTextEditorProvider {
   /** Must match the view type contributed in `package.json`. */
@@ -55,6 +55,21 @@ export class EnfEditor implements vscode.CustomTextEditorProvider {
       send();
     };
 
+    // One move at a time, each worked out against the text the one before it left. An edit the
+    // editor turned down — a read-only file, a document changed in between — puts the form back
+    // to what the document says instead of leaving a value on screen that is not in the file.
+    let editing: Promise<void> = Promise.resolve();
+    const edit = (move: FormEdit): Promise<void> => {
+      // A move that failed was already reported; it does not hold up the ones after it.
+      editing = editing.catch(() => undefined).then(async () => {
+        if (!(await apply(document, kind, move))) {
+          this.log.warn(`The form's edit of ${document.uri.fsPath} was not applied.`);
+          send();
+        }
+      });
+      return editing;
+    };
+
     // Listening before the page exists, because the page asks for the manifest as soon as it loads.
     const attached = vscode.Disposable.from(
       panel.webview.onDidReceiveMessage((request: FormRequest) => {
@@ -64,7 +79,7 @@ export class EnfEditor implements vscode.CustomTextEditorProvider {
             this.report(reread());
             return;
           case 'edit':
-            this.report(apply(document, kind, request.edit));
+            this.report(edit(request.edit));
             return;
           case 'text':
             this.report(asText(document, request.line, request.column));
@@ -72,9 +87,10 @@ export class EnfEditor implements vscode.CustomTextEditorProvider {
         }
       }),
       // The same document edited as text, reverted, or checked out under the editor: the form is
-      // a view of it, so it is rebuilt rather than asked to agree.
+      // a view of it, so it is rebuilt rather than asked to agree. A save or a dirty mark changes
+      // no text and fires with no changes — rebuilding then would wipe a box mid-typing.
       vscode.workspace.onDidChangeTextDocument((event) => {
-        if (event.document.uri.toString() === document.uri.toString()) {
+        if (event.document.uri.toString() === document.uri.toString() && event.contentChanges.length > 0) {
           send();
         }
       }),
@@ -122,9 +138,12 @@ export class EnfEditor implements vscode.CustomTextEditorProvider {
   }
 }
 
-/** Which of the two files this is, which the editor is only ever opened on one of. */
+/**
+ * Which of the two files this is, which the editor is only ever opened on one of. VS Code matches
+ * the editor's file patterns without regard for case, and so does Windows: `Mod.enf` is a mod.
+ */
 function kindOf(document: vscode.TextDocument): ManifestKind {
-  return nameOf(document.uri.path) === MANIFEST_FILE ? 'mod' : 'workspace';
+  return nameOf(document.uri.path).toLowerCase() === MANIFEST_FILE ? 'mod' : 'workspace';
 }
 
 function messageOf(
@@ -156,10 +175,10 @@ async function apply(
   document: vscode.TextDocument,
   kind: ManifestKind,
   edit: FormEdit,
-): Promise<void> {
+): Promise<boolean> {
   const changes = changesOf(kind, document.getText(), edit);
   if (changes.length === 0) {
-    return;
+    return true;
   }
 
   const work = new vscode.WorkspaceEdit();
@@ -174,7 +193,7 @@ async function apply(
     );
   }
 
-  await vscode.workspace.applyEdit(work);
+  return vscode.workspace.applyEdit(work);
 }
 
 /** The same document in the text editor, at the place the form named when it named one. */

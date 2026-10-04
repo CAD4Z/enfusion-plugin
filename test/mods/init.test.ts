@@ -50,6 +50,9 @@ test('a single-addon mod comes out whole, with every name in it worked out from 
   "launch": {
     // Where the built mod goes, counted from this file: Addons\\@MyMod.
     "modsDirectory": "Addons",
+    // What every target loads, in load order: nothing is added to this list on the way to the
+    // game, so the mod itself is named here, and any mod it needs goes in front of it.
+    "mods": ["@MyMod"],
     "targets": [
       {
         // The client alone, which loads the vanilla offline mission of the map: a mod is seen
@@ -160,8 +163,9 @@ version = "0.1.0";
       {
         path: 'MyMod/stringtable.csv',
         content:
-          'Language\toriginal\tenglish\tczech\tgerman\trussian\tpolish\thungarian\titalian\t' +
-          'spanish\tfrench\tchinese\tjapanese\tportuguese\tchinesesimp\n',
+          '"Language","original","english","czech","german","russian","polish","hungarian",' +
+          '"italian","spanish","french","chinese","japanese","portuguese","chinesesimp",\r\n' +
+          '"STR_MyMod_Name","MyMod","MyMod","","","","","","","","","","","","",\r\n',
       },
       {
         path: 'MyMod/Scripts/Inputs.xml',
@@ -575,6 +579,9 @@ function adoptedManifest(): string {
   "launch": {
     // Where the built mod goes, counted from this file: Addons\\@Foreign.
     "modsDirectory": "Addons",
+    // What every target loads, in load order: nothing is added to this list on the way to the
+    // game, so the mod itself is named here, and any mod it needs goes in front of it.
+    "mods": ["@Foreign"],
     "targets": [
       {
         // The client alone, which loads the vanilla offline mission of the map: a mod is seen

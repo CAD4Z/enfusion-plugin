@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveWindows, samePath, windowsFolder, windowsName, windowsPath } from '../../src/mods/paths';
+import {
+  literalGlobOf,
+  resolveWindows,
+  samePath,
+  windowsFolder,
+  windowsName,
+  windowsPath,
+} from '../../src/mods/paths';
+
+/** Each glob character stands for itself as a one-character wildcard, so the name still matches. */
+test('a file name with glob characters in it becomes a pattern that still matches it', () => {
+  assert.equal(literalGlobOf('ground_co.png'), 'ground_co.png');
+  assert.equal(literalGlobOf('wall [old] {2}*?.png'), 'wall ?old? ?2???.png');
+});
 
 test('parts are joined with one separator, however many the parts brought', () => {
   assert.equal(windowsPath('P:', 'temp'), 'P:\\temp');

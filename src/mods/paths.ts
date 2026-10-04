@@ -24,6 +24,15 @@ export function nameOf(path: string): string {
 }
 
 /**
+ * A file name as a glob that matches it. A file watcher reads its pattern as a glob, and a name
+ * with `[`, `{`, `*` or `?` in it would match anything but itself; each of those becomes the
+ * one-character wildcard, which still matches the name.
+ */
+export function literalGlobOf(name: string): string {
+  return name.replace(/[[\]{}*?]/g, '?');
+}
+
+/**
  * A path reduced to what a comparison should look at. Windows tells none of these apart — the
  * case, the separator, a doubled or trailing one, a `.` segment, a `..` the path walks back
  * through, the leading slash a `Uri.path` carries in front of a drive letter — so neither does

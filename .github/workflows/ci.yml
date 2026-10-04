@@ -108,6 +108,11 @@ jobs:
       - name: Test native core and black-box CLI
         run: ctest --test-dir native/.build -C Release --output-on-failure
 
+      - name: Test extension recovery against native process crashes
+        run: npm test
+        env:
+          EDDS_TEST_CONVERTER: native/.build/Release/enfusion.exe
+
       - name: Stage the tested executable and notices
         run: cmake --install native/.build --config Release
 

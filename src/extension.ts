@@ -5,14 +5,14 @@
 import * as vscode from 'vscode';
 import { watchMachineSettings } from './platform/machine';
 import { watchMods } from './platform/workspace';
-import { EddsConverter } from './platform/eddsConverter';
+import { EddsConverter } from './platform/texture/eddsConverter';
 import { registerBuildCommands } from './view/build';
 import { EnfEditor } from './view/enfEditor';
 import { registerInitCommands } from './view/init';
 import { registerLaunch } from './view/launch';
 import { ModsPanel } from './view/modsPanel';
-import { registerTextureEditor } from './view/textureEditor';
-import { registerTextureConversionEditor } from './view/textureConversionEditor';
+import { registerTextureEditor } from './view/texture/textureEditor';
+import { registerTextureConversionEditor } from './view/texture/textureConversionEditor';
 import { registerWorkDriveCommands } from './view/workDrive';
 import { registerWorkbenchCommand } from './view/workbench';
 
@@ -54,6 +54,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // The panel shows what the machine resolved to, so a setting changing is a change to show.
     watchMachineSettings(() => {
+      panel.refresh();
+    }),
+    // Building, launching and Workbench wait for trust, and their buttons say so until it comes.
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
       panel.refresh();
     }),
     vscode.commands.registerCommand('enfusion.refresh', () => {

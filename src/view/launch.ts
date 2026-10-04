@@ -5,8 +5,7 @@
  * `launch.json` is ever written. One written by hand is no use for configuring anything either: a
  * configuration of ours takes `type`, `request`, `target` and `build`, and any other field is
  * refused with a sentence pointing at the manifest. Stopping a file from being written is not something an
- * extension can do; making it pointless is. See
- * `docs/adr/0002-enf-is-the-only-project-configuration.md`.
+ * extension can do; making it pointless is.
  *
  * The debug adapter starts a process and kills it, and does nothing else — no breakpoints, no
  * stacks, no variables. What it buys over a command is what a developer gets for free around it:
@@ -24,7 +23,7 @@ import {
   runRootOf,
   targetById,
   targetsOf,
-} from '../mods/launch';
+} from '../mods/launch/launch';
 import { type GameBuild, GAME_BUILDS, gameBuildOf } from '../mods/machine';
 import {
   type LaunchAttempt,
@@ -33,11 +32,11 @@ import {
   type LaunchSession,
   LaunchCoordinator,
   activeLaunchOf,
-} from '../mods/launchSession';
+} from '../mods/launch/launchSession';
 import { MANIFEST_FILE } from '../mods/model';
 import { windowsName } from '../mods/paths';
-import { scriptDebugNoteOf, scriptDebugSaidOf } from '../mods/scriptDebug';
-import { gamePrefixOf, sandboxPlanOf } from '../mods/sandbox';
+import { scriptDebugNoteOf, scriptDebugSaidOf } from '../mods/launch/scriptDebug';
+import { gamePrefixOf, sandboxPlanOf } from '../mods/launch/sandbox';
 import {
   localAppData,
   prepareLaunch,
@@ -46,14 +45,14 @@ import {
   readLinkFacts,
   startGame,
   windowsUser,
-} from '../platform/launch';
+} from '../platform/launch/launch';
 import { readMachineSettings } from '../platform/machine';
-import { openSandbox, sandboxedGame, settleBoxedWindowSettings } from '../platform/sandbox';
+import { openSandbox, sandboxedGame, settleBoxedWindowSettings } from '../platform/launch/sandbox';
 import {
   type ScriptDebugHandler,
   type ScriptDebugPort,
   openScriptDebugPorts,
-} from '../platform/scriptDebug';
+} from '../platform/launch/scriptDebug';
 import { readWorkDrive } from '../platform/workDrive';
 import { findMods, launchModsOf, targetSourcesOf } from '../platform/workspace';
 
@@ -102,6 +101,8 @@ export interface Launching extends vscode.Disposable {
    * read it from here rather than from a memento key each of them knows the name of.
    */
   chosen(targets: readonly LaunchTarget[]): Chosen;
+  /** Whether a launch is up for a second client to join, which is the debug session in focus. */
+  running(): boolean;
 }
 
 /** The target and the build the next launch uses. */
@@ -113,7 +114,10 @@ export interface Chosen {
 export function registerLaunch(
   memento: vscode.Memento,
   log: vscode.LogOutputChannel,
-  /** Called when the choice changes, so that whatever shows it says so without being asked. */
+  /**
+   * Called when the choice changes, or a launch comes up or goes down, so that whatever shows
+   * either says so without being asked.
+   */
   onChosen: () => void,
 ): Launching {
   const launcher = new Launcher(log);
@@ -132,6 +136,10 @@ export function registerLaunch(
     }),
     vscode.debug.onDidTerminateDebugSession((session) => {
       active.delete(session.id);
+    }),
+    // Add a second client joins the session in focus, so its button follows that session.
+    vscode.debug.onDidChangeActiveDebugSession(() => {
+      onChosen();
     }),
     // Twice on purpose: the dynamic registration is what fills the Run and Debug list, and the
     // ordinary one is what gets asked to resolve a configuration before it is launched.
@@ -173,6 +181,7 @@ export function registerLaunch(
       bar.refresh();
     },
     chosen: (targets) => bar.chosen(targets),
+    running: () => vscode.debug.activeDebugSession?.type === LAUNCH_TYPE,
   };
 }
 
@@ -522,6 +531,25 @@ async function noTargets(): Promise<void> {
 }
 
 /**
+ * The workspace's persistent location, and a label read off it rather than off its display name:
+ * `workspace.name` is localized — "(Workspace)" in one language, something else in the next — and
+ * changes when an untitled workspace is saved, and either would move the run folder.
+ */
+function launchWorkspace() {
+  const file = vscode.workspace.workspaceFile;
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  const label = file?.scheme === 'file'
+    ? file.path.slice(file.path.lastIndexOf('/') + 1).replace(/\.code-workspace$/i, '')
+    : folder?.name ?? vscode.workspace.name ?? '';
+  return {
+    name: label,
+    file: file === undefined ? undefined : file.scheme === 'file' ? file.fsPath : file.toString(),
+    folders: (vscode.workspace.workspaceFolders ?? []).map(({ uri }) =>
+      uri.scheme === 'file' ? uri.fsPath : uri.toString()),
+  };
+}
+
+/**
  * Everything a launch does between the button and the process. Read afresh every time rather than
  * kept: a developer who mounted the work drive or built a mod a second ago is exactly the case a
  * remembered answer gets wrong.
@@ -569,7 +597,7 @@ class Launcher {
       const runRoot = runRootOf(
         settings.filePatchingRoot,
         localAppData(),
-        vscode.workspace.name ?? '',
+        launchWorkspace(),
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),
@@ -698,7 +726,7 @@ class Launcher {
       const runRoot = runRootOf(
         settings.filePatchingRoot,
         localAppData(),
-        vscode.workspace.name ?? '',
+        launchWorkspace(),
       );
       const [drive, game, present, found] = await Promise.all([
         readWorkDrive(settings),

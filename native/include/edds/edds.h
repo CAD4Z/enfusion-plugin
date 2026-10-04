@@ -244,8 +244,7 @@ edds_status edds_inspect(
     edds_info *info,
     edds_cancelled_fn cancelled,
     void *cancel_context,
-    edds_error *error
-);
+    edds_error *error);
 
 edds_status edds_preview(
     FILE *input,
@@ -255,8 +254,7 @@ edds_status edds_preview(
     void *cancel_context,
     uint8_t **rgba,
     size_t *rgba_size,
-    edds_error *error
-);
+    edds_error *error);
 
 void edds_default_profile(edds_profile *profile);
 
@@ -282,8 +280,7 @@ edds_status edds_convert(
     void *cancel_context,
     edds_progress_fn progress,
     void *progress_context,
-    edds_error *error
-);
+    edds_error *error);
 
 /**
  * Encodes one top-to-bottom RGBA8 image that already exists in memory — a generated atlas — through
@@ -299,8 +296,7 @@ edds_status edds_encode_rgba(
     const edds_profile *profile,
     edds_cancelled_fn cancelled,
     void *cancel_context,
-    edds_error *error
-);
+    edds_error *error);
 
 edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error *error);
 edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edds_error *error);

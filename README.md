@@ -24,24 +24,29 @@ scope, and that relation owns this exact EDDS. A same-stem image is never guesse
 
 ## Texture conversion
 
-On Windows x64, **Enfusion: Convert Texture to EDDS** is available on local `.png`, `.tga`, `.jpg`
-and `.tiff` files when the window contains a discovered `mod.enf` or `workspace.enf`. Those four
-are the texture resource classes DayZ Workbench registers, and they are matched however the
-extension was typed. `.jpeg` and `.tif` are deliberately not among them: Workbench does not
-register those spellings, so a file under one is refused rather than converted into an EDDS this
-editor would call registered and Workbench would see no source for.
+On Windows x64, **Enfusion: Convert Texture to EDDS** is available on local `.png`, `.tga`, `.jpg`,
+`.tiff` and `.dds` files when the window contains a discovered `mod.enf` or `workspace.enf`, and
+the same five open in the conversion editor through **Reopen Editor With**. Those five are the
+texture resource classes DayZ Workbench registers, and they are matched however the extension was
+typed. `.jpeg` and `.tif` are deliberately not among them: Workbench does not register those
+spellings, so a file under one is refused rather than converted into an EDDS this editor would
+call registered and Workbench would see no source for.
 
 Each format is accepted in a stated subtype, and refused by name outside it, rather than decoded
 on a guess:
 
 | Format | Accepted | Refused by name |
 | --- | --- | --- |
-| PNG | Non-interlaced 8-bit RGB and RGBA | Every other IHDR, unknown critical chunks |
+| PNG | Non-interlaced 8-bit RGB and RGBA; a `tRNS` colour key on RGB is transparency, a suggested `PLTE` is passed over | Every other IHDR, unknown critical chunks |
 | TGA | Colour-map type 0, uncompressed true-colour type 2, 24 or 32-bit | RLE, palettes, other descriptors |
 | JPG | Baseline sequential (SOF0), 8-bit, Huffman, one scan, greyscale or YCbCr at 1x1, 2x1, 1x2 or 2x2 luma over 1x1 chroma | Progressive, arithmetic, lossless, 12-bit, CMYK/YCCK, an Adobe transform other than YCbCr, a non-identity EXIF orientation |
 | TIFF | One page, either byte order, 8-bit samples, chunky, top-left, no predictor, strips, and no/LZW/Deflate/PackBits compression; greyscale BlackIsZero, RGB, or RGB plus one unassociated alpha | Tiles, planar separation, palette, WhiteIsZero, CMYK, YCbCr, 16-bit, predictors, premultiplied alpha, further pages |
+| DDS | One two-dimensional LDR surface: legacy BGRX/BGRA or DXT1/DXT5, or DX10 R8, RG8, BC1, BC3, BC4, BC5, BC7, BGRA or BGRX UNORM, with the top level only or a complete chain | Cube maps, arrays, volumes, HDR and every other DXGI format |
 
-Samples are taken as the file stores them. No colour management is applied to any of the four: a
+A DDS that carries its own mips gives them to the result only with `ContainsMips` on and
+`GenerateMips` off; otherwise its top level enters the same generated chain as any other source.
+
+Samples are taken as the file stores them. No colour management is applied to any of them: a
 PNG `gAMA`, a JPEG ICC profile and a TIFF ICC profile are all read past, exactly as the first
 slice already treated `gAMA`. JPEG's three components are converted with the full-range JFIF
 YCbCr matrix and its chroma is upsampled by replication.
@@ -108,7 +113,9 @@ registration was skipped. Existing registered GUIDs are preserved character-for-
 a new registered resource receives a random collision-scanned 64-bit GUID. Source, EDDS and
 metadata revisions are captured for the session and checked again by the native worker immediately
 before its temporary files are published. A failure leaves the complete old pair or the complete
-new pair, never one file from each.
+new pair, never one file from each — a converter that is cancelled or dies mid-publish included:
+the extension restores the pair from the converter's journal, for a single conversion and a batch
+alike.
 
 An explicit Explorer multi-selection opens one conversion batch. The file whose context menu was
 used is the primary source image and supplies the one complete profile; selection order does not.
@@ -121,7 +128,7 @@ the cores busy without a codec pool or a memory peak per image. It keeps complet
 cancellation, and lets retryable failures be retried without rerunning successes; an input the
 converter refuses identically every time is not offered as retryable work.
 
-The public native CLI can convert any of those four formats to any explicit output path without a
+The public native CLI can convert any of those five formats to any explicit output path without a
 project gate; an unregistered extension is refused there too, with a stable `unsupported-source-extension`.
 It accepts the same stable recipe flags used by the editor; `inspect --metadata PATH` returns the
 metadata identity and recipe as versioned structured JSON through the same native codec.
@@ -135,10 +142,13 @@ fonts, with the recipe kept in `.fnt.meta`; see [the native README](native/READM
 
 The Activity Bar gains an **Enfusion** container with a **Mods** panel. Along its top are two lists
 saying what the next launch is — which **target**, and whether it is a **Debug** or a **Release**
-build of the game — and under them a row of buttons for everything at once: **Start** puts the game
-up, **Build** builds the workspace, and the three square ones on the right mount the work drive,
-unmount it, and link the mods onto it. A button that would only fail is disabled and says why in its
-tooltip, so the reason is there before the press rather than after it. Below the row is
+build of the game — and under them two groups of buttons for everything at once. The first is the
+launch and the build: **Start** puts the game up, **Add client** adds a second client to the launch
+that is up, **Build** builds the workspace. The second is the workspace's tools: one button that
+mounts the work drive or unmounts it, whichever it is, one that links the mods onto it, and one
+that opens Workbench. A button that would only fail is disabled and says why in its tooltip — an
+untrusted workspace and no launch to join included — so the reason is there before the press
+rather than after it. Below the row is
 `workspace.enf` and the mods under it, each mod with its addons in the order they will be built.
 
 A mod's row is its manifest: clicking it opens `mod.enf`, the way a file in the explorer does, and
@@ -168,8 +178,8 @@ window opened on its own folder, and what it builds is still loaded the way any 
 named in `mods` by its folder under `modsDirectory`. Each folder is written relative to the file
 and stays inside its folder, and it is a folder rather than a mask, compared the way Windows
 compares paths. One written wrong — empty, absolute, walking out with `..`, or a mask — ignores
-nothing and is underlined where it is written, because a guess at what it meant could hide a mod
-nobody asked to hide.
+nothing and is listed among the problems of the panel and the form, because a guess at what it
+meant could hide a mod nobody asked to hide.
 
 The `name` field in `mod.enf` is not a title but a name: the panel shows the mod under it, its
 prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the same name has to
@@ -229,11 +239,12 @@ are asked: the name, and the layout — one pbo for the whole mod, or a pbo per 
 follows from the name rather than being typed: a mod's name is the folder, `dir` in `CfgMods`,
 `P:\<Name>`, `@<Name>` and the class in `CfgPatches` all at once, and a slip of case in any one of
 them makes a mod that builds and says nothing. What comes out is a `mod.enf` with `modsDirectory`
-filled in and one target, a `config.cpp` with `CfgPatches` and `CfgMods`, four script modules
+filled in, the mod itself in `mods` and one target, a `config.cpp` with `CfgPatches` and `CfgMods`, four script modules
 (`1_Core`, `3_Game`, `4_World`, `5_Mission`) — each with a file in it, because the builder does not
 carry an empty folder into a pbo — `mod.cpp` for the launcher, `Inputs.xml` with the line in the
-config that points at it, a `stringtable.csv` in the main addon's root (the engine reads it from the
-root of the pbo; there is nowhere to declare it and no need), empty `Missions\Global`,
+config that points at it, a `stringtable.csv` with the mod's name as its one string in the main
+addon's root (the engine reads it from the root of the pbo; there is nowhere to declare it and no
+need), empty `Missions\Global`,
 `Profiles\Global`, `Profiles\Dev` and `Addons`, and a `.gitignore` that closes off the pbo, the logs
 and the private key. The mod is linked onto the work drive as soon as it is made, so it can be built
 on the spot. The script module paths in `CfgMods` are the same in both layouts, so a mod moves from
@@ -389,7 +400,15 @@ written by then — they are in the profile. The protocol is documented nowhere 
 `DayZDiag_x64.exe`.
 
 Before a launch the run folder is put together — by default
-`%LOCALAPPDATA%\Enfusion\run\<workspace>`. Inside it is `game\`, the **file patching root**: the
+`%LOCALAPPDATA%\Enfusion\run\<workspace>-<id>`. The name is that of the `.code-workspace` file, or
+of the first folder when there is none — never the window's title, which changes with the editor's
+language — and the suffix is a stable hash of the workspace file's location, or of its folders, so
+same-named checkouts cannot share links, profiles or missions. Previous folders without the suffix
+are left in place; their contents are not moved automatically because their name does not identify
+which checkout owned them. They are full of junctions into the game and the mods, so delete one
+from Explorer or with `rmdir /s` rather than with Windows PowerShell's `Remove-Item -Recurse`, which
+can follow a junction into what it points at.
+Inside the run folder is `game\`, the **file patching root**: the
 working directory the game will get, holding junctions onto **every folder of the game root**,
 obtained by listing it, plus junctions onto the prefix roots of the workspace's mods, plus **copies
 of every file of the root** except the programs, the libraries and the logs; neither the game folder
@@ -448,7 +467,7 @@ before it will let one play: if a Release client is thrown off a moment after jo
 
 A target says what to put up: a client, the server alone, or both at once. Both is one launch: the
 server starts first, the client follows with `-connect=127.0.0.1 -port=2302`, so there is no
-connecting by hand. The client gets `-filePatching`, a profile of its own inside the working
+connecting by hand. The client gets `-filePatching`, a profile of its own beside the working
 directory, `-mod=` out of `mods` and `-name=SurvivorA`; a client with nothing to connect to
 loads `-mission=dayzOffline.<map>` instead. The server gets the same `-mod=` out of `mods`,
 plus `-serverMod=` out of `serverMods`, `-config=`, `-profiles=`, `-mission=` and `-world=none`.
@@ -508,7 +527,9 @@ one takes `Maps\<map>` as well; the mission comes out of `Missions\<Mod>.<map>` 
 beside, because the game root has a `Missions` of its own and Windows does not tell it apart from
 our `missions` — in one folder the mission would ride into the DayZ installation straight through a
 junction. Neither the mod's sources nor the work drive is changed by a launch, still. A layer the
-mod does not have is not asked for by anybody.
+mod does not have is not asked for by anybody. The mission is emptied before its layers go down, so
+a file deleted from a layer is gone from the next launch too; the server's own `storage_*`, its
+persistence, is the one thing kept.
 
 The profile is the one part of a launch that is read by human eyes: `.RPT`, `.ADM`, whatever a
 server mod keeps its configuration in. So its place is the `enfusion.launch.profiles` setting, and
@@ -593,8 +614,8 @@ older failed attempt has already copied into the box. If such a box still cannot
 ready", close its Steam and empty/recreate `steam2` once in Sandboxie. That recovery deliberately
 is not automatic because it also removes the remembered login and requires Steam Guard again.
 
-With no account set, the second client is just one more client: fine for offline, and unable to join
-a server the first one is already on.
+With no account set, the second client is just one more client: on a client target it plays the
+same offline mission as the first, and it is unable to join a server the first one is already on.
 
 One more thing about AddonBuilder, nothing to do with this extension but worth knowing in advance:
 it binarises through `binarize.exe -addon="P:"`, which is to say it reads **every** config on the
@@ -611,8 +632,8 @@ work drive. One broken `config.cpp` in any third-party mod on `P:` brings down a
 | `npm run lint` | ESLint with type checking |
 | `npm test` | builds `*.test.ts` through esbuild and runs `node --test`, with no extension host |
 | `npm run vsix` | build the `.vsix` |
-| `cmake -S native -B native/.build -A x64` | configure the C17 EDDS converter with MSVC |
-| `cmake --build native/.build --config Release` | build the native converter with the static CRT |
+| `cmake -S native -B native/.build -A x64` | configure the C17 `enfusion.exe` with MSVC |
+| `cmake --build native/.build --config Release` | build `enfusion.exe` with the static CRT |
 | `ctest --test-dir native/.build -C Release` | run native core and black-box CLI tests |
 
 `F5` puts up an Extension Development Host and opens the folder one level above this one in it, so
@@ -623,18 +644,25 @@ that the panel has some mods to show straight away.
 ```
 src/
   extension.ts        composition root: everything is made and disposed here
-  mods/               the domain: the model of the mods and the config.cpp parsing, with no vscode
-  platform/           access to the workspace: findFiles, reading files, the watcher, Uri
-  view/               the Mods panel and the .enf editor on the extension's side: the webview, the messages, the document edits
-  webview/            the Mods panel and the .enf form on the browser's side: a tsconfig of its own, DOM instead of Node
-test/
-  mods/               bare-Node domain tests, mirroring src/mods
-  platform/           host adapters whose resource ownership can be exercised on bare Node
-  webview/            browser-side logic that needs no DOM or extension host
+  mods/               the domain, with no vscode: the model of the mods, manifests, the work drive
+    build/            the build plan, the build queue, the packing log
+    launch/           launch plans and sessions, Steam and Sandboxie, game windows, the script log
+    texture/          EDDS facts, texture profiles, conversion plans and the editors' state
+  platform/           access to the workspace and the machine: files, processes, the registry
+    launch/           the run folder, the boxed second client, the window guard, the debugger port
+    texture/          the native converter, its batches and their recovery, the work scheduler
+  view/               the extension's side of the panel and the editors: the messages, the edits
+    texture/          the EDDS preview and the two conversion editors
+  webview/            the browser's side: a tsconfig of its own, DOM instead of Node
+    panel/            the Mods panel
+    form/             the form over mod.enf and workspace.enf
+    texture/          the EDDS preview and the two conversion editors
+test/                 mirrors src/: bare-Node tests, with no extension host
+  smoke/              the activation smoke test of the installed VSIX
   schemas.test.ts     the contract shared by the two JSON schemas
 schemas/              the JSON schemas of `mod.enf` and `workspace.enf`, registered through jsonValidation
-native/               dependency-free C17 EDDS parser/decoder, CLI, synthetic tests and fuzz target
-dist/native/           staged platform executable and notices; produced by CI, not kept in git
+native/               the C17 `enfusion.exe`, its tests and fuzz targets; see native/README.md
+dist/native/          staged platform executable and notices; produced by CI, not kept in git
 ```
 
 The "the domain knows nothing of the host" boundary is held by `no-restricted-imports` in
