@@ -5,8 +5,8 @@ DayZ Workbench 1.29.163709 texture importer. The executable SHA-256 is recorded 
 No Workbench binaries or disassembly are distributed.
 
 Legacy target research, complete writer captures and the LZO writer blocker are documented in
-[target-evidence.md](target-evidence.md). Ticket 09 remains incomplete; captures do not enable
-either legacy authoring target.
+[target-evidence.md](target-evidence.md). The captures do not enable either legacy authoring
+target.
 
 The capture executes the installed importer's machine code in Unicorn, starting at its texture
 conversion function (RVA `0xfcc0d0`), with decoded BGRA8/BGRX8 input and `Conversion=None`.
@@ -26,7 +26,7 @@ Observed for this DayZ build:
 
 - `MipMapFunction=ColorNoise` (enum 2) takes the same filtering path as Filter (enum 0).
   RGB and alpha are deterministic. A separate `Swizzling=ColorNoise` enum invokes alpha noise;
-  that swizzle is outside this ticket and is not enabled here.
+  that swizzle is outside this capture and is not enabled here.
 - `TiledTexture=false` clamps out-of-bounds samples; true repeats them. Mip 0 is unchanged.
   Box never needs samples outside the image. Kaiser makes the border difference observable.
 - Workbench sets Kaiser width 3, **stretch 4, alpha 1**, with 32 subsamples. The earlier
@@ -37,7 +37,7 @@ Observed for this DayZ build:
 To reproduce in a separate Python environment with `pefile==2024.8.26` and `unicorn==2.1.4`:
 
 ```powershell
-py capture.py 'F:/SteamLibrary/steamapps/common/DayZ Tools/Bin/Workbench/workbenchApp.exe' reproduced.json
+py capture.py '<DayZ Tools>/Bin/Workbench/workbenchApp.exe' reproduced.json
 ```
 
 Compare the `rows` with `mip-goldens.json`; a different Workbench build needs fresh address and

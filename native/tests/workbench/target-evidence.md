@@ -1,6 +1,6 @@
 # Legacy target research gate — 2026-10-04
 
-Ticket 09 is **not implemented**. The current Workbench can produce complete controlled files
+The legacy targets are **not implemented**. The current Workbench can produce complete controlled files
 for `EnfusionDDS_LZ4`, but its `EnfusionDDS_LZ0` compression path faults before writing a file.
 Neither target is enabled by this evidence-only change. A successful LZO writer oracle and the
 Workbench-open/DayZ visual checks remain required before claiming the requested support.
@@ -11,7 +11,7 @@ Use the Python environment described in [README.md](README.md), with the same fi
 DayZ Workbench 1.29.163709 executable:
 
 ```powershell
-py -B capture_targets.py 'F:/SteamLibrary/steamapps/common/DayZ Tools/Bin/Workbench/workbenchApp.exe' reproduced-targets.json
+py -B capture_targets.py '<DayZ Tools>/Bin/Workbench/workbenchApp.exe' reproduced-targets.json
 py -B check_target_captures.py reproduced-targets.json
 py -B check_target_captures.py reproduced-targets.json --cli ../../.build/Release/enfusion.exe
 ```
@@ -83,14 +83,13 @@ fixtures with their source/profile. Then establish its reader/writer contract, m
 limits and profile interactions, and implement the shared target capability across native CLI,
 metadata, batch and editor. Keep `DirectXDDS` explicitly refused before writing. Preserve GUIDs
 and atomic replacement, verify both targets from the packaged executable, and perform the
-Workbench-open and minimal-DayZ visual smoke. Current refusal remains in place until that work
-is completed; ticket 09 must not be marked done on the strength of these captures.
+Workbench-open and minimal-DayZ visual smoke. The current refusal remains in place until that
+work is completed; these captures alone do not support either legacy target.
 
-## Verification of this evidence change
+## Verification of this evidence
 
-To avoid the in-progress ticket 08 changes, verification used an isolated checkout of `703c874`
-plus these research files. Typecheck and lint passed; all 565 extension tests passed with
-`EDDS_TEST_CONVERTER` set to the freshly built executable, and all nine native CTest suites passed.
-The Windows packaging smoke passed. The independent checker and CLI inspect/preview checks passed
-again using the executable extracted from that VSIX. None of this substitutes for implementing
-the target options, fuzzing a future LZO parser, or the outstanding visual compatibility checks.
+When the captures were recorded, typecheck, lint, the extension tests with `EDDS_TEST_CONVERTER`
+set to a freshly built executable, the native CTest suites and the Windows packaging smoke passed.
+The independent checker and the CLI inspect/preview checks passed again with the executable
+extracted from the VSIX. None of this substitutes for implementing the target options, fuzzing
+a future LZO parser, or the outstanding visual compatibility checks.
