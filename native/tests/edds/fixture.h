@@ -1,9 +1,16 @@
+/*
+ * The fixtures the EDDS tests build their inputs from: small EDDS, DDS, PNG, TGA, JPEG and TIFF
+ * files, each written byte by byte in memory. A function that returns a test_bytes returns a new
+ * allocation the caller releases with fixture_free, or an empty one (NULL data) when it could not
+ * build the file.
+ */
 #ifndef EDDS_TEST_FIXTURE_H
 #define EDDS_TEST_FIXTURE_H
 
 #include <stddef.h>
 #include <stdint.h>
 
+/** Bytes in memory and how many there are. */
 typedef struct test_bytes {
     uint8_t *data;
     size_t   size;
@@ -18,31 +25,38 @@ test_bytes fixture_odd_fourcc(void);
 
 /**
  * A DXT5 whose colour endpoints are in the order BC1 would read as its punch-through layout. BC3
- * has no such layout — the alpha block beside it carries the alpha — so this is a legal texture
+ * has no such layout (the alpha block beside it carries the alpha), so this is a legal texture
  * whose fourth colour a BC1 decoder would turn into a hole.
  */
 test_bytes fixture_dxt5_low_endpoints(void);
+
 /** A standard DDS, not ENF1, whose three levels carry independently chosen pixels. */
 test_bytes fixture_dds_bgrx_mips(void);
+
 /** The same standard DDS with only its top level, suitable for generated-mip coverage. */
 test_bytes fixture_dds_bgrx_top(void);
+
 /** Controlled compressed legacy and DX10 source-header paths. */
 test_bytes fixture_dds_dxt1_top(void);
 test_bytes fixture_dds_dxt5_top(void);
 test_bytes fixture_dds_bgra_alpha_mips(void);
 test_bytes fixture_dds_dx10_r8_mips(void);
+
 /** A controlled four-by-four, top-only DX10 DDS for one exact payload format. */
 test_bytes fixture_dds_dx10_top(
     uint32_t       dxgi_format,
     const uint8_t *payload,
     size_t         payload_size,
     uint32_t       bytes_per_pixel);
+
 test_bytes fixture_integer_overflow(void);
 test_bytes fixture_png_rgba(void);
 test_bytes fixture_png_flat(uint32_t side);
 test_bytes fixture_png_rgba_gamma(void);
-/* RGB with a suggested palette, a tRNS colour key and its zlib stream split over many IDATs. */
+
+/** RGB with a suggested palette, a tRNS colour key and its zlib stream split over many IDATs. */
 test_bytes fixture_png_rgb_keyed(void);
+
 test_bytes fixture_tga_bgrx(void);
 test_bytes fixture_jpeg_ycbcr(void);
 test_bytes fixture_tiff_rgb(void);
@@ -59,12 +73,13 @@ test_bytes fixture_tga_gpu_gradient(void);
  * something to compress. It is how the black-box test gets one GPU result stored both ways.
  */
 test_bytes fixture_tga_gpu_flat(void);
+
 void fixture_free(test_bytes fixture);
 int fixture_write(const char *path, test_bytes fixture);
 
 /**
  * One IFD entry as the builder takes it. `value` is the literal inline value for a tag that fits
- * four bytes, and the file offset of the values otherwise — `fixture_tiff_ifd_end` says where the
+ * four bytes, and the file offset of the values otherwise: `fixture_tiff_ifd_end` says where the
  * trailing blob a test supplies begins.
  */
 typedef struct fixture_tiff_tag {
@@ -85,30 +100,40 @@ size_t fixture_tiff_build(
     size_t                  trailing_size);
 
 /**
- * A JPEG around fixed all-ones quantisation and a three-symbol Huffman pair, so a test writes only
- * the frame shape it is about and the entropy bits it wants decoded.
+ * A JPEG around fixed all-ones quantisation, a three-symbol DC Huffman table and an AC table that
+ * holds only the end of block, so a test writes only the frame shape it is about and the entropy
+ * bits it wants decoded.
  */
 typedef struct fixture_jpeg_spec {
-    uint8_t        frame_marker;
-    uint8_t        precision;
-    uint16_t       width;
-    uint16_t       height;
-    uint8_t        component_count;
-    uint8_t        luma_sampling;
-    uint16_t       restart_interval;
+    /** The byte after 0xff that opens the frame header. */
+    uint8_t  frame_marker;
+    uint8_t  precision;
+    uint16_t width;
+    uint16_t height;
+    /** One to three: the builder refuses any other count. */
+    uint8_t  component_count;
+    /** The sampling factors of the first component; every other component gets 0x11. */
+    uint8_t  luma_sampling;
+    /** Non-zero adds a restart interval segment with this interval; 0 leaves it out. */
+    uint16_t restart_interval;
+
+    /** The contents of an APP1 segment right after the start of image; none when the size is 0. */
     const uint8_t *exif;
     size_t         exif_size;
+    /** The entropy-coded data, written right after the scan header. */
     const uint8_t *entropy;
     size_t         entropy_size;
-    int            omit_end_of_image;
+
+    /** Non-zero leaves off the end-of-image marker. */
+    int omit_end_of_image;
 } fixture_jpeg_spec;
 
 size_t fixture_jpeg_build(uint8_t *output, size_t capacity, const fixture_jpeg_spec *spec);
 
 /**
  * An uncompressed true-colour TGA of whatever size and samples a test wants. The GPU formats need
- * a controlled source of their own — a gradient wide enough for several blocks, a size that is not
- * a multiple of four, an alpha channel that is or is not used — and this is the cheapest source
+ * a controlled source of their own (a gradient wide enough for several blocks, a size that is not
+ * a multiple of four, an alpha channel that is or is not used), and this is the cheapest source
  * format to build exactly: a header and the BGRA samples, with no compression in between.
  */
 size_t fixture_tga_bytes(uint32_t width, uint32_t height, int with_alpha);
