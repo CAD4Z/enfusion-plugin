@@ -93,6 +93,16 @@ test('returning to a cached mip reuses pixels without conversion and a profile e
   assert.equal(updateTextureAuthoring(fresh.state, { kind: 'select-mip', mip: 1 }).effects[0]?.kind, 'render-draft');
 });
 
+test('committing an RGB source preserves carried-channel facts for analysis', () => {
+  const ready = updateTextureAuthoring(readyAuthoring(), { kind: 'draft-rendered', revision: 1,
+    rendered: { ...rendering(), sourceFacts: { width: 1, height: 1, hasAlpha: false } } });
+  const running = updateTextureAuthoring(ready.state, { kind: 'run' });
+  const converted = updateTextureAuthoring(running.state, { kind: 'converted', revision: 1,
+    conversion: CONVERSION, rendered: rendering() });
+  assert.equal(converted.state.kind, 'result');
+  assert.equal(converted.state.kind === 'result' && converted.state.rendered.sourceFacts?.hasAlpha, false);
+});
+
 test('profile changes invalidate the old preview and late native results cannot win', () => {
   const loaded = updateTextureAuthoring(openedTextureAuthoring().state, {
     kind: 'loaded',

@@ -13,6 +13,7 @@ import type {
 import './textureConversion.css';
 import { textureAnalysisView, type TextureAnalysisView } from './textureAnalysisView';
 import type { TextureChannels } from '../../mods/texture/textureConversions';
+import { analysisChannelsOf, sourceChannelsOf } from '../../mods/texture/textureAnalysis';
 
 declare function acquireVsCodeApi(): { postMessage(message: TextureAuthoringRequest): void };
 
@@ -71,7 +72,7 @@ function render(next: TextureAuthoringState): void {
   } else {
     const comparisons = element('div', 'comparisons');
     comparisons.append(
-      previewPane(`Source · mip ${rendered.source.level}`, rendered.source, rendered.sourceFacts?.hasAlpha === false ? 'RGB' : 'RGBA', analysis),
+      previewPane(`Source · mip ${rendered.source.level}`, rendered.source, sourceChannelsOf(rendered.sourceFacts), analysis),
       previewPane(`Result · mip ${rendered.result.level}`, rendered.result, rendered.inspection.channels, analysis),
     );
     body.append(comparisons);
@@ -133,7 +134,7 @@ function toolbar(
   const rendered = current.kind === 'authoring'
     ? (current.preview.kind === 'ready' ? current.preview.rendered : undefined)
     : current.rendered;
-  const views = textureChannelViewsOf(rendered?.inspection.channels ?? 'RGBA');
+  const views = textureChannelViewsOf(rendered === undefined ? 'RGBA' : analysisChannelsOf(rendered, analysisSide));
   // A conversion that took the shown channel away — Red after A — goes back to the whole image.
   if (!views.some(({ view }) => view === channel)) channel = 'rgba';
   for (const { view, label } of views) {
@@ -186,6 +187,11 @@ function previewPane(title: string, preview: EddsPreview, channels: TextureChann
   pane.append(heading(title));
   const viewport = element('div', 'viewport checkerboard');
   draggable(viewport);
+  if (!textureChannelViewsOf(channels).some(({ view }) => view === channel)) {
+    viewport.append(message('The selected channel is not carried by these pixels.'));
+    pane.append(viewport);
+    return pane;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = preview.width;
   canvas.height = preview.height;

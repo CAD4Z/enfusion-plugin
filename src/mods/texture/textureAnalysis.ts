@@ -143,7 +143,7 @@ export function errorMetricOf(
   }
   const samples = result.width * result.height * components.length;
   return { kind: 'available', value: {
-    rmse: Math.sqrt(squared / samples), samples, units: floating ? 'linear float values' : 'byte values (0–255)',
+    rmse: Math.sqrt(squared / samples), samples, units: floating ? 'float sample values' : 'byte values (0–255)',
   } };
 }
 
@@ -170,12 +170,23 @@ export function runtimeMemoryOf(inspection: EddsInspection, level: number): Anal
 
 export interface TextureAnalysisInput {
   readonly inspection: EddsInspection;
-  readonly source?: EddsPreview;
-  readonly result?: EddsPreview;
+  readonly source?: Omit<AnalysisPixels, 'channels'>;
+  readonly result?: Omit<AnalysisPixels, 'channels'>;
   readonly sourceFacts?: { readonly hasAlpha: boolean };
   readonly profile?: TextureProfile;
   readonly reason?: string;
   readonly selectedMip?: number;
+}
+
+/** Source samples retain their declared channels independently of the Result's conversion. */
+export function sourceChannelsOf(facts?: { readonly hasAlpha: boolean }): TextureChannels {
+  return facts?.hasAlpha === false ? 'RGB' : 'RGBA';
+}
+
+export function analysisChannelsOf(
+  input: Pick<TextureAnalysisInput, 'sourceFacts' | 'inspection'>, side: AnalysisSelection['side'],
+): TextureChannels | 'UNKNOWN' {
+  return side === 'source' ? sourceChannelsOf(input.sourceFacts) : input.inspection.channels;
 }
 
 export interface AnalysisSelection {
@@ -199,18 +210,17 @@ function referenceOf(input: TextureAnalysisInput): AnalysisValue<AnalysisPixels>
     return unavailable('The Source preview precedes swizzling, normalization and mip removal; matching pipeline samples are unavailable.');
   }
   if (input.result?.level !== 0) return unavailable('Source preview contains mip 0 only; matching Source pipeline mip samples are unavailable.');
-  return { kind: 'available', value: { ...input.source, channels: input.sourceFacts?.hasAlpha === false ? 'RGB' : 'RGBA' } };
+  return { kind: 'available', value: { ...input.source, channels: sourceChannelsOf(input.sourceFacts) } };
 }
 
-/** One pure projection shared by standalone, single-source and batch viewports. */
+/** One pure projection shared by standalone and source-image viewports. */
 export function analysisOf(input: TextureAnalysisInput, selection: AnalysisSelection): TextureAnalysis {
   const preview = selection.side === 'source' ? input.source : input.result;
   const reason = input.reason ?? (input.inspection.pixels.kind === 'unsupported'
     ? input.inspection.pixels.reason : 'Decoded pixels are not available yet.');
   const pixels: AnalysisValue<AnalysisPixels> = preview === undefined ? unavailable(reason) : {
     kind: 'available', value: {
-      ...preview, channels: selection.side === 'result' ? input.inspection.channels
-        : input.sourceFacts?.hasAlpha === false ? 'RGB' : 'RGBA',
+      ...preview, channels: analysisChannelsOf(input, selection.side),
     },
   };
   const reference = referenceOf(input);

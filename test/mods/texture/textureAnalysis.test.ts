@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  histogramOf, pixelAt, errorMetricOf, runtimeMemoryOf, analysisOf, ANALYSIS_MAX_PIXELS, cachePreview, PREVIEW_CACHE_BYTES,
+  histogramOf, pixelAt, errorMetricOf, runtimeMemoryOf, analysisOf, analysisChannelsOf,
+  ANALYSIS_MAX_PIXELS, cachePreview, PREVIEW_CACHE_BYTES,
   type AnalysisPixels,
 } from '../../../src/mods/texture/textureAnalysis';
 import { DEFAULT_TEXTURE_PROFILE } from '../../../src/mods/texture/textureConversion';
 import { inspectionOf } from '../../../src/mods/texture/edds';
+import { textureChannelViewsOf } from '../../../src/mods/texture/textureConversions';
 
 const pixels: AnalysisPixels = {
   level: 0, width: 2, height: 1, channels: 'RGBA',
@@ -134,4 +136,12 @@ test('the mip cache bounds both Source and Result memory and excludes an oversiz
   const cached = cachePreview(cachePreview([], first), second);
   assert.deepEqual(cached, [second]);
   assert.deepEqual(cachePreview(cached, { source: base, result: { ...base, rgba: new Uint8Array(PREVIEW_CACHE_BYTES + 1) } }), []);
+});
+
+test('Source channel selection remains independent of a single-channel Result', () => {
+  const input = { inspection: { ...inspection(), channels: 'R' as const }, sourceFacts: { hasAlpha: true } };
+  assert.deepEqual(textureChannelViewsOf(analysisChannelsOf(input, 'source')).map(({ view }) => view),
+    ['rgba', 'red', 'green', 'blue', 'alpha']);
+  assert.deepEqual(textureChannelViewsOf(analysisChannelsOf(input, 'result')).map(({ view }) => view), ['rgba', 'red']);
+  assert.equal(analysisChannelsOf({ ...input, sourceFacts: { hasAlpha: false } }, 'source'), 'RGB');
 });

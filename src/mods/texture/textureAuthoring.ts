@@ -393,7 +393,8 @@ function converted(
           profile: state.profile,
           revision,
           conversion,
-          rendered,
+          rendered: state.rendered.sourceFacts === undefined ? rendered
+            : { ...rendered, sourceFacts: state.rendered.sourceFacts },
         },
         effects: [],
       }
