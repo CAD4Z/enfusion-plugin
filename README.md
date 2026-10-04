@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/github/issues/CAD4Z/enfusion-plugin?style=for-the-badge" alt="open issues" />
     <img src="https://img.shields.io/badge/version-0.0.28-blue?style=for-the-badge" alt="version" />
     <img src="https://img.shields.io/badge/platform-Windows%20x64-lightgrey?style=for-the-badge" alt="platform" />
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="license" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Strict%201.0.0-red?style=for-the-badge" alt="license" /></a>
 </div>
 
 <br />
@@ -252,6 +252,8 @@ The rule that the domain knows nothing of the host is held by `no-restricted-imp
 
 ## License
 
-MIT — see [LICENSE](./LICENSE); bundled third-party work is listed in
-[THIRD-PARTY.md](./THIRD-PARTY.md). DayZ and Enfusion are trademarks of Bohemia Interactive a.s.;
-this extension is not affiliated with or endorsed by Bohemia Interactive.
+PolyForm Strict 1.0.0 — see [LICENSE](./LICENSE). Source-available, not open source: you may read
+and use this extension for any noncommercial purpose, but not redistribute or modify it.
+Third-party work it bundles keeps its own license, as listed in [THIRD-PARTY.md](./THIRD-PARTY.md).
+DayZ and the Enfusion engine are the property of Bohemia Interactive; this extension is not
+affiliated with or endorsed by Bohemia Interactive.

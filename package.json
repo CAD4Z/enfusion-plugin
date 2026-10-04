@@ -4,7 +4,7 @@
   "description": "Enfusion mod tooling for VS Code: discover, build, launch and open DayZ mods in Workbench",
   "version": "0.0.28",
   "publisher": "hurfy",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "repository": {
     "type": "git",

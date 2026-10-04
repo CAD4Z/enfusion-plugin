@@ -1,5 +1,5 @@
 Enfusion native executable (enfusion.exe)
-Copyright (c) 2026 Enfusion extension contributors
+Copyright (c) 2026 CAD4Z
 
-This program is distributed under the MIT License in the repository root.
+This program is distributed under the PolyForm Strict License 1.0.0 in the repository root.
 Third-party notices are in THIRD-PARTY.md beside this file.
