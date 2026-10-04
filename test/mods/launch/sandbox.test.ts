@@ -117,13 +117,22 @@ test('the count in front of the pids is not one of them', () => {
 });
 
 test('the pids of a program are read out of the quoted rows and nothing else', () => {
+  // tasklist on a Russian Windows: "INFO: No tasks are running which match the specified
+  // criteria.", and sizes in KB.
+  const info =
+    '\u0418\u041d\u0424\u041e: \u043d\u0435\u0442 ' +
+    '\u0437\u0430\u043f\u0443\u0449\u0435\u043d\u043d\u044b\u0445 ' +
+    '\u0437\u0430\u0434\u0430\u0447, ' +
+    '\u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0445 ' +
+    '\u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u043c ' +
+    '\u043a\u0440\u0438\u0442\u0435\u0440\u0438\u044f\u043c.\r\n';
   const said =
-    'ИНФО: нет запущенных задач, соответствующих указанным критериям.\r\n' +
-    '"steam.exe","7488","Console","1","108 192 КБ"\r\n' +
-    '"steam.exe","28652","Console","1","144 320 КБ"\r\n';
+    info +
+    '"steam.exe","7488","Console","1","108 192 \u041a\u0411"\r\n' +
+    '"steam.exe","28652","Console","1","144 320 \u041a\u0411"\r\n';
 
   assert.deepEqual(imagePidsOf(said), [7488, 28652]);
-  assert.deepEqual(imagePidsOf('ИНФО: нет запущенных задач.\r\n'), []);
+  assert.deepEqual(imagePidsOf(info), []);
 });
 
 test('a box root nobody configured is the one Sandboxie would have used', () => {

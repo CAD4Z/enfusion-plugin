@@ -251,7 +251,8 @@ What the engine is given:
   `by = ceil(yMax)`), placed so that the outline is exactly where it belongs after the engine
   centres the box in its cell, half pixels included. The advance is rounded.
 - `HEAD` carries the cap height from `OS/2.sCapHeight`; without one, the top of the font's H, of
-  Cyrillic Н when it has no H, or 0.7 em when it has neither, whether or not the set holds them.
+  Cyrillic En (U+041D) when it has no H, or 0.7 em when it has neither, whether or not the set
+  holds them.
   `B = C = FontSize`, and the bold and italic flags are zero; the widget sets those itself.
 - `KERN` holds the GPOS `PairPos` format 1 and 2 pairs (`Extension` included) of the `kern`
   feature in the default language system of the DFLT, latn and cyrl scripts — what text with no
@@ -287,7 +288,7 @@ and those the generator drew (`drawn`), and the `source` family and style. `insp
 `unitsPerEm` and `glyphCount`, from which a caller names a new font.
 
 Tests follow the EDDS rule: production code is never its own oracle. `enfusion-font-fixture`
-writes synthetic TrueType fonts — overlapping contours shaped like Ц, a contour with a hole,
+writes synthetic TrueType fonts — overlapping contours shaped like Tse (U+0426), a contour with a hole,
 composite glyphs with offsets, scale, a two-by-two matrix, nesting and point matching, GPOS pairs
 behind PairPos 1, PairPos 2 and an Extension lookup next to pairs only a language's own system
 enables, a variant with a `kern` table and no cap height, and the fonts that must be refused. `enfusion-font-reference` reads the result with its own FNT5, EDDS and LZ4

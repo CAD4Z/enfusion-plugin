@@ -81,7 +81,7 @@ static const font_fixture_point h_points[] = {
 static const size_t h_ends[] = { 4, 8, 12 };
 static const simple_glyph h_glyph = { h_points, 12, h_ends, 3 };
 
-/* Ц the way type designers build it: stems, foot and tail overlapping instead of joined. */
+/* Cyrillic Tse (U+0426) as type designers build it: stems, foot and tail overlap, not join. */
 static const font_fixture_point tse_points[] = {
     RECT(80, 0, 180, 700), RECT(520, 0, 620, 700), RECT(80, 0, 680, 100), RECT(600, -180, 680, 100)
 };

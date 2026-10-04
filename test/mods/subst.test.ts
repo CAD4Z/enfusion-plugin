@@ -28,8 +28,13 @@ test('a letter is the same letter however it was cased', () => {
 
 /** The output is paths and an arrow; whatever `subst` says in words says nothing to us. */
 test('a line that is not a mapping is not read as one', () => {
+  // The same refusal as a Russian Windows prints it.
+  const refused =
+    '\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 ' +
+    '\u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440 - P:';
+
   assert.equal(mountedAt('Invalid parameter - P:', 'P:'), '');
-  assert.equal(mountedAt('Неверный параметр - P:', 'P:'), '');
+  assert.equal(mountedAt(refused, 'P:'), '');
 });
 
 test('a folder with spaces in it survives being read back', () => {

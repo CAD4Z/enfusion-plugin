@@ -72,7 +72,7 @@ string(JSON drawn_count LENGTH "${output}" drawn)
 string(JSON drawn GET "${output}" drawn 0)
 string(JSON family GET "${output}" source family)
 string(JSON cell GET "${output}" cell)
-# Eighteen mapped characters, the box drawn for U+25A1; x and Ж are not in the font.
+# Eighteen mapped characters, the box drawn for U+25A1; x and U+0416 are not in the font.
 if(NOT kind STREQUAL "font-generate" OR NOT guid MATCHES "^[0-9A-F]+$" OR NOT glyphs EQUAL 19 OR
     NOT pairs EQUAL 5 OR NOT missing_count EQUAL 2 OR NOT first_missing EQUAL 120 OR
     NOT second_missing EQUAL 1046 OR NOT drawn_count EQUAL 1 OR NOT drawn EQUAL 9633 OR

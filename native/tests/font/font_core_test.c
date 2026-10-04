@@ -200,7 +200,7 @@ static int only_the_guid_of_a_recipe_about_to_be_replaced_matters(void) {
 }
 
 static int a_character_file_is_its_characters_and_nothing_between_them(void) {
-    /* BOM, a line break, a tab, a space, NBSP, Ж twice, a CR LF: A B Ж and NBSP remain. */
+    /* BOM, a line break, a tab, a space, NBSP, U+0416 twice, a CR LF: A B U+0416 and NBSP remain. */
     static const uint8_t text[] = {
         0xEF, 0xBB, 0xBF, 'B', 'A', '\n', 0xD0, 0x96, '\t', ' ', 0xC2, 0xA0, 0xD0, 0x96, '\r', '\n'
     };

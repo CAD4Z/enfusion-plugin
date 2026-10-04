@@ -40,7 +40,13 @@ HKEY_CURRENT_USER\\SOFTWARE\\Bohemia Interactive\\DayZ Tools
 
 /** `reg` speaks the machine's language, so nothing here may depend on the words it uses. */
 test('an error in a language nobody parsed still means nothing was found', () => {
-  const output = 'ОШИБКА: Не удается найти указанный раздел или параметр реестра.';
+  // "ERROR: The system was unable to find the specified registry key or value." in Russian.
+  const output =
+    '\u041e\u0428\u0418\u0411\u041a\u0410: \u041d\u0435 ' +
+    '\u0443\u0434\u0430\u0435\u0442\u0441\u044f \u043d\u0430\u0439\u0442\u0438 ' +
+    '\u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0439 \u0440\u0430\u0437\u0434\u0435\u043b ' +
+    '\u0438\u043b\u0438 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440 ' +
+    '\u0440\u0435\u0435\u0441\u0442\u0440\u0430.';
 
   assert.equal(registryValue(output, 'main'), '');
 });

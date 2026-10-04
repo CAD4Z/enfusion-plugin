@@ -110,7 +110,7 @@ default language systems of DFLT, latn and cyrl, or from a format 0 `kern` table
 atlas pixels.
 
 ```powershell
-py font_check.py ..\..\.build\Release\enfusion.exe Sans-Regular.ttf Sans.charset.txt 32 --preview sample.png "AV Ту Ц"
+py font_check.py ..\..\.build\Release\enfusion.exe Sans-Regular.ttf Sans.charset.txt 32 --preview sample.png "AV To Ty"
 ```
 
 It needs fontTools and numpy; fonts never enter the repository. `--preview` draws a line of text

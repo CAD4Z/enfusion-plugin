@@ -228,8 +228,9 @@ static int push_code(uint32_t **list, size_t *count, uint32_t code) {
 }
 
 /**
- * OS/2.sCapHeight, else the top of the font's H, else of its Cyrillic Н, else 0.7 em, rounded the
- * way Font Editor rounds. The glyph is looked up in the font whether or not the set holds it.
+ * OS/2.sCapHeight, else the top of the font's H, else of its Cyrillic En (U+041D), else 0.7 em,
+ * rounded the way Font Editor rounds. The glyph is looked up in the font whether or not the set
+ * holds it.
  */
 static edds_status cap_height_of(const font_face *face, double scale, float *cap_height, edds_error *error) {
     static const uint32_t probes[] = { 0x48u, 0x41Du };
