@@ -1,14 +1,10 @@
 /**
- * The one process boundary around the bundled EDDS converter.
- *
- * The executable path is installation-relative and is never configurable. Arguments go straight
- * to the process with no shell, so an EDDS path remains one opaque argument. Every useful command
- * waits for one cached protocol handshake before it hands a local path to the binary.
+ * The one process boundary around the bundled EDDS converter. Every useful command waits for one
+ * cached protocol handshake before it hands a local path to the binary (see nativeExecutable).
  */
 
-import { type ChildProcess, execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { textureSwizzleWireOf } from '../../mods/texture/textureSwizzles';
@@ -39,29 +35,11 @@ import {
   runEddsBatch,
 } from './eddsBatch';
 import { TextureScheduler } from './textureScheduler';
+import { bundledExecutable, type Execute, executeFile, Handshake } from '../nativeExecutable';
+
+export type { ExecutableRequest, ExecutableResult, Execute } from '../nativeExecutable';
 
 const OUTPUT_LIMIT = 96 * 1024 * 1024;
-
-export interface ExecutableRequest {
-  readonly executable: string;
-  readonly args: readonly string[];
-  readonly shell: false;
-  readonly windowsHide: true;
-  readonly maxBuffer: number;
-  readonly signal?: AbortSignal;
-  /**
-   * The file the process watches for a request to stop, when it has one. An abort then creates it
-   * and kills the process only after a grace period, so a conversion can roll its pair back first.
-   */
-  readonly cancelFile?: string;
-}
-
-export interface ExecutableResult {
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-export type Execute = (request: ExecutableRequest) => Promise<ExecutableResult>;
 
 export class EddsConverterError extends Error {
   constructor(
@@ -77,20 +55,16 @@ export class EddsConverterError extends Error {
 
 export class EddsConverter {
   private readonly executable: string;
-  private handshake: Promise<void> | undefined;
+  private readonly handshake = new Handshake(async (signal) => {
+    protocolOf(await this.invoke(['protocol', '--machine'], signal));
+  });
 
   constructor(
     extensionPath: string,
     private readonly execute: Execute = executeFile,
     private readonly scheduler = new TextureScheduler(),
   ) {
-    this.executable = path.join(
-      extensionPath,
-      'dist',
-      'native',
-      'win32-x64',
-      'enfusion.exe',
-    );
+    this.executable = bundledExecutable(extensionPath);
   }
 
   async inspect(
@@ -100,7 +74,7 @@ export class EddsConverter {
     identityOnly = false,
   ): Promise<EddsInspection> {
     return this.scheduler.run('inspect', async (scheduledSignal) => {
-      await this.compatible(scheduledSignal);
+      await this.handshake.ensure(scheduledSignal);
       return inspectionOf(
         await this.invoke(
           [
@@ -116,7 +90,7 @@ export class EddsConverter {
 
   async preview(input: string, mip: number, signal?: AbortSignal): Promise<EddsPreview> {
     return this.scheduler.run('preview', async (scheduledSignal) => {
-      await this.compatible(scheduledSignal);
+      await this.handshake.ensure(scheduledSignal);
       return previewOf(
         await this.invoke(
           [EDDS_AREA, 'preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input, '--all-faces'],
@@ -132,7 +106,7 @@ export class EddsConverter {
     workKind: 'convert' | 'preview' = 'convert',
   ): Promise<EddsConversion> {
     return this.scheduler.run(workKind, async (scheduledSignal) => {
-      await this.compatible(scheduledSignal);
+      await this.handshake.ensure(scheduledSignal);
       const profile = plan.profile;
       const registration =
         plan.metadata === undefined || plan.identity === undefined
@@ -201,6 +175,8 @@ export class EddsConverter {
         maxBuffer: OUTPUT_LIMIT,
         signal,
         cancelFile,
+        // A conversion asked to stop rolls its pair back; one that will not is killed after this.
+        killAfterMs: EDDS_BATCH_CANCEL_GRACE_MS,
       });
       return result.stdout;
     } catch (error: unknown) {
@@ -230,7 +206,7 @@ export class EddsConverter {
     signal?: AbortSignal,
   ): Promise<EddsBatchExecution> {
     return this.scheduler.run('batch', async (scheduledSignal) => {
-      await this.compatible(scheduledSignal);
+      await this.handshake.ensure(scheduledSignal);
       return runEddsBatch(
         this.executable,
         jobs,
@@ -240,18 +216,6 @@ export class EddsConverter {
         scheduledSignal,
       );
     }, signal);
-  }
-
-  private async compatible(signal?: AbortSignal): Promise<void> {
-    this.handshake ??= this.invoke(['protocol', '--machine'], signal).then((source) => {
-        protocolOf(source);
-      });
-    try {
-      await this.handshake;
-    } catch (error: unknown) {
-      this.handshake = undefined;
-      throw error;
-    }
   }
 
   private async invoke(args: readonly string[], signal?: AbortSignal): Promise<string> {
@@ -269,53 +233,6 @@ export class EddsConverter {
       throw processFailure(error);
     }
   }
-}
-
-function executeFile(request: ExecutableRequest): Promise<ExecutableResult> {
-  return new Promise<ExecutableResult>((resolve, reject) => {
-    const graceful = request.cancelFile !== undefined;
-    let forced: NodeJS.Timeout | undefined;
-    let aborted = false;
-    const child: ChildProcess = execFile(
-      request.executable,
-      [...request.args],
-      {
-        encoding: 'utf8',
-        maxBuffer: request.maxBuffer,
-        shell: request.shell,
-        // A process that can be asked to stop is asked; anything else is simply stopped.
-        signal: graceful ? undefined : request.signal,
-        windowsHide: request.windowsHide,
-      },
-      (error, stdout, stderr) => {
-        if (forced !== undefined) clearTimeout(forced);
-        request.signal?.removeEventListener('abort', abort);
-        if (error === null) {
-          resolve({ stdout, stderr });
-          return;
-        }
-        reject(Object.assign(new Error(error.message), error, {
-          stdout,
-          stderr,
-          pid: child.pid,
-          ...(aborted ? { name: 'AbortError' } : {}),
-        }));
-      },
-    );
-    function abort(): void {
-      aborted = true;
-      try {
-        writeFileSync(request.cancelFile ?? '', '', { flag: 'wx' });
-      } catch {
-        // The first request to stop is the one that counts.
-      }
-      forced = setTimeout(() => child.kill('SIGKILL'), EDDS_BATCH_CANCEL_GRACE_MS);
-    }
-    if (graceful && request.signal !== undefined) {
-      if (request.signal.aborted) abort();
-      else request.signal.addEventListener('abort', abort, { once: true });
-    }
-  });
 }
 
 function processFailure(error: unknown): EddsConverterError {

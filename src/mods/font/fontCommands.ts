@@ -2,7 +2,15 @@
 import { samePath, windowsFolder } from '../paths';
 import type { EnfusionRoot } from '../texture/textureConversion';
 
-type Metadata = { readonly kind: 'missing' | 'present' } | { readonly kind: 'unreadable'; readonly reason: string };
+/** The atlas font sizes the engine takes, and the size a new font starts with. */
+export const FONT_SIZE_MIN = 8;
+export const FONT_SIZE_MAX = 40;
+export const FONT_SIZE_DEFAULT = 32;
+
+/** Whether the font's `.fnt.meta` recipe exists; native code reads it and refuses one it cannot. */
+interface Metadata {
+  readonly kind: 'missing' | 'present';
+}
 
 interface CommandContext {
   readonly platform: string;
@@ -19,35 +27,37 @@ export type FontRequest =
 
 export type FontCommandInput = CommandContext & FontRequest;
 
+/** The three sibling files a font command writes. */
+export interface FontTargets {
+  readonly output: string;
+  readonly atlas: string;
+  readonly metadata: string;
+}
+
+/** A regeneration takes everything from the recipe; a generation names its source and size. */
 export type FontCommandPlan =
   | { readonly kind: 'refused'; readonly reason: string }
-  | {
-      readonly kind: 'ready';
-      readonly action: 'generate' | 'replace' | 'regenerate';
-      readonly output: string;
-      readonly atlas: string;
-      readonly metadata: string;
-      readonly resourceName: string;
-      readonly source?: string;
-      readonly size?: number;
-      readonly characters?: string;
-      readonly replace: readonly string[];
-    };
+  | (FontTargets & { readonly kind: 'ready'; readonly resourceName: string; readonly replace: readonly string[] } & (
+      | { readonly action: 'regenerate' }
+      | {
+          readonly action: 'generate' | 'replace';
+          readonly source: string;
+          readonly size: number;
+          readonly characters: string | undefined;
+        }
+    ));
 
 export function fontCommandPlanOf(input: FontCommandInput): FontCommandPlan {
   const refusal = fontCommandRefusalOf(input);
   if (refusal !== undefined) return { kind: 'refused', reason: refusal };
-  if (input.metadata.kind === 'unreadable') {
-    return { kind: 'refused', reason: `The font recipe could not be read: ${input.metadata.reason}` };
-  }
   if (input.kind === 'regenerate' && input.metadata.kind === 'missing') {
     return { kind: 'refused', reason: 'This font has no .fnt.meta recipe. Generate it from a .ttf first.' };
   }
   if (input.kind === 'generate') {
     const nameProblem = fontNameProblemOf(input.name);
     if (nameProblem !== undefined) return { kind: 'refused', reason: nameProblem };
-    if (!Number.isInteger(input.size) || input.size < 8 || input.size > 40) {
-      return { kind: 'refused', reason: 'Font size must be a whole number from 8 to 40.' };
+    if (!Number.isInteger(input.size) || input.size < FONT_SIZE_MIN || input.size > FONT_SIZE_MAX) {
+      return { kind: 'refused', reason: `Font size must be a whole number from ${FONT_SIZE_MIN} to ${FONT_SIZE_MAX}.` };
     }
   }
   const targets = fontTargetsOf(input.file, input);
@@ -55,16 +65,16 @@ export function fontCommandPlanOf(input: FontCommandInput): FontCommandPlan {
     .sort((a, b) => samePath(b.root).length - samePath(a.root).length)[0];
   if (root === undefined) return { kind: 'refused', reason: 'The file is outside every discovered Enfusion root in this window.' };
   const resourceRoot = root.prefixRoot !== undefined && within(targets.output, root.prefixRoot) ? root.prefixRoot : root.root;
+  const ready = { kind: 'ready', ...targets, resourceName: targets.output.slice(windowsFolder(resourceRoot).length + 1) } as const;
+  if (input.kind === 'regenerate') return { ...ready, action: 'regenerate', replace: [] };
   return {
-    kind: 'ready', action: input.kind === 'regenerate' ? 'regenerate' : input.existing.length > 0 ? 'replace' : 'generate',
-    ...targets, resourceName: targets.output.slice(windowsFolder(resourceRoot).length + 1),
-    source: input.kind === 'generate' ? input.file : undefined, size: input.kind === 'generate' ? input.size : undefined,
-    characters: input.kind === 'generate' ? input.characters : undefined, replace: input.kind === 'regenerate' ? [] : input.existing,
+    ...ready, action: input.existing.length > 0 ? 'replace' : 'generate', replace: input.existing,
+    source: input.file, size: input.size, characters: input.characters,
   };
 }
 
 /** The same sibling paths are inspected by the host and handed to native publication. */
-export function fontTargetsOf(file: string, request: FontRequest): { output: string; atlas: string; metadata: string } {
+export function fontTargetsOf(file: string, request: FontRequest): FontTargets {
   if (request.kind === 'generate') {
     const problem = fontNameProblemOf(request.name);
     if (problem !== undefined) throw new Error(problem);

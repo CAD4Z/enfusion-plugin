@@ -23,7 +23,7 @@ test('generating a font plans three siblings and its Workbench resource name', (
   });
 });
 
-test('regeneration targets the selected recipe and refuses missing or unreadable metadata', () => {
+test('regeneration targets the selected recipe and refuses a missing one', () => {
   const input = { ...context, kind: 'regenerate' as const, file: 'C:/Mods/Example/Example/Fonts/Old.FNT',
     existing: ['C:/Mods/Example/Example/Fonts/Old.FNT'], metadata: { kind: 'present' as const } };
   const plan = fontCommandPlanOf(input);
@@ -31,11 +31,9 @@ test('regeneration targets the selected recipe and refuses missing or unreadable
   if (plan.kind !== 'ready') return;
   assert.equal(plan.action, 'regenerate');
   assert.equal(plan.metadata, 'C:/Mods/Example/Example/Fonts/Old.FNT.meta');
-  assert.equal(plan.source, undefined, 'native code must resolve the saved recipe, not a guessed sibling TTF');
+  assert.equal('source' in plan, false, 'native code must resolve the saved recipe, not a guessed sibling TTF');
   assert.deepEqual(plan.replace, []);
   assert.equal(fontCommandPlanOf({ ...input, metadata: { kind: 'missing' } }).kind, 'refused');
-  assert.deepEqual(fontCommandPlanOf({ ...input, metadata: { kind: 'unreadable', reason: 'Access denied' } }),
-    { kind: 'refused', reason: 'The font recipe could not be read: Access denied' });
 });
 
 test('a workspace-only font still receives a recipe, using the nearest discovered root', () => {
@@ -57,7 +55,7 @@ test('any occupied sibling requires explicit replacement, including an orphan at
     if (plan.kind !== 'ready') return;
     assert.equal(plan.action, 'replace');
     assert.deepEqual(plan.replace, existing);
-    assert.equal(plan.characters, 'C:/Mods/Example/shared.txt');
+    assert.equal(plan.action === 'replace' ? plan.characters : undefined, 'C:/Mods/Example/shared.txt');
   }
 });
 

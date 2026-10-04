@@ -1,7 +1,9 @@
 /** Explorer commands for fonts: native Quick Input, a cancellable operation, and its result. */
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { defaultFontName, fontNameProblemOf, type FontRequest } from '../mods/font/fontCommands';
+import {
+  defaultFontName, FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, fontNameProblemOf, type FontRequest,
+} from '../mods/font/fontCommands';
 import { samePath } from '../mods/paths';
 import { assertFontCommandCurrent, assertFontScope, loadFontCommand } from '../platform/font/fontCommands';
 import { FontGenerator } from '../platform/font/fontGenerator';
@@ -78,10 +80,13 @@ export function registerFontCommands(context: vscode.ExtensionContext, log: vsco
 
 async function chooseFont(uri: vscode.Uri, generator: FontGenerator): Promise<FontRequest | undefined> {
   const source = await generator.inspect(uri.fsPath);
-  const sizes = [32, ...Array.from({ length: 33 }, (_, at) => at + 8).filter((size) => size !== 32)];
+  const sizes = [FONT_SIZE_DEFAULT, ...Array.from({ length: FONT_SIZE_MAX - FONT_SIZE_MIN + 1 }, (_, at) => at + FONT_SIZE_MIN)
+    .filter((size) => size !== FONT_SIZE_DEFAULT)];
   const size = await vscode.window.showQuickPick(sizes.map((size) => ({
-    label: String(size), description: size === 32 ? 'Default' : undefined, size,
-  })), { title: 'Generate Enfusion Font · 1/3', placeHolder: 'Atlas font size (8–40 px)', ignoreFocusOut: true });
+    label: String(size), description: size === FONT_SIZE_DEFAULT ? 'Default' : undefined, size,
+  })), {
+    title: 'Generate Enfusion Font · 1/3', placeHolder: `Atlas font size (${FONT_SIZE_MIN}–${FONT_SIZE_MAX} px)`, ignoreFocusOut: true,
+  });
   if (size === undefined) return undefined;
   const folder = vscode.Uri.file(path.dirname(uri.fsPath));
   const textFiles = (await vscode.workspace.fs.readDirectory(folder))
