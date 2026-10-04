@@ -63,18 +63,12 @@ uint16_t edds_u16be(const uint8_t *at) {
 
 /** Reads a 32-bit number stored low byte first. */
 uint32_t edds_u32le(const uint8_t *at) {
-    return (uint32_t)at[0] |
-        ((uint32_t)at[1] << 8) |
-        ((uint32_t)at[2] << 16) |
-        ((uint32_t)at[3] << 24);
+    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) | ((uint32_t)at[3] << 24);
 }
 
 /** Reads a 32-bit number stored high byte first. */
 uint32_t edds_u32be(const uint8_t *at) {
-    return ((uint32_t)at[0] << 24) |
-        ((uint32_t)at[1] << 16) |
-        ((uint32_t)at[2] << 8) |
-        at[3];
+    return ((uint32_t)at[0] << 24) | ((uint32_t)at[1] << 16) | ((uint32_t)at[2] << 8) | at[3];
 }
 
 /** Writes a 32-bit number low byte first. */
@@ -101,8 +95,7 @@ int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error)
         (length = ftell(input)) < 0 ||
         fseek(input, 0, SEEK_SET) != 0 ||
         (uint64_t)length > EDDS_MAX_FILE_BYTES) {
-        edds_fail(error, "source-size-limit",
-            "The source image could not be measured within the supported limit.");
+        edds_fail(error, "source-size-limit", "The source image could not be measured within the supported limit.");
         return 0;
     }
 
@@ -110,8 +103,7 @@ int edds_read_all(FILE *input, uint8_t **bytes, size_t *size, edds_error *error)
     allocation = edds_alloc(length == 0 ? 1u : (size_t)length);
 
     if (allocation == NULL) {
-        edds_fail(error, "allocation-failed",
-            "Memory for the source image could not be allocated.");
+        edds_fail(error, "allocation-failed", "Memory for the source image could not be allocated.");
         return 0;
     }
 
@@ -278,8 +270,7 @@ static int fixed_trees(huffman *literal, huffman *distance) {
 
     memset(distance_lengths, 5, sizeof distance_lengths);
 
-    return build_huffman(literal, literal_lengths, 288) &&
-        build_huffman(distance, distance_lengths, 32);
+    return build_huffman(literal, literal_lengths, 288) && build_huffman(distance, distance_lengths, 32);
 }
 
 /**
@@ -472,9 +463,7 @@ static int inflate_codes(
 
         length = length_base[symbol] + extra;
 
-        if (!decode_symbol(reader, distance, &symbol) ||
-            symbol >= 30u ||
-            !take_bits(reader, distance_extra[symbol], &extra)) {
+        if (!decode_symbol(reader, distance, &symbol) || symbol >= 30u || !take_bits(reader, distance_extra[symbol], &extra)) {
             return 0;
         }
 
@@ -496,8 +485,7 @@ static int inflate_codes(
  * one marked last, and the Adler-32 checksum of the output in the last four bytes. Returns 1 only
  * when all of it holds.
  */
-int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output,
-    size_t output_size) {
+int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
     bit_reader reader;
     size_t     output_at = 0;
     int        final     = 0;
@@ -564,12 +552,9 @@ int edds_inflate_zlib(const uint8_t *input, size_t input_size, uint8_t *output,
             }
         } else if (type == 1 || type == 2) {
             /* Types 1 and 2 are compressed: with the fixed codes, or with codes of their own. */
-            const int built = type == 1
-                ? fixed_trees(&literal, &distance)
-                : dynamic_trees(&reader, &literal, &distance);
+            const int built = type == 1 ? fixed_trees(&literal, &distance) : dynamic_trees(&reader, &literal, &distance);
 
-            if (!built ||
-                !inflate_codes(&reader, &literal, &distance, output, output_size, &output_at)) {
+            if (!built || !inflate_codes(&reader, &literal, &distance, output, output_size, &output_at)) {
                 return 0;
             }
         } else {

@@ -47,8 +47,7 @@ static int color_noise_matches_the_observed_mip_function(void) {
     /* Converted with the default profile, except for the ColorNoise mip function. */
     edds_default_profile(&profile);
     profile.mipmap_function = EDDS_MIPMAP_COLOR_NOISE;
-    CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-              NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
 
     /* The output holds two levels, 2x2 and 1x1, and level 1 decodes to the expected RGBA. */
     CHECK(fseek(output, 0, SEEK_SET) == 0);
@@ -87,9 +86,8 @@ static int untiled_kaiser_clamps_edges(void) {
 
             p[0] = (uint8_t)((x * 67 + y * 13) % 256);
             p[1] = (uint8_t)((y * 79 + x * 19) % 256);
-            p[2] = (uint8_t)(x == 0 ? 255
-                    : x == 7        ? 0
-                                    : (x * 37 + y * 11) % 256);
+            p[2] = (uint8_t)(x == 0 ? 255 : x == 7 ? 0
+                                                   : (x * 37 + y * 11) % 256);
             p[3] = (uint8_t)((x * 47 + y * 59) % 256);
         }
     }
@@ -118,8 +116,7 @@ static int untiled_kaiser_clamps_edges(void) {
     edds_default_profile(&profile);
     profile.tiled_texture = 0;
     profile.mipmap_filter = EDDS_FILTER_KAISER;
-    CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile,
-              NULL, NULL, NULL, NULL, &error) == EDDS_OK);
+    CHECK(edds_convert(source, EDDS_SOURCE_TGA, output, &profile, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
 
     /* Level 1 decodes to exactly the expected 4x4 level, each RGBA pixel against its BGRA bytes. */
     CHECK(fseek(output, 0, SEEK_SET) == 0);

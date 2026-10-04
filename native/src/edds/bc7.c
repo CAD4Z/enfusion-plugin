@@ -278,9 +278,7 @@ static uint8_t subset_of(const mode_layout *layout, uint32_t partition, unsigned
         return 0;
     }
 
-    return layout->subsets == 2
-        ? partitions_two[partition][pixel]
-        : partitions_three[partition][pixel];
+    return layout->subsets == 2 ? partitions_two[partition][pixel] : partitions_three[partition][pixel];
 }
 
 /**
@@ -297,8 +295,7 @@ static int is_anchor(const mode_layout *layout, uint32_t partition, unsigned pix
     }
 
     if (layout->subsets == 3) {
-        return pixel == anchor_second_of_three[partition] ||
-            pixel == anchor_third_of_three[partition];
+        return pixel == anchor_second_of_three[partition] || pixel == anchor_third_of_three[partition];
     }
 
     return 0;
@@ -362,9 +359,7 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
     }
 
     for (unsigned endpoint = 0; endpoint < endpoint_count; ++endpoint) {
-        raw[endpoint][3] = layout->alpha_bits == 0
-            ? 0u
-            : take_bits(&cursor, layout->alpha_bits);
+        raw[endpoint][3] = layout->alpha_bits == 0 ? 0u : take_bits(&cursor, layout->alpha_bits);
     }
 
     /* The P-bits: one per endpoint, or one per subset that both its endpoints share. */
@@ -385,11 +380,10 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
      * The endpoints widened to 8 bits a channel. A value is one bit more precise when the mode has
      * P-bits, which are appended below it; a mode without alpha has opaque endpoints.
      */
-    colour_precision = (unsigned)layout->colour_bits +
-        (layout->endpoint_p_bits != 0 || layout->shared_p_bits != 0 ? 1u : 0u);
-    alpha_precision = layout->alpha_bits == 0
-        ? 0u
-        : (unsigned)layout->alpha_bits +
+    colour_precision = (unsigned)layout->colour_bits + (layout->endpoint_p_bits != 0 || layout->shared_p_bits != 0 ? 1u : 0u);
+    alpha_precision  = layout->alpha_bits == 0
+         ? 0u
+         : (unsigned)layout->alpha_bits +
             (layout->endpoint_p_bits != 0 || layout->shared_p_bits != 0 ? 1u : 0u);
 
     for (unsigned endpoint = 0; endpoint < endpoint_count; ++endpoint) {
@@ -418,8 +412,7 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
 
     /* The indices, pixel by pixel; an anchor's is one bit shorter. */
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
-        const unsigned bits = (unsigned)layout->index_bits -
-            (is_anchor(layout, partition, pixel) ? 1u : 0u);
+        const unsigned bits = (unsigned)layout->index_bits - (is_anchor(layout, partition, pixel) ? 1u : 0u);
 
         indices[pixel] = (uint8_t)take_bits(&cursor, bits);
     }
@@ -447,9 +440,7 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
         const uint8_t *high   = endpoints[subset * 2u + 1u];
 
         /* The weights of the colour index, by its bits. */
-        const uint8_t *colour_weights = layout->index_bits == 2
-            ? weights_two
-            : (layout->index_bits == 3 ? weights_three : weights_four);
+        const uint8_t *colour_weights = layout->index_bits == 2 ? weights_two : (layout->index_bits == 3 ? weights_three : weights_four);
 
         /* The weights of the alpha index: the colour's, unless the mode has a second set. */
         const uint8_t *alpha_weights = layout->index_bits_two == 0
@@ -475,9 +466,7 @@ void edds_bc7_decode_block(const uint8_t block[16], uint8_t rgba[64]) {
             out[channel] = interpolate(low[channel], high[channel], colour_weights[colour_index]);
         }
 
-        out[3] = layout->alpha_bits == 0
-            ? 255u
-            : interpolate(low[3], high[3], alpha_weights[alpha_index]);
+        out[3] = layout->alpha_bits == 0 ? 255u : interpolate(low[3], high[3], alpha_weights[alpha_index]);
 
         if (rotation == 1) {
             const uint8_t kept = out[3];
@@ -528,10 +517,7 @@ static uint8_t quantize_with_p(int value, unsigned p) {
 }
 
 /** The 16 RGBA colours of mode 6: `low` and `high` mixed by the weight of each 4-bit index. */
-static void mode_six_palette(
-    const uint8_t low[4],
-    const uint8_t high[4],
-    uint8_t       palette[16][4]) {
+static void mode_six_palette(const uint8_t low[4], const uint8_t high[4], uint8_t palette[16][4]) {
     for (unsigned entry = 0; entry < 16; ++entry) {
         for (unsigned channel = 0; channel < 4; ++channel) {
             palette[entry][channel] = interpolate(low[channel], high[channel], weights_four[entry]);
@@ -540,10 +526,7 @@ static void mode_six_palette(
 }
 
 /** Each pixel's nearest palette entry, into `indices`; returns the total squared error. */
-static uint64_t assign_indices(
-    const uint8_t pixels[16][4],
-    const uint8_t palette[16][4],
-    uint8_t       indices[16]) {
+static uint64_t assign_indices(const uint8_t pixels[16][4], const uint8_t palette[16][4], uint8_t indices[16]) {
     uint64_t total = 0;
 
     for (unsigned pixel = 0; pixel < 16; ++pixel) {
@@ -579,11 +562,7 @@ static uint64_t assign_indices(
  * `low` and `high` are replaced, not yet held to 0..255; when the indices do not pin them down,
  * they stay as they are.
  */
-static void refit_endpoints(
-    const uint8_t pixels[16][4],
-    const uint8_t indices[16],
-    int           low[4],
-    int           high[4]) {
+static void refit_endpoints(const uint8_t pixels[16][4], const uint8_t indices[16], int low[4], int high[4]) {
     double a = 0;
     double b = 0;
     double c = 0;
@@ -759,8 +738,7 @@ static void fit_subset(
                     quantized[0][channel] = quantize_at(low[channel], first, layout->bits);
                     quantized[1][channel] = quantize_at(high[channel], second, layout->bits);
                     endpoints[0][channel] = endpoint_of(quantized[0][channel], first, layout->bits);
-                    endpoints[1][channel] = endpoint_of(quantized[1][channel], second,
-                        layout->bits);
+                    endpoints[1][channel] = endpoint_of(quantized[1][channel], second, layout->bits);
                 }
 
                 /* Each pixel of the subset takes the index whose colour comes closest to it. */
@@ -858,10 +836,7 @@ static void fit_subset(
  * the partitions are ranked by this first and only the best few are fitted. The lower the score,
  * the better the split.
  */
-static uint64_t partition_score(
-    const uint8_t pixels[16][4],
-    const uint8_t membership[16],
-    unsigned      channels) {
+static uint64_t partition_score(const uint8_t pixels[16][4], const uint8_t membership[16], unsigned channels) {
     uint32_t sums[2][4]    = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
     uint32_t squares[2][4] = { { 0, 0, 0, 0 }, { 0, 0, 0, 0 } };
     uint32_t counts[2]     = { 0, 0 };
@@ -888,8 +863,7 @@ static uint64_t partition_score(
         }
 
         for (unsigned channel = 0; channel < channels; ++channel) {
-            total += squares[subset][channel] -
-                (uint64_t)sums[subset][channel] * sums[subset][channel] / counts[subset];
+            total += squares[subset][channel] - (uint64_t)sums[subset][channel] * sums[subset][channel] / counts[subset];
         }
     }
 
@@ -927,8 +901,7 @@ static void write_two_subset(
 
             for (unsigned pixel = 0; pixel < 16; ++pixel) {
                 if (membership[pixel] == subset) {
-                    fits[subset].indices[pixel] =
-                        (uint8_t)(mirror - fits[subset].indices[pixel]);
+                    fits[subset].indices[pixel] = (uint8_t)(mirror - fits[subset].indices[pixel]);
                 }
             }
         }
@@ -1152,8 +1125,7 @@ void edds_bc7_encode_block(const uint8_t bgra[64], unsigned refits, uint8_t bloc
             opaque = pixels[pixel][3] == 255u;
         }
 
-        if (better_two_subset_block(pixels, opaque ? &layout_mode_one : &layout_mode_seven,
-                refits, &contested, block)) {
+        if (better_two_subset_block(pixels, opaque ? &layout_mode_one : &layout_mode_seven, refits, &contested, block)) {
             return;
         }
     }

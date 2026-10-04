@@ -43,8 +43,7 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
     /* Byte 1 is the colour-map type and byte 2 the image type. */
     if (file[1] != 0 || file[2] != 2) {
         edds_free(file);
-        edds_fail(error, "unsupported-tga-subtype",
-            "Only TGA color-map type 0 and uncompressed true-color image type 2 are supported.");
+        edds_fail(error, "unsupported-tga-subtype", "Only TGA color-map type 0 and uncompressed true-color image type 2 are supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -53,16 +52,14 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
 
     if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
         edds_free(file);
-        edds_fail(error, "tga-dimension-limit", "TGA dimensions must be between 1 and %u.",
-            EDDS_MAX_DIMENSION);
+        edds_fail(error, "tga-dimension-limit", "TGA dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
         return EDDS_INVALID_INPUT;
     }
 
     /* Byte 16 is the bits per pixel. */
     if (file[16] != 24 && file[16] != 32) {
         edds_free(file);
-        edds_fail(error, "unsupported-tga-bit-depth",
-            "Only 24-bit and 32-bit true-color TGA inputs are supported.");
+        edds_fail(error, "unsupported-tga-bit-depth", "Only 24-bit and 32-bit true-color TGA inputs are supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -72,12 +69,9 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
      */
     attributes = file[17] & 0x0fu;
 
-    if ((file[17] & 0xc0u) != 0 ||
-        (file[16] == 24 && attributes != 0) ||
-        (file[16] == 32 && attributes != 0 && attributes != 8)) {
+    if ((file[17] & 0xc0u) != 0 || (file[16] == 24 && attributes != 0) || (file[16] == 32 && attributes != 0 && attributes != 8)) {
         edds_free(file);
-        edds_fail(error, "unsupported-tga-descriptor",
-            "The TGA descriptor must be non-interleaved with zero or eight alpha bits.");
+        edds_fail(error, "unsupported-tga-descriptor", "The TGA descriptor must be non-interleaved with zero or eight alpha bits.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -86,12 +80,9 @@ edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error 
     data_at    = 18u + file[0];
     data_bytes = (size_t)width * height * channels;
 
-    if (data_at > size ||
-        data_bytes > size - data_at ||
-        (uint64_t)width * height * 4u > EDDS_MAX_PREVIEW_BYTES) {
+    if (data_at > size || data_bytes > size - data_at || (uint64_t)width * height * 4u > EDDS_MAX_PREVIEW_BYTES) {
         edds_free(file);
-        edds_fail(error, "truncated-tga-pixels",
-            "The TGA pixel array is truncated or exceeds the decoded-image limit.");
+        edds_fail(error, "truncated-tga-pixels", "The TGA pixel array is truncated or exceeds the decoded-image limit.");
         return EDDS_INVALID_INPUT;
     }
 

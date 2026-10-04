@@ -123,9 +123,7 @@ static edds_pixel_format legacy_format(const uint8_t *header, int *declares_alph
         return EDDS_PIXEL_BGRA8;
     }
 
-    return (flags & DDPF_ALPHAPIXELS) == 0 && edds_u32le(header + 104) == 0
-        ? EDDS_PIXEL_BGRX8
-        : EDDS_PIXEL_UNKNOWN;
+    return (flags & DDPF_ALPHAPIXELS) == 0 && edds_u32le(header + 104) == 0 ? EDDS_PIXEL_BGRX8 : EDDS_PIXEL_UNKNOWN;
 }
 
 /**
@@ -199,27 +197,19 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
     }
 
     /* The "DDS " signature, then the sizes the header records: 124 at byte 4 and 32 at byte 76. */
-    if (memcmp(bytes, "DDS ", 4) != 0 ||
-        edds_u32le(bytes + 4) != 124u ||
-        edds_u32le(bytes + 76) != 32u) {
-        edds_fail(error, "invalid-dds-header",
-            "The DDS source does not have the required header sizes.");
+    if (memcmp(bytes, "DDS ", 4) != 0 || edds_u32le(bytes + 4) != 124u || edds_u32le(bytes + 76) != 32u) {
+        edds_fail(error, "invalid-dds-header", "The DDS source does not have the required header sizes.");
         goto invalid;
     }
 
     if (memcmp(bytes + 36, "ENF1", 4) == 0) {
-        edds_fail(error, "unsupported-dds-container",
-            "An ENF1 EDDS is a runtime texture, not a standard DDS source.");
+        edds_fail(error, "unsupported-dds-container", "An ENF1 EDDS is a runtime texture, not a standard DDS source.");
         goto unsupported;
     }
 
     /* The reserved bytes, 32 to 75 and 116 to 127, must be zero. */
-    if (!all_zero(bytes + 32, 44) ||
-        edds_u32le(bytes + 116) != 0 ||
-        edds_u32le(bytes + 120) != 0 ||
-        edds_u32le(bytes + 124) != 0) {
-        edds_fail(error, "unsupported-dds-header",
-            "The DDS source uses reserved or legacy header fields outside the controlled layout.");
+    if (!all_zero(bytes + 32, 44) || edds_u32le(bytes + 116) != 0 || edds_u32le(bytes + 120) != 0 || edds_u32le(bytes + 124) != 0) {
+        edds_fail(error, "unsupported-dds-header", "The DDS source uses reserved or legacy header fields outside the controlled layout.");
         goto unsupported;
     }
 
@@ -230,8 +220,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
     caps      = edds_u32le(bytes + 108);
 
     if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
-        edds_fail(error, "dds-dimension-limit", "DDS dimensions must be between 1 and %u.",
-            EDDS_MAX_DIMENSION);
+        edds_fail(error, "dds-dimension-limit", "DDS dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
         goto invalid;
     }
 
@@ -251,8 +240,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         edds_u32le(bytes + 24) != 0 ||
         (caps & ~(DDSCAPS_TEXTURE | DDSCAPS_COMPLEX | DDSCAPS_MIPMAP)) != 0 ||
         edds_u32le(bytes + 112) != 0) {
-        edds_fail(error, "unsupported-dds-topology",
-            "Only one two-dimensional DDS texture surface is supported as input.");
+        edds_fail(error, "unsupported-dds-topology", "Only one two-dimensional DDS texture surface is supported as input.");
         goto unsupported;
     }
 
@@ -281,19 +269,16 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
      * The pixel format. A four-character code of DX10 means a DX10 header follows the header and
      * names the format by DXGI code; otherwise the header's pixel format flags describe it.
      */
-    if ((edds_u32le(bytes + 80) & DDPF_FOURCC) != 0 &&
-        memcmp(bytes + 84, "DX10", 4) == 0) {
+    if ((edds_u32le(bytes + 80) & DDPF_FOURCC) != 0 && memcmp(bytes + 84, "DX10", 4) == 0) {
         uint32_t dxgi;
 
         if (size < DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES) {
-            edds_fail(error, "truncated-dds-dx10-header",
-                "The DDS DX10 source header is truncated.");
+            edds_fail(error, "truncated-dds-dx10-header", "The DDS DX10 source header is truncated.");
             goto invalid;
         }
 
         if (edds_u32le(bytes + 80) != DDPF_FOURCC || !all_zero(bytes + 88, 20)) {
-            edds_fail(error, "unsupported-dds-format",
-                "The DDS DX10 pixel descriptor contains legacy fields.");
+            edds_fail(error, "unsupported-dds-format", "The DDS DX10 pixel descriptor contains legacy fields.");
             goto unsupported;
         }
 
@@ -304,8 +289,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
             edds_u32le(bytes + 136) != 0 ||
             edds_u32le(bytes + 140) != 1 ||
             edds_u32le(bytes + 144) != 0) {
-            edds_fail(error, "unsupported-dds-topology",
-                "DDS arrays, cubes, volumes, and non-2D resources are not supported as input.");
+            edds_fail(error, "unsupported-dds-topology", "DDS arrays, cubes, volumes, and non-2D resources are not supported as input.");
             goto unsupported;
         }
 
@@ -316,8 +300,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
     }
 
     if (format == EDDS_PIXEL_UNKNOWN) {
-        edds_fail(error, "unsupported-dds-format",
-            "The DDS pixel format is recognized as outside the controlled LDR input matrix.");
+        edds_fail(error, "unsupported-dds-format", "The DDS pixel format is recognized as outside the controlled LDR input matrix.");
         goto unsupported;
     }
 
@@ -330,15 +313,10 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         const uint32_t top_bytes      = edds_gpu_mip_bytes(format, width, height);
         const uint32_t block          = edds_gpu_block_bytes(format);
         const uint32_t required_flag  = block == 0 ? DDSD_PITCH : DDSD_LINEARSIZE;
-        const uint32_t expected_pitch = block == 0
-            ? width * edds_gpu_pixel_bytes(format)
-            : top_bytes;
+        const uint32_t expected_pitch = block == 0 ? width * edds_gpu_pixel_bytes(format) : top_bytes;
 
-        if (top_bytes == 0 ||
-            (flags & required_flag) == 0 ||
-            edds_u32le(bytes + 20) != expected_pitch) {
-            edds_fail(error, "unsupported-dds-pitch",
-                "The DDS source must use the tight pitch or top-level linear size of its format.");
+        if (top_bytes == 0 || (flags & required_flag) == 0 || edds_u32le(bytes + 20) != expected_pitch) {
+            edds_fail(error, "unsupported-dds-pitch", "The DDS source must use the tight pitch or top-level linear size of its format.");
             goto unsupported;
         }
     }
@@ -357,20 +335,15 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         const uint32_t    stored_bytes = edds_gpu_mip_bytes(format, mip_width, mip_height);
         const uint64_t    rgba_bytes   = (uint64_t)mip_width * mip_height * 4u;
 
-        if (stored_bytes == 0 ||
-            rgba_bytes > EDDS_MAX_PREVIEW_BYTES ||
-            payload_at > size ||
-            stored_bytes > size - payload_at) {
-            edds_fail(error, "truncated-dds-mip",
-                "DDS mip %u is truncated or exceeds the decoded-image limit.", level);
+        if (stored_bytes == 0 || rgba_bytes > EDDS_MAX_PREVIEW_BYTES || payload_at > size || stored_bytes > size - payload_at) {
+            edds_fail(error, "truncated-dds-mip", "DDS mip %u is truncated or exceeds the decoded-image limit.", level);
             goto decoded_invalid;
         }
 
         mip->rgba = edds_alloc((size_t)rgba_bytes);
 
         if (mip->rgba == NULL) {
-            edds_fail(error, "allocation-failed",
-                "Memory for DDS mip %u could not be allocated.", level);
+            edds_fail(error, "allocation-failed", "Memory for DDS mip %u could not be allocated.", level);
             goto decoded_internal;
         }
 
@@ -380,8 +353,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
         /* Counted before it is decoded, so that release_mips frees it if the decode fails. */
         image->supplied_mip_count = level + 1u;
 
-        if (!edds_gpu_decode(format, bytes + payload_at, stored_bytes,
-                mip_width, mip_height, mip->rgba)) {
+        if (!edds_gpu_decode(format, bytes + payload_at, stored_bytes, mip_width, mip_height, mip->rgba)) {
             edds_fail(error, "malformed-dds-mip", "DDS mip %u could not be decoded.", level);
             goto decoded_invalid;
         }
@@ -390,8 +362,7 @@ edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error 
     }
 
     if (payload_at != size) {
-        edds_fail(error, "trailing-dds-data",
-            "The DDS source has bytes after its complete mip chain.");
+        edds_fail(error, "trailing-dds-data", "The DDS source has bytes after its complete mip chain.");
         goto decoded_invalid;
     }
 

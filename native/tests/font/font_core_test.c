@@ -58,9 +58,7 @@ static char *contents(FILE *file) {
     char *text;
 
     /* The size: seek to the end, read the position, seek back to the start. */
-    if (fseek(file, 0, SEEK_END) != 0 ||
-        (size = ftell(file)) < 0 ||
-        fseek(file, 0, SEEK_SET) != 0) {
+    if (fseek(file, 0, SEEK_END) != 0 || (size = ftell(file)) < 0 || fseek(file, 0, SEEK_SET) != 0) {
         return NULL;
     }
 
@@ -201,9 +199,7 @@ static int a_recipe_without_characters_writes_none(void) {
     CHECK(output != NULL);
     CHECK(font_recipe_write(output, &recipe, &error) == EDDS_OK);
     written = contents(output);
-    CHECK(written != NULL &&
-        strstr(written, "Characters") == NULL &&
-        strstr(written, "FontSize 24\n") != NULL);
+    CHECK(written != NULL && strstr(written, "Characters") == NULL && strstr(written, "FontSize 24\n") != NULL);
 
     free(written);
     fclose(output);
@@ -297,10 +293,7 @@ static int a_character_file_is_its_characters_and_nothing_between_them(void) {
 
     CHECK(font_characters_parse(text, sizeof text, &characters, &error) == EDDS_OK);
     CHECK(characters.count == 4);
-    CHECK(characters.codes[0] == 'A' &&
-        characters.codes[1] == 'B' &&
-        characters.codes[2] == 0xA0u &&
-        characters.codes[3] == 0x416u);
+    CHECK(characters.codes[0] == 'A' && characters.codes[1] == 'B' && characters.codes[2] == 0xA0u && characters.codes[3] == 0x416u);
     font_characters_free(&characters);
 
     /* An overlong encoding of NUL is not a character. */
@@ -321,8 +314,7 @@ static int a_character_file_is_its_characters_and_nothing_between_them(void) {
  * built-in one), and expects it refused: the status and error code given, and neither an FNT nor
  * an atlas. Returns 1 when that is what happened.
  */
-static int refused(font_fixture_variant variant, uint32_t size, const font_characters *characters,
-    edds_status expected, const char *code) {
+static int refused(font_fixture_variant variant, uint32_t size, const font_characters *characters, edds_status expected, const char *code) {
     test_bytes   font = font_fixture(variant);
     font_request request;
     font_output  output;
@@ -340,8 +332,7 @@ static int refused(font_fixture_variant variant, uint32_t size, const font_chara
     fixture_free(font);
 
     if (status != expected || strcmp(error.code, code) != 0) {
-        fprintf(stderr, "expected %s, got %d %s: %s\n", code, (int)status, error.code,
-            error.message);
+        fprintf(stderr, "expected %s, got %d %s: %s\n", code, (int)status, error.code, error.message);
         return 0;
     }
 
@@ -367,10 +358,8 @@ static int fonts_the_engine_cannot_draw_are_refused_with_their_reason(void) {
     crowded.count = FONT_FIXTURE_CROWDED_COUNT;
 
     /* CFF outlines, a variable font, a size on either side of the range, too many cells. */
-    CHECK(refused(FONT_FIXTURE_CFF, 32, NULL, EDDS_UNSUPPORTED_FORMAT,
-        "unsupported-outline-format"));
-    CHECK(refused(FONT_FIXTURE_VARIABLE, 32, NULL, EDDS_UNSUPPORTED_FORMAT,
-        "variable-font-unsupported"));
+    CHECK(refused(FONT_FIXTURE_CFF, 32, NULL, EDDS_UNSUPPORTED_FORMAT, "unsupported-outline-format"));
+    CHECK(refused(FONT_FIXTURE_VARIABLE, 32, NULL, EDDS_UNSUPPORTED_FORMAT, "variable-font-unsupported"));
     CHECK(refused(FONT_FIXTURE_GPOS, 7, NULL, EDDS_UNSUPPORTED_FORMAT, "font-size-out-of-range"));
     CHECK(refused(FONT_FIXTURE_GPOS, 41, NULL, EDDS_UNSUPPORTED_FORMAT, "font-size-out-of-range"));
     CHECK(refused(FONT_FIXTURE_CROWDED, 40, &crowded, EDDS_UNSUPPORTED_FORMAT, "atlas-too-large"));
@@ -430,26 +419,20 @@ static int a_font_carries_what_it_has_and_names_what_it_lacks(void) {
     CHECK(output.glyph_count == count + 1u);
 
     /* The names of the source font. */
-    CHECK(strcmp(output.source.family, "Fixture Sans") == 0 &&
-        strcmp(output.source.style, "Regular") == 0);
+    CHECK(strcmp(output.source.family, "Fixture Sans") == 0 && strcmp(output.source.style, "Regular") == 0);
 
     /* The atlas: at least as wide as high, within the limit, a power of two each way, opaque. */
     CHECK(output.atlas_width >= output.atlas_height && output.atlas_width <= FONT_MAX_ATLAS);
-    CHECK((output.atlas_width & (output.atlas_width - 1u)) == 0 &&
-        (output.atlas_height & (output.atlas_height - 1u)) == 0);
+    CHECK((output.atlas_width & (output.atlas_width - 1u)) == 0 && (output.atlas_height & (output.atlas_height - 1u)) == 0);
 
     for (size_t at = 3; at < (size_t)output.atlas_width * output.atlas_height * 4u; at += 4u) {
         CHECK(output.atlas[at] == 255u);
     }
 
     /* The FNT, written to a file and inspected: its header, and the counts the output gave. */
-    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size &&
-        fseek(fnt, 0, SEEK_SET) == 0);
+    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size && fseek(fnt, 0, SEEK_SET) == 0);
     CHECK(font_inspect(fnt, &info, &error) == EDDS_OK);
-    CHECK(strcmp(info.name, "SDF_FixtureSans32") == 0 &&
-        info.size == 32 &&
-        info.type == 2 &&
-        info.r == 8);
+    CHECK(strcmp(info.name, "SDF_FixtureSans32") == 0 && info.size == 32 && info.type == 2 && info.r == 8);
     CHECK(info.glyph_count == output.glyph_count && info.pair_count == output.pair_count);
     CHECK((uint32_t)info.cell == output.cell && info.range_count == output.range_count);
 
@@ -487,8 +470,7 @@ static int a_font_without_a_cap_height_measures_its_h_even_when_the_set_leaves_h
     request.name       = "SDF_Fixture32";
 
     CHECK(font_generate(&request, &output, NULL, NULL, NULL, NULL, &error) == EDDS_OK);
-    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size &&
-        fseek(fnt, 0, SEEK_SET) == 0);
+    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size && fseek(fnt, 0, SEEK_SET) == 0);
     CHECK(font_inspect(fnt, &info, &error) == EDDS_OK);
 
     /*
@@ -537,8 +519,7 @@ static int an_fnt_whose_header_metrics_are_not_numbers_is_refused(void) {
 
     /* A overwritten, then the FNT written to a file and inspected. */
     memcpy(output.fnt + cap_height_at, not_a_number, sizeof not_a_number);
-    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size &&
-        fseek(fnt, 0, SEEK_SET) == 0);
+    CHECK(fwrite(output.fnt, 1, output.fnt_size, fnt) == output.fnt_size && fseek(fnt, 0, SEEK_SET) == 0);
     CHECK(font_inspect(fnt, &info, &error) == EDDS_INVALID_INPUT);
     CHECK(strcmp(error.code, "malformed-fnt") == 0);
 

@@ -74,8 +74,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
         const edds_source_capability     *capabilities = edds_source_capabilities(&formats);
         const edds_conversion_capability *encoders     = edds_conversions(&conversions);
-        const edds_conversion_capability *chosen =
-            &encoders[size == 0 ? 0u : (size_t)data[0] % conversions];
+        const edds_conversion_capability *chosen       = &encoders[size == 0 ? 0u : (size_t)data[0] % conversions];
 
         /* The first byte picks the conversion, the second its quality when it takes one. */
         if (chosen->supported) {
@@ -92,19 +91,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         profile.remove_mips = size > 2u ? data[2] % 15u : 0u;
 
         /* Payload selection reaches all channel mappings without fixing a format's magic bytes. */
-        profile.swizzling = size > 0u
-            ? (edds_swizzling)(data[size - 1u] % 11u)
-            : EDDS_SWIZZLE_NONE;
+        profile.swizzling = size > 0u ? (edds_swizzling)(data[size - 1u] % 11u) : EDDS_SWIZZLE_NONE;
 
         profile.generate_mips   = size > 3u ? (data[3] & 1u) != 0u : 1;
         profile.normalize       = size > 4u ? (data[4] & 1u) != 0u : 0;
-        profile.mipmap_function = size > 5u && (data[5] & 1u) != 0u
-            ? EDDS_MIPMAP_NORMALIZE
-            : EDDS_MIPMAP_FILTER;
+        profile.mipmap_function = size > 5u && (data[5] & 1u) != 0u ? EDDS_MIPMAP_NORMALIZE : EDDS_MIPMAP_FILTER;
 
-        profile.mipmap_filter = size > 6u && (data[6] & 1u) != 0u
-            ? EDDS_FILTER_KAISER
-            : EDDS_FILTER_BOX;
+        profile.mipmap_filter = size > 6u && (data[6] & 1u) != 0u ? EDDS_FILTER_KAISER : EDDS_FILTER_BOX;
 
         /* The owned DDS seed has an odd low flag bit and a complete three-level chain. */
         profile.contains_mips = size > 8u && (data[8] & 1u) != 0u;
@@ -122,8 +115,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         for (size_t at = 0; at < formats; ++at) {
             rewind(file);
             rewind(output);
-            (void)edds_convert(file, capabilities[at].format, output, &profile,
-                NULL, NULL, NULL, NULL, &error);
+            (void)edds_convert(file, capabilities[at].format, output, &profile, NULL, NULL, NULL, NULL, &error);
         }
     }
 
@@ -160,8 +152,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                     size_t consumed  = 0;
                     size_t line_size = 0;
 
-                    const edds_batch_line line =
-                        edds_batch_reader_push(reader, chunk, remaining, &consumed, &line_size);
+                    const edds_batch_line line = edds_batch_reader_push(reader, chunk, remaining, &consumed, &line_size);
 
                     if (consumed == 0u) {
                         break;

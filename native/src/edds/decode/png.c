@@ -70,8 +70,7 @@ static size_t idat_total_from(const uint8_t *file, size_t file_size, size_t at) 
  * Appends one IDAT chunk's data to the stream. Data that would not fit the capacity counted up
  * front is refused (0) rather than written past the end.
  */
-static int append_idat(uint8_t *idat, size_t capacity, size_t *size, const uint8_t *part,
-    size_t part_size) {
+static int append_idat(uint8_t *idat, size_t capacity, size_t *size, const uint8_t *part, size_t part_size) {
     if (part_size > capacity - *size) {
         return 0;
     }
@@ -153,8 +152,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         data   = file + at + 8u;
 
         if ((size_t)length > file_size - at - 12u) {
-            edds_fail(error, "truncated-png-chunk",
-                "A PNG chunk extends beyond the input boundary.");
+            edds_fail(error, "truncated-png-chunk", "A PNG chunk extends beyond the input boundary.");
             goto done;
         }
 
@@ -166,8 +164,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         if (memcmp(type, "IHDR", 4) == 0) {
             /* The header: the first chunk, exactly one, 13 bytes long. */
             if (saw_ihdr || at != 8u || length != 13u) {
-                edds_fail(error, "invalid-png-ihdr",
-                    "PNG must contain one 13-byte IHDR as its first chunk.");
+                edds_fail(error, "invalid-png-ihdr", "PNG must contain one 13-byte IHDR as its first chunk.");
                 goto done;
             }
 
@@ -175,12 +172,8 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             width    = edds_u32be(data);
             height   = edds_u32be(data + 4);
 
-            if (width == 0 ||
-                height == 0 ||
-                width > EDDS_MAX_DIMENSION ||
-                height > EDDS_MAX_DIMENSION) {
-                edds_fail(error, "png-dimension-limit", "PNG dimensions must be between 1 and %u.",
-                    EDDS_MAX_DIMENSION);
+            if (width == 0 || height == 0 || width > EDDS_MAX_DIMENSION || height > EDDS_MAX_DIMENSION) {
+                edds_fail(error, "png-dimension-limit", "PNG dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
                 goto done;
             }
 
@@ -188,13 +181,8 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
              * Bytes 8 to 12 are the bit depth, the colour type, and the compression, filter and
              * interlace methods: 8 bits, RGB (2) or RGBA (6), and method 0 for the other three.
              */
-            if (data[8] != 8 ||
-                (data[9] != 2 && data[9] != 6) ||
-                data[10] != 0 ||
-                data[11] != 0 ||
-                data[12] != 0) {
-                edds_fail(error, "unsupported-png-subtype",
-                    "Only non-interlaced 8-bit RGB and RGBA PNG inputs are supported.");
+            if (data[8] != 8 || (data[9] != 2 && data[9] != 6) || data[10] != 0 || data[11] != 0 || data[12] != 0) {
+                edds_fail(error, "unsupported-png-subtype", "Only non-interlaced 8-bit RGB and RGBA PNG inputs are supported.");
                 status = EDDS_UNSUPPORTED_FORMAT;
                 goto done;
             }
@@ -203,8 +191,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         } else if (memcmp(type, "IDAT", 4) == 0) {
             /* The image data: after IHDR, and every IDAT chunk right after the one before. */
             if (!saw_ihdr || ended_idat) {
-                edds_fail(error, "invalid-png-idat",
-                    "PNG IDAT chunks are missing, out of order, or exceed the input limit.");
+                edds_fail(error, "invalid-png-idat", "PNG IDAT chunks are missing, out of order, or exceed the input limit.");
                 goto done;
             }
 
@@ -213,16 +200,14 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
                 idat          = edds_alloc(idat_capacity == 0 ? 1u : idat_capacity);
 
                 if (idat == NULL) {
-                    edds_fail(error, "allocation-failed",
-                        "Memory for the PNG image data could not be allocated.");
+                    edds_fail(error, "allocation-failed", "Memory for the PNG image data could not be allocated.");
                     status = EDDS_INTERNAL_FAILURE;
                     goto done;
                 }
             }
 
             if (!append_idat(idat, idat_capacity, &idat_size, data, length)) {
-                edds_fail(error, "invalid-png-idat",
-                    "PNG IDAT chunks are missing, out of order, or exceed the input limit.");
+                edds_fail(error, "invalid-png-idat", "PNG IDAT chunks are missing, out of order, or exceed the input limit.");
                 goto done;
             }
 
@@ -235,17 +220,11 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
              * matches no 8-bit pixel. RGBA carries its own alpha and has no tRNS of its own.
              */
             if (!saw_ihdr || saw_idat) {
-                edds_fail(error, "invalid-png-chunk-order",
-                    "A PNG palette or transparency chunk follows the image data.");
+                edds_fail(error, "invalid-png-chunk-order", "A PNG palette or transparency chunk follows the image data.");
                 goto done;
             }
 
-            if (type[0] == 't' &&
-                channels == 3u &&
-                length == 6u &&
-                data[0] == 0u &&
-                data[2] == 0u &&
-                data[4] == 0u) {
+            if (type[0] == 't' && channels == 3u && length == 6u && data[0] == 0u && data[2] == 0u && data[4] == 0u) {
                 keyed  = 1;
                 key[0] = data[1];
                 key[1] = data[3];
@@ -269,8 +248,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             }
 
             if ((type[0] & 0x20u) == 0) {
-                edds_fail(error, "unsupported-png-critical-chunk",
-                    "The PNG contains an unsupported critical chunk.");
+                edds_fail(error, "unsupported-png-critical-chunk", "The PNG contains an unsupported critical chunk.");
                 status = EDDS_UNSUPPORTED_FORMAT;
                 goto done;
             }
@@ -288,10 +266,8 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
      * The buffers. An inflated scanline is its filter byte and width * channels bytes; every
      * product is checked to fit size_t, and the RGBA result to stay within the decoded-image limit.
      */
-    if ((uint64_t)width * channels > SIZE_MAX ||
-        (uint64_t)width * channels + 1u > SIZE_MAX / height) {
-        edds_fail(error, "png-size-overflow",
-            "The PNG decoded size overflows the supported address space.");
+    if ((uint64_t)width * channels > SIZE_MAX || (uint64_t)width * channels + 1u > SIZE_MAX / height) {
+        edds_fail(error, "png-size-overflow", "The PNG decoded size overflows the supported address space.");
         goto done;
     }
 
@@ -315,8 +291,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
 
     /* The stream must inflate to exactly the scanlines, no more and no less. */
     if (!edds_inflate_zlib(idat, idat_size, filtered, filtered_size)) {
-        edds_fail(error, "invalid-png-deflate",
-            "The PNG IDAT zlib stream is malformed or has the wrong decoded size.");
+        edds_fail(error, "invalid-png-deflate", "The PNG IDAT zlib stream is malformed or has the wrong decoded size.");
         goto done;
     }
 
@@ -332,8 +307,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
         const uint8_t *above   = y == 0 ? NULL : decoded - row_bytes;
 
         if (filter > 4u) {
-            edds_fail(error, "unsupported-png-filter",
-                "The PNG scanline uses an unknown filter type.");
+            edds_fail(error, "unsupported-png-filter", "The PNG scanline uses an unknown filter type.");
             goto done;
         }
 
@@ -370,10 +344,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
             if (channels == 4) {
                 rgba[output_at + 3u] = raw[source_at + 3u];
             } else {
-                const int transparent = keyed &&
-                    raw[source_at] == key[0] &&
-                    raw[source_at + 1u] == key[1] &&
-                    raw[source_at + 2u] == key[2];
+                const int transparent = keyed && raw[source_at] == key[0] && raw[source_at + 1u] == key[1] && raw[source_at + 2u] == key[2];
 
                 rgba[output_at + 3u] = transparent ? 0u : 255u;
             }

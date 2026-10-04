@@ -92,13 +92,7 @@ static size_t png_chunk(uint8_t *output, const char type[4], const uint8_t *data
  * marker and the pixel format. An empty `four_cc` (four zero bytes) gives 32-bit BGR masks, BGRA
  * when `alpha_mask` is set and BGRX when it is 0; any other `four_cc` names the format itself.
  */
-static void header(
-    uint8_t   *bytes,
-    uint32_t   width,
-    uint32_t   height,
-    uint32_t   mips,
-    const char four_cc[4],
-    uint32_t   alpha_mask) {
+static void header(uint8_t *bytes, uint32_t width, uint32_t height, uint32_t mips, const char four_cc[4], uint32_t alpha_mask) {
     /*
      * The magic, the size of the header after it (124), the flags (caps, height, width, pitch,
      * pixel format and mip count), the height, the width, the pitch of one row and the mip count.
@@ -558,8 +552,7 @@ test_bytes fixture_dds_dx10_r8_mips(void) {
     static const uint8_t middle[] = { 11, 22 };
     static const uint8_t last[]   = { 33 };
 
-    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u +
-        sizeof top + sizeof middle + sizeof last);
+    test_bytes fixture = allocated(DDS_HEADER_BYTES + 20u + sizeof top + sizeof middle + sizeof last);
     size_t     at      = DDS_HEADER_BYTES + 20u;
 
     if (fixture.data == NULL) {
@@ -1040,10 +1033,8 @@ size_t fixture_tiff_build(
         uint8_t *entry = output + 10u + at * 12u;
 
         /* The size of one value: a byte for types 1 and 2, two bytes for type 3, four otherwise. */
-        const uint32_t element = tags[at].type == 1u || tags[at].type == 2u
-            ? 1u
-            : tags[at].type == 3u ? 2u
-                                  : 4u;
+        const uint32_t element = tags[at].type == 1u || tags[at].type == 2u ? 1u : tags[at].type == 3u ? 2u
+                                                                                                       : 4u;
 
         const int inline_short = tags[at].count == 1u && element == 2u;
 
@@ -1288,8 +1279,7 @@ test_bytes fixture_tiff_rgb(void) {
         return fixture;
     }
 
-    fixture.size = fixture_tiff_build(fixture.data, fixture.size, 0, tags, 9, trailing,
-        sizeof trailing);
+    fixture.size = fixture_tiff_build(fixture.data, fixture.size, 0, tags, 9, trailing, sizeof trailing);
 
     if (fixture.size == 0) {
         fixture_free(fixture);

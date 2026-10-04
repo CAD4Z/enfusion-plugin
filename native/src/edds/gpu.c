@@ -153,11 +153,7 @@ static uint8_t mix(int low, int high, int low_parts, int high_parts, int total) 
  * beside them already carries the alpha and the endpoint order means nothing, so a DXT5 written
  * with `c0 <= c1` decodes to colours, not to holes. The colours go to `palette` as RGBA.
  */
-static void bc1_palette(
-    uint16_t first,
-    uint16_t second,
-    int      always_four_colours,
-    uint8_t  palette[4][4]) {
+static void bc1_palette(uint16_t first, uint16_t second, int always_four_colours, uint8_t palette[4][4]) {
     const int four_colours = always_four_colours || first > second;
     uint8_t   low[3];
     uint8_t   high[3];
@@ -190,10 +186,7 @@ static void bc1_palette(
 }
 
 /** Each pixel's nearest palette entry in RGB, into `indices`; returns the total squared error. */
-static uint32_t bc1_indices(
-    const uint8_t pixels[BLOCK_PIXELS][4],
-    const uint8_t palette[4][4],
-    uint8_t       indices[BLOCK_PIXELS]) {
+static uint32_t bc1_indices(const uint8_t pixels[BLOCK_PIXELS][4], const uint8_t palette[4][4], uint8_t indices[BLOCK_PIXELS]) {
     uint32_t total = 0;
 
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
@@ -282,10 +275,7 @@ static void bc1_refit(
  * pixel. The first fit spans the lowest and highest value of each channel; every refit moves the
  * endpoints by least squares, and the pass with the smallest error is written.
  */
-static void bc1_encode_block(
-    const uint8_t pixels[BLOCK_PIXELS][4],
-    unsigned      refits,
-    uint8_t       block[8]) {
+static void bc1_encode_block(const uint8_t pixels[BLOCK_PIXELS][4], unsigned refits, uint8_t block[8]) {
     /* The endpoints the next pass starts from, one value per channel. */
     int low[3];
     int high[3];
@@ -384,10 +374,7 @@ static void bc1_encode_block(
  * Decodes one BC1 block into 16 RGBA pixels. `always_four_colours` is set for the colour half of a
  * DXT5 block (see bc1_palette).
  */
-static void bc1_decode_block(
-    const uint8_t block[8],
-    int           always_four_colours,
-    uint8_t       rgba[BLOCK_PIXELS * 4]) {
+static void bc1_decode_block(const uint8_t block[8], int always_four_colours, uint8_t rgba[BLOCK_PIXELS * 4]) {
     uint8_t palette[4][4];
 
     bc1_palette(u16le(block), u16le(block + 2), always_four_colours, palette);
@@ -425,10 +412,7 @@ static void bc4_palette(uint8_t first, uint8_t second, uint8_t palette[8]) {
 }
 
 /** Each value's nearest palette entry, into `indices`; returns the total squared error. */
-static uint32_t bc4_indices(
-    const uint8_t values[BLOCK_PIXELS],
-    const uint8_t palette[8],
-    uint8_t       indices[BLOCK_PIXELS]) {
+static uint32_t bc4_indices(const uint8_t values[BLOCK_PIXELS], const uint8_t palette[8], uint8_t indices[BLOCK_PIXELS]) {
     uint32_t total = 0;
 
     for (unsigned pixel = 0; pixel < BLOCK_PIXELS; ++pixel) {
@@ -456,8 +440,7 @@ static uint32_t bc4_indices(
  * Writes one BC4 block: the two endpoint bytes, then the sixteen 3-bit indices packed into six
  * bytes, the first pixel in the lowest bits.
  */
-static void bc4_write(uint8_t first, uint8_t second, const uint8_t indices[BLOCK_PIXELS],
-    uint8_t block[8]) {
+static void bc4_write(uint8_t first, uint8_t second, const uint8_t indices[BLOCK_PIXELS], uint8_t block[8]) {
     uint64_t packed = 0;
 
     block[0] = first;
@@ -478,10 +461,7 @@ static void bc4_write(uint8_t first, uint8_t second, const uint8_t indices[BLOCK
  * when quality pays for the second search. A block that really does hold both extremes plus mid
  * tones is where the two differ.
  */
-static void bc4_encode_block(
-    const uint8_t values[BLOCK_PIXELS],
-    unsigned      refits,
-    uint8_t       block[8]) {
+static void bc4_encode_block(const uint8_t values[BLOCK_PIXELS], unsigned refits, uint8_t block[8]) {
     /* The palette, and the indices of the fit being tried and of the best one. */
     uint8_t palette[8];
     uint8_t indices[BLOCK_PIXELS];
@@ -741,8 +721,7 @@ static void scatter_block(
                 break;
             }
 
-            memcpy(rgba + (((size_t)(top + row) * width) + left + column) * 4u,
-                decoded + (row * 4u + column) * 4u, 4);
+            memcpy(rgba + (((size_t)(top + row) * width) + left + column) * 4u, decoded + (row * 4u + column) * 4u, 4);
         }
     }
 }
@@ -782,8 +761,7 @@ int edds_gpu_decode(
                 rgba[pixel * 4u]      = stored[pixel * 4u + 2u];
                 rgba[pixel * 4u + 1u] = stored[pixel * 4u + 1u];
                 rgba[pixel * 4u + 2u] = stored[pixel * 4u];
-                rgba[pixel * 4u + 3u] =
-                    format == EDDS_PIXEL_BGRX8 ? 255u : stored[pixel * 4u + 3u];
+                rgba[pixel * 4u + 3u] = format == EDDS_PIXEL_BGRX8 ? 255u : stored[pixel * 4u + 3u];
             }
         }
 

@@ -100,22 +100,16 @@ static uint32_t tiff_entry_count(const tiff_reader *reader, const uint8_t *entry
  * value goes to `*value`; 0 is returned when the entry's type is not one this reads, `index` is
  * past its count, or the values run past the end of the file.
  */
-static int tiff_value_of(
-    const tiff_reader *reader,
-    const uint8_t     *entry,
-    uint32_t           index,
-    uint32_t          *value) {
+static int tiff_value_of(const tiff_reader *reader, const uint8_t *entry, uint32_t index, uint32_t *value) {
     /*
      * The type at bytes 2 and 3 gives the size of one value: one byte for types 1 and 2, two for
      * type 3, four for type 4. Any other type is refused.
      */
-    const uint32_t type  = tiff_u16(reader, entry + 2);
-    const uint32_t count = tiff_entry_count(reader, entry);
-    const uint32_t element =
-        type == 1u || type == 2u ? 1u
-        : type == 3u             ? 2u
-        : type == 4u             ? 4u
-                                 : 0u;
+    const uint32_t type    = tiff_u16(reader, entry + 2);
+    const uint32_t count   = tiff_entry_count(reader, entry);
+    const uint32_t element = type == 1u || type == 2u ? 1u : type == 3u ? 2u
+        : type == 4u                                                    ? 4u
+                                                                        : 0u;
     const uint8_t *base;
     uint64_t       total;
 
@@ -151,11 +145,7 @@ static int tiff_value_of(
  * A tag that may be absent, in which case the baseline default stands in for it. Its first value,
  * or `fallback`, goes to `*value`; 0 is returned only when a present tag cannot be read.
  */
-static int tiff_scalar_or(
-    const tiff_reader *reader,
-    uint32_t           tag,
-    uint32_t           fallback,
-    uint32_t          *value) {
+static int tiff_scalar_or(const tiff_reader *reader, uint32_t tag, uint32_t fallback, uint32_t *value) {
     const uint8_t *entry = tiff_entry_of(reader, tag);
 
     if (entry == NULL) {
@@ -172,8 +162,7 @@ static int tiff_scalar_or(
  * when the output is filled exactly, 0 when a run is cut short by the input or would overflow
  * the output.
  */
-static int tiff_packbits(const uint8_t *input, size_t input_size, uint8_t *output,
-    size_t output_size) {
+static int tiff_packbits(const uint8_t *input, size_t input_size, uint8_t *output, size_t output_size) {
     size_t at      = 0;
     size_t written = 0;
 
@@ -288,8 +277,7 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
         for (uint32_t bit = 0; bit < width; ++bit) {
             const uint64_t position = bit_at + bit;
 
-            code = (code << 1) |
-                ((input[position / 8u] >> (7u - (uint32_t)(position % 8u))) & 1u);
+            code = (code << 1) | ((input[position / 8u] >> (7u - (uint32_t)(position % 8u))) & 1u);
         }
 
         bit_at += width;
@@ -331,13 +319,11 @@ static int tiff_lzw(const uint8_t *input, size_t input_size, uint8_t *output, si
              */
             uint32_t previous_length = 0;
 
-            if (!lzw_string(dictionary, previous, next, &previous_length) ||
-                previous_length + 1u >= LZW_CODES) {
+            if (!lzw_string(dictionary, previous, next, &previous_length) || previous_length + 1u >= LZW_CODES) {
                 break;
             }
 
-            memmove(dictionary->stack + LZW_CODES - previous_length - 1u,
-                dictionary->stack + LZW_CODES - previous_length, previous_length);
+            memmove(dictionary->stack + LZW_CODES - previous_length - 1u, dictionary->stack + LZW_CODES - previous_length, previous_length);
             dictionary->stack[LZW_CODES - 1u] = dictionary->stack[LZW_CODES - previous_length - 1u];
 
             length = previous_length + 1u;
@@ -434,10 +420,7 @@ typedef struct tiff_layout {
  * Reads the directory's tags into `layout`, refusing every shape outside the supported one.
  * Returns EDDS_OK, or the status of the refusal with `error` filled in.
  */
-static edds_status tiff_read_layout(
-    const tiff_reader *reader,
-    tiff_layout       *layout,
-    edds_error        *error) {
+static edds_status tiff_read_layout(const tiff_reader *reader, tiff_layout *layout, edds_error *error) {
     const uint8_t *bits_entry;
     const uint8_t *offsets;
     const uint8_t *counts;
@@ -454,8 +437,7 @@ static edds_status tiff_read_layout(
         !tiff_scalar_or(reader, TIFF_TAG_COMPRESSION, TIFF_COMPRESSION_NONE,
             &layout->compression) ||
         !tiff_scalar_or(reader, TIFF_TAG_PHOTOMETRIC, 0xffffffffu, &photometric)) {
-        edds_fail(error, "malformed-tiff-directory",
-            "A TIFF directory entry points outside the input.");
+        edds_fail(error, "malformed-tiff-directory", "A TIFF directory entry points outside the input.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -470,8 +452,7 @@ static edds_status tiff_read_layout(
         tiff_entry_of(reader, TIFF_TAG_TILE_LENGTH) != NULL ||
         tiff_entry_of(reader, TIFF_TAG_TILE_OFFSETS) != NULL ||
         tiff_entry_of(reader, TIFF_TAG_TILE_BYTE_COUNTS) != NULL) {
-        edds_fail(error, "unsupported-tiff-layout",
-            "Tiled TIFF inputs are not supported; strips are.");
+        edds_fail(error, "unsupported-tiff-layout", "Tiled TIFF inputs are not supported; strips are.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -480,8 +461,7 @@ static edds_status tiff_read_layout(
      * which is also what they read as when absent.
      */
     if (!tiff_scalar_or(reader, TIFF_TAG_PLANAR_CONFIGURATION, 1, &value) || value != 1u) {
-        edds_fail(error, "unsupported-tiff-layout",
-            "Only chunky TIFF planar configuration 1 is supported.");
+        edds_fail(error, "unsupported-tiff-layout", "Only chunky TIFF planar configuration 1 is supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -491,20 +471,17 @@ static edds_status tiff_read_layout(
     }
 
     if (!tiff_scalar_or(reader, TIFF_TAG_PREDICTOR, 1, &value) || value != 1u) {
-        edds_fail(error, "unsupported-tiff-predictor",
-            "A TIFF horizontal predictor is not supported; only predictor 1 is.");
+        edds_fail(error, "unsupported-tiff-predictor", "A TIFF horizontal predictor is not supported; only predictor 1 is.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
     if (!tiff_scalar_or(reader, TIFF_TAG_ORIENTATION, 1, &value) || value != 1u) {
-        edds_fail(error, "unsupported-tiff-orientation",
-            "Only the top-left TIFF orientation is supported; this file declares %u.", value);
+        edds_fail(error, "unsupported-tiff-orientation", "Only the top-left TIFF orientation is supported; this file declares %u.", value);
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
     if (layout->samples == 0u || layout->samples > 4u) {
-        edds_fail(error, "unsupported-tiff-channels",
-            "Only 1, 3 and 4 samples per pixel are supported, not %u.", layout->samples);
+        edds_fail(error, "unsupported-tiff-channels", "Only 1, 3 and 4 samples per pixel are supported, not %u.", layout->samples);
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -512,21 +489,18 @@ static edds_status tiff_read_layout(
     bits_entry = tiff_entry_of(reader, TIFF_TAG_BITS_PER_SAMPLE);
 
     if (bits_entry == NULL || tiff_entry_count(reader, bits_entry) != layout->samples) {
-        edds_fail(error, "malformed-tiff-directory",
-            "TIFF BitsPerSample is missing or does not describe every sample.");
+        edds_fail(error, "malformed-tiff-directory", "TIFF BitsPerSample is missing or does not describe every sample.");
         return EDDS_INVALID_INPUT;
     }
 
     for (uint32_t at = 0; at < layout->samples; ++at) {
         if (!tiff_value_of(reader, bits_entry, at, &value)) {
-            edds_fail(error, "malformed-tiff-directory",
-                "TIFF BitsPerSample points outside the input.");
+            edds_fail(error, "malformed-tiff-directory", "TIFF BitsPerSample points outside the input.");
             return EDDS_INVALID_INPUT;
         }
 
         if (value != 8u) {
-            edds_fail(error, "unsupported-tiff-bit-depth",
-                "Only 8 bits per sample are supported; this file declares %u.", value);
+            edds_fail(error, "unsupported-tiff-bit-depth", "Only 8 bits per sample are supported; this file declares %u.", value);
             return EDDS_UNSUPPORTED_FORMAT;
         }
     }
@@ -537,8 +511,7 @@ static edds_status tiff_read_layout(
 
         for (uint32_t at = 0; format != NULL && at < tiff_entry_count(reader, format); ++at) {
             if (!tiff_value_of(reader, format, at, &value) || value != 1u) {
-                edds_fail(error, "unsupported-tiff-sample-format",
-                    "Only unsigned integer TIFF samples are supported.");
+                edds_fail(error, "unsupported-tiff-sample-format", "Only unsigned integer TIFF samples are supported.");
                 return EDDS_UNSUPPORTED_FORMAT;
             }
         }
@@ -558,12 +531,8 @@ static edds_status tiff_read_layout(
     } else if (layout->samples == 4u && photometric == 2u) {
         const uint8_t *extra = tiff_entry_of(reader, TIFF_TAG_EXTRA_SAMPLES);
 
-        if (extra == NULL ||
-            tiff_entry_count(reader, extra) != 1u ||
-            !tiff_value_of(reader, extra, 0, &value) ||
-            value != 2u) {
-            edds_fail(error, "unsupported-tiff-alpha",
-                "A fourth TIFF sample is supported only as one unassociated alpha extra sample.");
+        if (extra == NULL || tiff_entry_count(reader, extra) != 1u || !tiff_value_of(reader, extra, 0, &value) || value != 2u) {
+            edds_fail(error, "unsupported-tiff-alpha", "A fourth TIFF sample is supported only as one unassociated alpha extra sample.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
 
@@ -592,8 +561,7 @@ static edds_status tiff_read_layout(
      * cut to it, which makes one strip of the whole image. The number of strips is the height
      * over the rows per strip, rounded up.
      */
-    if (!tiff_scalar_or(reader, TIFF_TAG_ROWS_PER_STRIP, 0xffffffffu, &layout->rows_per_strip) ||
-        layout->rows_per_strip == 0u) {
+    if (!tiff_scalar_or(reader, TIFF_TAG_ROWS_PER_STRIP, 0xffffffffu, &layout->rows_per_strip) || layout->rows_per_strip == 0u) {
         edds_fail(error, "malformed-tiff-directory", "TIFF RowsPerStrip is zero or unreadable.");
         return EDDS_INVALID_INPUT;
     }
@@ -610,8 +578,7 @@ static edds_status tiff_read_layout(
         counts == NULL ||
         tiff_entry_count(reader, offsets) != layout->strips ||
         tiff_entry_count(reader, counts) != layout->strips) {
-        edds_fail(error, "malformed-tiff-directory",
-            "TIFF StripOffsets and StripByteCounts must both describe every strip.");
+        edds_fail(error, "malformed-tiff-directory", "TIFF StripOffsets and StripByteCounts must both describe every strip.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -637,15 +604,13 @@ static edds_status tiff_read_strips(
         uint32_t rows = layout->rows_per_strip;
 
         /* Where the strip starts in the file, and how many bytes it is stored in. */
-        if (!tiff_value_of(reader, offsets, strip, &offset) ||
-            !tiff_value_of(reader, counts, strip, &stored)) {
+        if (!tiff_value_of(reader, offsets, strip, &offset) || !tiff_value_of(reader, counts, strip, &stored)) {
             edds_fail(error, "malformed-tiff-directory", "A TIFF strip descriptor is unreadable.");
             return EDDS_INVALID_INPUT;
         }
 
         if ((uint64_t)offset + stored > (uint64_t)reader->size) {
-            edds_fail(error, "truncated-tiff-strip",
-                "A TIFF strip extends beyond the input boundary.");
+            edds_fail(error, "truncated-tiff-strip", "A TIFF strip extends beyond the input boundary.");
             return EDDS_INVALID_INPUT;
         }
 
@@ -657,8 +622,7 @@ static edds_status tiff_read_strips(
         if (!tiff_decompress(layout->compression, reader->bytes + offset, stored,
                 samples + (size_t)strip * layout->rows_per_strip * row_bytes,
                 row_bytes * rows)) {
-            edds_fail(error, "malformed-tiff-strip",
-                "A TIFF strip does not decompress to the rows its directory declares.");
+            edds_fail(error, "malformed-tiff-strip", "A TIFF strip does not decompress to the rows its directory declares.");
             return EDDS_INVALID_INPUT;
         }
     }
@@ -708,8 +672,7 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     } else if (memcmp(file, "MM\0\x2a", 4) == 0) {
         reader.big_endian = 1;
     } else {
-        edds_fail(error, "invalid-tiff-signature",
-            "The TIFF byte order and magic number are not a classic TIFF header.");
+        edds_fail(error, "invalid-tiff-signature", "The TIFF byte order and magic number are not a classic TIFF header.");
         goto done;
     }
 
@@ -717,8 +680,7 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     directory = tiff_u32(&reader, file + 4);
 
     if (directory < 8u || (uint64_t)directory + 2u > (uint64_t)file_size) {
-        edds_fail(error, "malformed-tiff-directory",
-            "The TIFF directory offset is outside the input.");
+        edds_fail(error, "malformed-tiff-directory", "The TIFF directory offset is outside the input.");
         goto done;
     }
 
@@ -728,19 +690,15 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
      */
     reader.entry_count = tiff_u16(&reader, file + directory);
 
-    if (reader.entry_count == 0u ||
-        (uint64_t)directory + 2u + (uint64_t)reader.entry_count * 12u + 4u >
-            (uint64_t)file_size) {
-        edds_fail(error, "malformed-tiff-directory",
-            "The TIFF directory extends beyond the input.");
+    if (reader.entry_count == 0u || (uint64_t)directory + 2u + (uint64_t)reader.entry_count * 12u + 4u > (uint64_t)file_size) {
+        edds_fail(error, "malformed-tiff-directory", "The TIFF directory extends beyond the input.");
         goto done;
     }
 
     reader.entries = file + directory + 2u;
 
     if (tiff_u32(&reader, reader.entries + (size_t)reader.entry_count * 12u) != 0u) {
-        edds_fail(error, "unsupported-tiff-pages",
-            "Only a single-page TIFF is supported; this file carries more directories.");
+        edds_fail(error, "unsupported-tiff-pages", "Only a single-page TIFF is supported; this file carries more directories.");
         status = EDDS_UNSUPPORTED_FORMAT;
         goto done;
     }
@@ -756,8 +714,7 @@ edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error
     rgba    = edds_alloc((size_t)layout.width * layout.height * 4u);
 
     if (samples == NULL || rgba == NULL) {
-        edds_fail(error, "allocation-failed",
-            "Memory for the decoded TIFF could not be allocated.");
+        edds_fail(error, "allocation-failed", "Memory for the decoded TIFF could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
         goto done;
     }

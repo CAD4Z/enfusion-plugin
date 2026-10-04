@@ -140,8 +140,7 @@ static void jpeg_basis(double basis[8][8]) {
         const double weight = frequency == 0u ? 0.35355339059327376 : 0.5;
 
         for (uint32_t sample = 0; sample < 8u; ++sample) {
-            basis[frequency][sample] =
-                weight * jpeg_cosine((2u * sample + 1u) * frequency);
+            basis[frequency][sample] = weight * jpeg_cosine((2u * sample + 1u) * frequency);
         }
     }
 }
@@ -150,11 +149,7 @@ static void jpeg_basis(double basis[8][8]) {
  * Turns one block of dequantised coefficients back into 8x8 samples, written to `output` with
  * `stride` bytes from one row to the next: the inverse DCT along the rows, then down the columns.
  */
-static void jpeg_idct(
-    const int32_t block[JPEG_BLOCK_SAMPLES],
-    double        basis[8][8],
-    uint8_t      *output,
-    size_t        stride) {
+static void jpeg_idct(const int32_t block[JPEG_BLOCK_SAMPLES], double basis[8][8], uint8_t *output, size_t stride) {
     double rows[JPEG_BLOCK_SAMPLES];
 
     /* Along each row. */
@@ -370,9 +365,7 @@ static int jpeg_restart(jpeg_entropy *reader, uint32_t index) {
         ++marker;
     }
 
-    if (marker == at ||
-        marker >= reader->size ||
-        reader->bytes[marker] != (uint8_t)(0xd0u + (index % 8u))) {
+    if (marker == at || marker >= reader->size || reader->bytes[marker] != (uint8_t)(0xd0u + (index % 8u))) {
         return 0;
     }
 
@@ -403,9 +396,7 @@ static int jpeg_decode_block(
     uint32_t at = 1;
 
     /* The DC difference: a symbol giving its size in bits, then the bits. */
-    if (!jpeg_decode_symbol(reader, dc, &symbol) ||
-        symbol > 16u ||
-        !jpeg_receive_extend(reader, symbol, &difference)) {
+    if (!jpeg_decode_symbol(reader, dc, &symbol) || symbol > 16u || !jpeg_receive_extend(reader, symbol, &difference)) {
         return 0;
     }
 
@@ -516,11 +507,7 @@ static int jpeg_exif_orientation_supported(const uint8_t *segment, size_t size) 
  * Reads the frame header of an SOF0 segment into `frame`, refusing every layout outside the
  * supported one. Returns EDDS_OK, or the status of the refusal with `error` filled in.
  */
-static edds_status jpeg_read_frame(
-    const uint8_t *segment,
-    size_t         size,
-    jpeg_frame    *frame,
-    edds_error    *error) {
+static edds_status jpeg_read_frame(const uint8_t *segment, size_t size, jpeg_frame *frame, edds_error *error) {
     if (size < 6u) {
         edds_fail(error, "malformed-jpeg-frame", "The JPEG frame header is truncated.");
         return EDDS_INVALID_INPUT;
@@ -528,8 +515,7 @@ static edds_status jpeg_read_frame(
 
     /* Byte 0 is the sample precision, then come the height, the width and the component count. */
     if (segment[0] != 8u) {
-        edds_fail(error, "unsupported-jpeg-precision",
-            "Only 8-bit sample precision is supported; this frame declares %u.", segment[0]);
+        edds_fail(error, "unsupported-jpeg-precision", "Only 8-bit sample precision is supported; this frame declares %u.", segment[0]);
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -576,8 +562,7 @@ static edds_status jpeg_read_frame(
         component->plane         = NULL;
 
         if (component->quant_table >= JPEG_QUANT_TABLES) {
-            edds_fail(error, "malformed-jpeg-frame",
-                "A JPEG component names quantisation table %u.", component->quant_table);
+            edds_fail(error, "malformed-jpeg-frame", "A JPEG component names quantisation table %u.", component->quant_table);
             return EDDS_INVALID_INPUT;
         }
 
@@ -605,15 +590,13 @@ static edds_status jpeg_read_frame(
         frame->components[0].vertical > 2u ||
         frame->components[0].horizontal == 0u ||
         frame->components[0].vertical == 0u) {
-        edds_fail(error, "unsupported-jpeg-sampling",
-            "Only 1x1, 2x1, 1x2 and 2x2 luma sampling is supported.");
+        edds_fail(error, "unsupported-jpeg-sampling", "Only 1x1, 2x1, 1x2 and 2x2 luma sampling is supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
     for (uint32_t at = 1; at < frame->component_count; ++at) {
         if (frame->components[at].horizontal != 1u || frame->components[at].vertical != 1u) {
-            edds_fail(error, "unsupported-jpeg-sampling",
-                "Only 1x1 chroma sampling is supported alongside the luma component.");
+            edds_fail(error, "unsupported-jpeg-sampling", "Only 1x1 chroma sampling is supported alongside the luma component.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
     }
@@ -623,10 +606,8 @@ static edds_status jpeg_read_frame(
      * than the sampling rectangle. Rather than carry a second block walk for a layout nothing
      * writes, a greyscale frame is only accepted when the two orders agree: at 1x1 sampling.
      */
-    if (frame->component_count == 1u &&
-        (frame->components[0].horizontal != 1u || frame->components[0].vertical != 1u)) {
-        edds_fail(error, "unsupported-jpeg-sampling",
-            "A greyscale JPEG is supported only at 1x1 sampling.");
+    if (frame->component_count == 1u && (frame->components[0].horizontal != 1u || frame->components[0].vertical != 1u)) {
+        edds_fail(error, "unsupported-jpeg-sampling", "A greyscale JPEG is supported only at 1x1 sampling.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -634,10 +615,8 @@ static edds_status jpeg_read_frame(
      * How many MCUs the image takes across and down, rounded up. An MCU is 8 samples times the
      * largest sampling factor each way.
      */
-    frame->mcus_x = (frame->width + frame->horizontal_max * 8u - 1u) /
-        (frame->horizontal_max * 8u);
-    frame->mcus_y = (frame->height + frame->vertical_max * 8u - 1u) /
-        (frame->vertical_max * 8u);
+    frame->mcus_x = (frame->width + frame->horizontal_max * 8u - 1u) / (frame->horizontal_max * 8u);
+    frame->mcus_y = (frame->height + frame->vertical_max * 8u - 1u) / (frame->vertical_max * 8u);
 
     return EDDS_OK;
 }
@@ -653,8 +632,7 @@ static edds_status jpeg_allocate_planes(jpeg_frame *frame, edds_error *error) {
         const uint64_t  rows      = (uint64_t)frame->mcus_y * component->vertical * 8u;
 
         if (stride * rows > (uint64_t)EDDS_MAX_PREVIEW_BYTES) {
-            edds_fail(error, "jpeg-decoded-size-limit",
-                "The JPEG component planes exceed the decoded-image limit.");
+            edds_fail(error, "jpeg-decoded-size-limit", "The JPEG component planes exceed the decoded-image limit.");
             return EDDS_INVALID_INPUT;
         }
 
@@ -663,8 +641,7 @@ static edds_status jpeg_allocate_planes(jpeg_frame *frame, edds_error *error) {
         component->plane  = edds_calloc((size_t)(stride * rows), 1u);
 
         if (component->plane == NULL) {
-            edds_fail(error, "allocation-failed",
-                "Memory for the decoded JPEG could not be allocated.");
+            edds_fail(error, "allocation-failed", "Memory for the decoded JPEG could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
     }
@@ -757,8 +734,7 @@ typedef struct jpeg_state {
  * coefficient in the order the coefficients come in.
  * Returns EDDS_OK, or the status of the refusal with `error` filled in.
  */
-static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, size_t size,
-    edds_error *error) {
+static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, size_t size, edds_error *error) {
     size_t at = 0;
 
     while (at < size) {
@@ -768,14 +744,12 @@ static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, si
         ++at;
 
         if (precision != 0u) {
-            edds_fail(error, "unsupported-jpeg-quantisation",
-                "Only 8-bit quantisation tables are supported in a baseline frame.");
+            edds_fail(error, "unsupported-jpeg-quantisation", "Only 8-bit quantisation tables are supported in a baseline frame.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
 
         if (slot >= JPEG_QUANT_TABLES || size - at < JPEG_BLOCK_SAMPLES) {
-            edds_fail(error, "malformed-jpeg-quantisation",
-                "A JPEG quantisation table is truncated.");
+            edds_fail(error, "malformed-jpeg-quantisation", "A JPEG quantisation table is truncated.");
             return EDDS_INVALID_INPUT;
         }
 
@@ -796,8 +770,7 @@ static edds_status jpeg_read_quant(jpeg_state *state, const uint8_t *segment, si
  * four bits: 0 for DC, 1 for AC) and the slot (low four), 16 counts of codes by length, then the
  * values. Returns EDDS_OK, or the status of the refusal with `error` filled in.
  */
-static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, size_t size,
-    edds_error *error) {
+static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, size_t size, edds_error *error) {
     size_t at = 0;
 
     while (at < size) {
@@ -815,8 +788,7 @@ static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, 
         slot = (uint32_t)segment[at] & 0x0fu;
 
         if (kind > 1u || slot >= JPEG_HUFFMAN_TABLES) {
-            edds_fail(error, "unsupported-jpeg-huffman",
-                "A baseline frame may only define DC and AC Huffman tables 0 and 1.");
+            edds_fail(error, "unsupported-jpeg-huffman", "A baseline frame may only define DC and AC Huffman tables 0 and 1.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
 
@@ -830,8 +802,7 @@ static edds_status jpeg_read_huffman(jpeg_state *state, const uint8_t *segment, 
         }
 
         if (total > 256u || size - at - 17u < total) {
-            edds_fail(error, "malformed-jpeg-huffman",
-                "A JPEG Huffman table declares more codes than it carries.");
+            edds_fail(error, "malformed-jpeg-huffman", "A JPEG Huffman table declares more codes than it carries.");
             return EDDS_INVALID_INPUT;
         }
 
@@ -878,8 +849,7 @@ static edds_status jpeg_read_scan(
     declared = segment[0];
 
     if (declared != frame->component_count || size < 1u + (size_t)declared * 2u + 3u) {
-        edds_fail(error, "unsupported-jpeg-scan",
-            "Only a single interleaved scan over every frame component is supported.");
+        edds_fail(error, "unsupported-jpeg-scan", "Only a single interleaved scan over every frame component is supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -895,8 +865,7 @@ static edds_status jpeg_read_scan(
         for (uint32_t candidate = 0; candidate < frame->component_count; ++candidate) {
             if (frame->components[candidate].id == id) {
                 if ((named & (1u << candidate)) != 0u) {
-                    edds_fail(error, "malformed-jpeg-scan",
-                        "The JPEG scan names the same component twice.");
+                    edds_fail(error, "malformed-jpeg-scan", "The JPEG scan names the same component twice.");
                     return EDDS_INVALID_INPUT;
                 }
 
@@ -906,26 +875,22 @@ static edds_status jpeg_read_scan(
         }
 
         if (component == NULL) {
-            edds_fail(error, "malformed-jpeg-scan",
-                "The JPEG scan names a component the frame does not declare.");
+            edds_fail(error, "malformed-jpeg-scan", "The JPEG scan names a component the frame does not declare.");
             return EDDS_INVALID_INPUT;
         }
 
         component->dc_table = (uint32_t)tables >> 4;
         component->ac_table = (uint32_t)tables & 0x0fu;
 
-        if (component->dc_table >= JPEG_HUFFMAN_TABLES ||
-            component->ac_table >= JPEG_HUFFMAN_TABLES) {
-            edds_fail(error, "unsupported-jpeg-scan",
-                "A baseline scan may only select Huffman tables 0 and 1.");
+        if (component->dc_table >= JPEG_HUFFMAN_TABLES || component->ac_table >= JPEG_HUFFMAN_TABLES) {
+            edds_fail(error, "unsupported-jpeg-scan", "A baseline scan may only select Huffman tables 0 and 1.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
 
         if (!state->dc[component->dc_table].defined ||
             !state->ac[component->ac_table].defined ||
             !state->quant_defined[component->quant_table]) {
-            edds_fail(error, "malformed-jpeg-scan",
-                "The JPEG scan selects a table the file never defines.");
+            edds_fail(error, "malformed-jpeg-scan", "The JPEG scan selects a table the file never defines.");
             return EDDS_INVALID_INPUT;
         }
     }
@@ -933,8 +898,7 @@ static edds_status jpeg_read_scan(
     if (segment[1u + (size_t)declared * 2u] != 0u ||
         segment[2u + (size_t)declared * 2u] != 63u ||
         segment[3u + (size_t)declared * 2u] != 0u) {
-        edds_fail(error, "unsupported-jpeg-scan",
-            "Only a full baseline spectral selection with no successive approximation is supported.");
+        edds_fail(error, "unsupported-jpeg-scan", "Only a full baseline spectral selection with no successive approximation is supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -957,8 +921,7 @@ static edds_status jpeg_read_scan(
     for (uint64_t mcu = 0; mcu < total_mcus; ++mcu) {
         if (state->restart_interval != 0u && mcu != 0u && mcu % state->restart_interval == 0u) {
             if (!jpeg_restart(&reader, (uint32_t)((mcu / state->restart_interval - 1u) % 8u))) {
-                edds_fail(error, "malformed-jpeg-scan",
-                    "A JPEG restart marker is missing or out of sequence.");
+                edds_fail(error, "malformed-jpeg-scan", "A JPEG restart marker is missing or out of sequence.");
                 return EDDS_INVALID_INPUT;
             }
 
@@ -973,19 +936,15 @@ static edds_status jpeg_read_scan(
 
             for (uint32_t down = 0; down < component->vertical; ++down) {
                 for (uint32_t across = 0; across < component->horizontal; ++across) {
-                    const uint32_t block_x =
-                        (uint32_t)(mcu % frame->mcus_x) * component->horizontal + across;
-                    const uint32_t block_y =
-                        (uint32_t)(mcu / frame->mcus_x) * component->vertical + down;
-                    uint8_t *output = component->plane +
-                        (size_t)block_y * 8u * component->stride + (size_t)block_x * 8u;
+                    const uint32_t block_x = (uint32_t)(mcu % frame->mcus_x) * component->horizontal + across;
+                    const uint32_t block_y = (uint32_t)(mcu / frame->mcus_x) * component->vertical + down;
+                    uint8_t       *output  = component->plane + (size_t)block_y * 8u * component->stride + (size_t)block_x * 8u;
 
                     if (!jpeg_decode_block(&reader, component,
                             &state->dc[component->dc_table], &state->ac[component->ac_table],
                             state->quant[component->quant_table], basis, output,
                             component->stride)) {
-                        edds_fail(error, "truncated-jpeg-scan",
-                            "The JPEG entropy-coded data ends before the image does.");
+                        edds_fail(error, "truncated-jpeg-scan", "The JPEG entropy-coded data ends before the image does.");
                         return EDDS_INVALID_INPUT;
                     }
                 }
@@ -1031,8 +990,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
     state = edds_calloc(1, sizeof *state);
 
     if (state == NULL) {
-        edds_fail(error, "allocation-failed",
-            "Memory for the JPEG decoder could not be allocated.");
+        edds_fail(error, "allocation-failed", "Memory for the JPEG decoder could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
         goto done;
     }
@@ -1055,8 +1013,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         size_t         payload;
 
         if (file[at] != 0xffu) {
-            edds_fail(error, "malformed-jpeg-marker",
-                "A JPEG marker segment does not start with 0xFF.");
+            edds_fail(error, "malformed-jpeg-marker", "A JPEG marker segment does not start with 0xFF.");
             goto done;
         }
 
@@ -1083,8 +1040,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         }
 
         if (marker == 0x01u || (marker >= 0xd0u && marker <= 0xd7u)) {
-            edds_fail(error, "malformed-jpeg-marker",
-                "A standalone JPEG marker appears outside a scan.");
+            edds_fail(error, "malformed-jpeg-marker", "A standalone JPEG marker appears outside a scan.");
             goto done;
         }
 
@@ -1096,8 +1052,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
         length = edds_u16be(file + at);
 
         if (length < 2u || (size_t)length > file_size - at) {
-            edds_fail(error, "truncated-jpeg-marker",
-                "A JPEG marker segment extends beyond the input.");
+            edds_fail(error, "truncated-jpeg-marker", "A JPEG marker segment extends beyond the input.");
             goto done;
         }
 
@@ -1137,8 +1092,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
             }
         } else if (marker == 0xddu) {
             if (payload != 2u) {
-                edds_fail(error, "malformed-jpeg-restart",
-                    "The JPEG restart interval is malformed.");
+                edds_fail(error, "malformed-jpeg-restart", "The JPEG restart interval is malformed.");
                 status = EDDS_INVALID_INPUT;
                 goto done;
             }
@@ -1154,8 +1108,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
             }
 
             if (state->saw_scan) {
-                edds_fail(error, "unsupported-jpeg-scan",
-                    "Only a single-scan baseline JPEG is supported.");
+                edds_fail(error, "unsupported-jpeg-scan", "Only a single-scan baseline JPEG is supported.");
                 status = EDDS_UNSUPPORTED_FORMAT;
                 goto done;
             }
@@ -1164,9 +1117,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
              * Adobe's APP14 transform is the file saying what its three components really carry.
              * Anything but the YCbCr transform is a colour layout with no established treatment.
              */
-            if (state->frame.component_count == 3u &&
-                state->adobe_transform >= 0 &&
-                state->adobe_transform != 1) {
+            if (state->frame.component_count == 3u && state->adobe_transform >= 0 && state->adobe_transform != 1) {
                 edds_fail(error, "unsupported-jpeg-colour",
                     "Only YCbCr three-component JPEG data is supported; this file declares Adobe transform %d.",
                     state->adobe_transform);
@@ -1181,8 +1132,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
             }
 
             /* The scan's data follows its header; the markers go on where that data ends. */
-            status = jpeg_read_scan(state, segment, payload, file, file_size, at, &resume_at,
-                error);
+            status = jpeg_read_scan(state, segment, payload, file, file_size, at, &resume_at, error);
 
             if (status != EDDS_OK) {
                 goto done;
@@ -1193,8 +1143,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
             at = resume_at;
         } else if (marker == 0xe1u) {
             if (!jpeg_exif_orientation_supported(segment, payload)) {
-                edds_fail(error, "unsupported-jpeg-orientation",
-                    "The JPEG declares an EXIF orientation this converter would not apply.");
+                edds_fail(error, "unsupported-jpeg-orientation", "The JPEG declares an EXIF orientation this converter would not apply.");
                 status = EDDS_UNSUPPORTED_FORMAT;
                 goto done;
             }
@@ -1204,8 +1153,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
                 state->adobe_transform = segment[11];
             }
         } else if (marker == 0xccu) {
-            edds_fail(error, "unsupported-jpeg-frame",
-                "Arithmetic-coded JPEG is not supported; only Huffman baseline frames are.");
+            edds_fail(error, "unsupported-jpeg-frame", "Arithmetic-coded JPEG is not supported; only Huffman baseline frames are.");
             status = EDDS_UNSUPPORTED_FORMAT;
             goto done;
         } else if (marker >= 0xc1u && marker <= 0xcfu) {
@@ -1228,8 +1176,7 @@ edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error
     rgba   = edds_alloc((size_t)state->frame.width * state->frame.height * 4u);
 
     if (rgba == NULL) {
-        edds_fail(error, "allocation-failed",
-            "Memory for the decoded JPEG could not be allocated.");
+        edds_fail(error, "allocation-failed", "Memory for the decoded JPEG could not be allocated.");
         status = EDDS_INTERNAL_FAILURE;
         goto done;
     }

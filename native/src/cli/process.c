@@ -79,8 +79,7 @@ int injected(const char *stage) {
 edds_status injected_failure(edds_error *error, const char *stage) {
     memset(error, 0, sizeof *error);
     (void)snprintf(error->code, sizeof error->code, "injected-%s", stage);
-    (void)snprintf(error->message, sizeof error->message,
-        "A test fault was injected at transaction stage %s.", stage);
+    (void)snprintf(error->message, sizeof error->message, "A test fault was injected at transaction stage %s.", stage);
 
     return EDDS_INTERNAL_FAILURE;
 }
@@ -177,9 +176,7 @@ int report_failure(edds_status status, const edds_error *error) {
     /* An error without a code or a message is reported with a stand-in for each. */
     const char *category = edds_status_category(status);
     const char *code     = error != NULL && error->code[0] != '\0' ? error->code : "unspecified";
-    const char *message  = error != NULL && error->message[0] != '\0'
-         ? error->message
-         : "The EDDS operation failed.";
+    const char *message  = error != NULL && error->message[0] != '\0' ? error->message : "The EDDS operation failed.";
 
     (void)fprintf(stderr, "enfusion: %s: %s\n", category, message);
 
@@ -198,8 +195,7 @@ int report_failure(edds_status status, const edds_error *error) {
 char *utf8_of(const cli_char *value) {
 #ifdef _WIN32
     /* Measured first, terminator included, then converted; an invalid character fails both. */
-    const int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
-        NULL, 0, NULL, NULL);
+    const int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, NULL, 0, NULL, NULL);
     char     *result;
 
     if (needed <= 0) {
@@ -212,8 +208,7 @@ char *utf8_of(const cli_char *value) {
         return NULL;
     }
 
-    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
-            result, needed, NULL, NULL) != needed) {
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, result, needed, NULL, NULL) != needed) {
         free(result);
         return NULL;
     }

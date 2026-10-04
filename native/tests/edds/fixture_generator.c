@@ -76,8 +76,7 @@ int main(int argc, char **argv) {
     }
 
     if (argc != argc_without_sources && argc != argc_with_sources) {
-        fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF GPU_TGA GPU_FLAT_TGA DDS]\n",
-            stderr);
+        fputs("usage: edds-fixture COPY LZ4 DXT1 ODD_FOURCC OVERFLOW [PNG TGA JPG TIFF GPU_TGA GPU_FLAT_TGA DDS]\n", stderr);
         return 2;
     }
 

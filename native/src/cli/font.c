@@ -62,8 +62,7 @@ static void usage(void) {
 }
 
 /** Fills `error` with `code` and `message`, and returns `status`. */
-static edds_status refuse(edds_error *error, edds_status status, const char *code,
-    const char *message) {
+static edds_status refuse(edds_error *error, edds_status status, const char *code, const char *message) {
     memset(error, 0, sizeof *error);
     (void)snprintf(error->code, sizeof error->code, "%s", code);
     (void)snprintf(error->message, sizeof error->message, "%s", message);
@@ -262,10 +261,7 @@ static int read_file(const cli_char *path, uint64_t limit, uint8_t **data, size_
     }
 
     /* The size, from the end of the file; then back to its start. */
-    if (fseek(file, 0, SEEK_END) != 0 ||
-        (length = ftell(file)) < 0 ||
-        fseek(file, 0, SEEK_SET) != 0 ||
-        (uint64_t)length > limit) {
+    if (fseek(file, 0, SEEK_END) != 0 || (length = ftell(file)) < 0 || fseek(file, 0, SEEK_SET) != 0 || (uint64_t)length > limit) {
         (void)fclose(file);
         return -1;
     }
@@ -410,9 +406,7 @@ static segment *segments_of(const cli_char *path, size_t *count) {
          */
         if (at - start == 1u && path[start] == (cli_char)'.') {
             /* Here: nothing to record. */
-        } else if (at - start == 2u &&
-            path[start] == (cli_char)'.' &&
-            path[start + 1u] == (cli_char)'.') {
+        } else if (at - start == 2u && path[start] == (cli_char)'.' && path[start + 1u] == (cli_char)'.') {
             if (*count > 1u) {
                 --*count;
             }
@@ -487,9 +481,7 @@ static char *relative_to(const cli_char *folder, const cli_char *target) {
 #endif
 
     /* The leading names the two share, leaving at least the last name of the target. */
-    while (common < from_count &&
-        common + 1u < to_count &&
-        same_segment(from_segments[common], to_segments[common])) {
+    while (common < from_count && common + 1u < to_count && same_segment(from_segments[common], to_segments[common])) {
         ++common;
     }
 
@@ -632,8 +624,7 @@ static int guid_taken(const cli_char *folder, const char *guid) {
             edds_error ignored;
 
             if (meta != NULL) {
-                if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK &&
-                    same_guid(existing, guid)) {
+                if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK && same_guid(existing, guid)) {
                     taken = 1;
                 }
 
@@ -678,8 +669,7 @@ static int guid_taken(const cli_char *folder, const char *guid) {
             edds_error ignored;
 
             if (meta != NULL) {
-                if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK &&
-                    same_guid(existing, guid)) {
+                if (font_recipe_guid(meta, existing, &ignored) == EDDS_OK && same_guid(existing, guid)) {
                     taken = 1;
                 }
 
@@ -700,8 +690,7 @@ static int guid_taken(const cli_char *folder, const char *guid) {
  * A new GUID for a font in `folder`: sixteen random hexadecimal digits that no `.meta` beside it
  * claims yet, from up to 16 tries. Returns EDDS_OK with the GUID in `guid`, or the refusal.
  */
-static edds_status new_guid(const cli_char *folder, char guid[EDDS_METADATA_GUID_BYTES],
-    edds_error *error) {
+static edds_status new_guid(const cli_char *folder, char guid[EDDS_METADATA_GUID_BYTES], edds_error *error) {
     static const char digits[] = "0123456789ABCDEF";
 
     for (int attempt = 0; attempt < 16; ++attempt) {
@@ -724,8 +713,7 @@ static edds_status new_guid(const cli_char *folder, char guid[EDDS_METADATA_GUID
         }
     }
 
-    return refuse(error, EDDS_INTERNAL_FAILURE, "guid-generation-failed",
-        "No unused GUID could be generated.");
+    return refuse(error, EDDS_INTERNAL_FAILURE, "guid-generation-failed", "No unused GUID could be generated.");
 }
 
 /* --- Generate --------------------------------------------------------------------------------- */
@@ -762,14 +750,12 @@ static void free_paths(font_paths *paths) {
  * recipe, the source and character files relative to its folder. `--resource-name`, when given,
  * replaces the recipe's own name. Returns EDDS_OK, or the refusal.
  */
-static edds_status recipe_from_meta(const font_options *options, font_paths *paths,
-    font_recipe *recipe, edds_error *error) {
+static edds_status recipe_from_meta(const font_options *options, font_paths *paths, font_recipe *recipe, edds_error *error) {
     FILE       *input = open_input(options->meta);
     edds_status status;
 
     if (input == NULL) {
-        return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed",
-            "The font recipe could not be opened.");
+        return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed", "The font recipe could not be opened.");
     }
 
     status = font_recipe_parse(input, recipe, error);
@@ -796,8 +782,7 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
         free(name);
 
         if (!fits) {
-            return refuse(error, EDDS_INVALID_INPUT, "invalid-resource-name",
-                "The resource name does not fit a recipe.");
+            return refuse(error, EDDS_INVALID_INPUT, "invalid-resource-name", "The resource name does not fit a recipe.");
         }
     }
 
@@ -807,12 +792,8 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
     paths->atlas  = replace_tail(options->meta, 9u, ".edds");
     paths->folder = folder_of(options->meta);
 
-    if (paths->meta == NULL ||
-        paths->fnt == NULL ||
-        paths->atlas == NULL ||
-        paths->folder == NULL) {
-        return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed",
-            "The font paths could not be prepared.");
+    if (paths->meta == NULL || paths->fnt == NULL || paths->atlas == NULL || paths->folder == NULL) {
+        return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed", "The font paths could not be prepared.");
     }
 
     /* The source font, and the character file when the recipe names one, in the recipe's folder. */
@@ -823,8 +804,7 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
     }
 
     if (paths->source == NULL || (recipe->characters[0] != '\0' && paths->characters == NULL)) {
-        return refuse(error, EDDS_INVALID_INPUT, "recipe-path-invalid",
-            "A recipe path is not valid UTF-8 for this platform.");
+        return refuse(error, EDDS_INVALID_INPUT, "recipe-path-invalid", "A recipe path is not valid UTF-8 for this platform.");
     }
 
     return EDDS_OK;
@@ -835,8 +815,7 @@ static edds_status recipe_from_meta(const font_options *options, font_paths *pat
  * source and character files as paths relative to its folder, and the GUID of the font already
  * there, the one `--guid` gives, or a new one. Returns EDDS_OK, or the refusal.
  */
-static edds_status recipe_from_input(const font_options *options, font_paths *paths,
-    font_recipe *recipe, edds_error *error) {
+static edds_status recipe_from_input(const font_options *options, font_paths *paths, font_recipe *recipe, edds_error *error) {
     char *text;
 
     memset(recipe, 0, sizeof *recipe);
@@ -859,8 +838,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
         paths->folder == NULL ||
         paths->source == NULL ||
         (options->characters != NULL && paths->characters == NULL)) {
-        return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed",
-            "The font paths could not be prepared.");
+        return refuse(error, EDDS_INTERNAL_FAILURE, "allocation-failed", "The font paths could not be prepared.");
     }
 
     /* The resource name, as UTF-8 that fits the recipe. */
@@ -868,8 +846,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
 
     if (text == NULL || strlen(text) >= sizeof recipe->name) {
         free(text);
-        return refuse(error, EDDS_INVALID_INPUT, "invalid-resource-name",
-            "The resource name does not fit a recipe.");
+        return refuse(error, EDDS_INVALID_INPUT, "invalid-resource-name", "The resource name does not fit a recipe.");
     }
 
     memcpy(recipe->name, text, strlen(text) + 1u);
@@ -907,8 +884,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
         edds_status status;
 
         if (existing == NULL) {
-            return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed",
-                "The existing font recipe could not be opened.");
+            return refuse(error, EDDS_INVALID_INPUT, "recipe-open-failed", "The existing font recipe could not be opened.");
         }
 
         status = font_recipe_guid(existing, recipe->guid, error);
@@ -937,8 +913,7 @@ static edds_status recipe_from_input(const font_options *options, font_paths *pa
         free(guid);
 
         if (!valid) {
-            return refuse(error, EDDS_INVALID_INVOCATION, "malformed-guid",
-                "--guid takes 16 hexadecimal digits.");
+            return refuse(error, EDDS_INVALID_INVOCATION, "malformed-guid", "--guid takes 16 hexadecimal digits.");
         }
     }
 
@@ -964,16 +939,14 @@ static edds_status write_atlas(FILE *output, const font_output *font, edds_error
     profile.compress_threshold = 100;
     profile.generate_mips      = 0;
 
-    return edds_encode_rgba(font->atlas, font->atlas_width, font->atlas_height, 1, output, &profile,
-        was_cancelled, NULL, error);
+    return edds_encode_rgba(font->atlas, font->atlas_width, font->atlas_height, 1, output, &profile, was_cancelled, NULL, error);
 }
 
 /**
  * Builds the three files in sibling temporaries, then swaps them in together or not at all.
  * Returns EDDS_OK once all three are in place, or the refusal.
  */
-static edds_status publish(const font_paths *paths, const font_recipe *recipe,
-    const font_output *font, edds_error *error) {
+static edds_status publish(const font_paths *paths, const font_recipe *recipe, const font_output *font, edds_error *error) {
     /* The atlas, the FNT and the recipe, in that order. */
     cli_artifact artifacts[3] = {
         { paths->atlas, NULL, NULL, 0, 0 },
@@ -1001,46 +974,39 @@ static edds_status publish(const font_paths *paths, const font_recipe *recipe,
         FILE *file = create_temporary(&artifacts[at], "new");
 
         if (file == NULL) {
-            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-open-failed",
-                "A sibling temporary file could not be created.");
+            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-open-failed", "A sibling temporary file could not be created.");
             break;
         }
 
         if (injected(write_stages[at])) {
-            status = refuse(error, EDDS_INTERNAL_FAILURE, "injected-write",
-                "A test fault was injected while writing.");
+            status = refuse(error, EDDS_INTERNAL_FAILURE, "injected-write", "A test fault was injected while writing.");
         } else if (at == 0) {
             status = write_atlas(file, font, error);
         } else if (at == 1) {
             if (fwrite(font->fnt, 1, font->fnt_size, file) != font->fnt_size) {
-                status = refuse(error, EDDS_INTERNAL_FAILURE, "fnt-write-failed",
-                    "The FNT file could not be written.");
+                status = refuse(error, EDDS_INTERNAL_FAILURE, "fnt-write-failed", "The FNT file could not be written.");
             }
         } else {
             status = font_recipe_write(file, recipe, error);
         }
 
         if (status == EDDS_OK && !sync_output(file, "font-flush")) {
-            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-flush-failed",
-                "A temporary file could not be flushed.");
+            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-flush-failed", "A temporary file could not be flushed.");
         }
 
         if (fclose(file) != 0 && status == EDDS_OK) {
-            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-close-failed",
-                "A temporary file could not be closed.");
+            status = refuse(error, EDDS_INTERNAL_FAILURE, "temporary-close-failed", "A temporary file could not be closed.");
         }
     }
 
     if (status == EDDS_OK && was_cancelled(NULL)) {
-        status = refuse(error, EDDS_CANCELLED, "cancelled",
-            "The font generation was cancelled before it was published.");
+        status = refuse(error, EDDS_CANCELLED, "cancelled", "The font generation was cancelled before it was published.");
     }
 
     /* The old files moved aside, one by one. */
     for (; status == EDDS_OK && backed < 3u; ++backed) {
         if (!backup_artifact(&artifacts[backed], "old", backup_stages[backed])) {
-            status = refuse(error, EDDS_INTERNAL_FAILURE, "artifact-backup-failed",
-                "The previous font files could not be moved aside.");
+            status = refuse(error, EDDS_INTERNAL_FAILURE, "artifact-backup-failed", "The previous font files could not be moved aside.");
             break;
         }
     }
@@ -1169,8 +1135,7 @@ static int generate_command(const font_options *options) {
     name = stem_of(paths.fnt);
 
     if (name == NULL) {
-        status = refuse(&error, EDDS_INVALID_INPUT, "invalid-font-name",
-            "The font file name is not valid UTF-8.");
+        status = refuse(&error, EDDS_INVALID_INPUT, "invalid-font-name", "The font file name is not valid UTF-8.");
         goto done;
     }
 
@@ -1237,10 +1202,7 @@ static int inspect_fnt(const cli_char *path) {
     edds_status status;
 
     if (input == NULL) {
-        return report_failure(
-            refuse(&error, EDDS_INVALID_INPUT, "input-open-failed",
-                "The FNT file could not be opened."),
-            &error);
+        return report_failure(refuse(&error, EDDS_INVALID_INPUT, "input-open-failed", "The FNT file could not be opened."), &error);
     }
 
     status = font_inspect(input, &info, &error);
@@ -1261,8 +1223,7 @@ static int inspect_fnt(const cli_char *path) {
         info.italic ? "true" : "false", info.glyph_count, info.pair_count);
 
     for (uint32_t at = 0; at < info.range_count; ++at) {
-        (void)printf("%s{\"first\":%u,\"count\":%u}", at == 0 ? "" : ",", info.ranges[at].first,
-            info.ranges[at].count);
+        (void)printf("%s{\"first\":%u,\"count\":%u}", at == 0 ? "" : ",", info.ranges[at].first, info.ranges[at].count);
     }
 
     fputs("]}\n", stdout);
@@ -1320,8 +1281,7 @@ int font_command(int argc, cli_char **argv) {
     generate = equals(argv[1], "generate");
 
     if (!parse_options(argc, argv, &options)) {
-        return invalid("invalid-options",
-            "The command options are incomplete, duplicated, or unsupported.");
+        return invalid("invalid-options", "The command options are incomplete, duplicated, or unsupported.");
     }
 
     /* inspect takes `--input` alone: a `.fnt` is inspected as a font, anything else as a source. */
@@ -1337,9 +1297,7 @@ int font_command(int argc, cli_char **argv) {
             return invalid("invalid-options", "inspect takes --input and nothing else.");
         }
 
-        return ends_with(options.input, ".fnt")
-            ? inspect_fnt(options.input)
-            : inspect_source(options.input);
+        return ends_with(options.input, ".fnt") ? inspect_fnt(options.input) : inspect_source(options.input);
     }
 
     /*
@@ -1353,8 +1311,7 @@ int font_command(int argc, cli_char **argv) {
                   options.characters != NULL ||
                   options.guid != NULL)
             : (options.input == NULL || options.output == NULL || options.resource_name == NULL)) {
-        return invalid("invalid-options",
-            "generate takes --meta, or --input, --output and --resource-name with optional recipe flags.");
+        return invalid("invalid-options", "generate takes --meta, or --input, --output and --resource-name with optional recipe flags.");
     }
 
     cli_watch_cancel_file(options.cancel_file);

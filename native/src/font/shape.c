@@ -108,9 +108,7 @@ static int emit(font_shape *shape, font_vec from, const font_vec *control, font_
         const font_vec offset       = vec_minus(*control, from);
 
         /* Where the control point falls along the chord: 0 at `from`, 1 at `to`. */
-        const double along = chord_length == 0
-            ? -1.0
-            : vec_dot(offset, chord) / (chord_length * chord_length);
+        const double along = chord_length == 0 ? -1.0 : vec_dot(offset, chord) / (chord_length * chord_length);
 
         /* All three points in one place: nothing to draw. */
         if (chord_length == 0 && same_point(*control, from)) {
@@ -118,10 +116,7 @@ static int emit(font_shape *shape, font_vec from, const font_vec *control, font_
         }
 
         /* A curve, unless the control point lies on the chord, between its ends. */
-        if (chord_length == 0 ||
-            fabs(vec_cross(chord, offset)) > SAME * chord_length ||
-            along < 0 ||
-            along > 1) {
+        if (chord_length == 0 || fabs(vec_cross(chord, offset)) > SAME * chord_length || along < 0 || along > 1) {
             edge.quad = 1;
             edge.p[1] = *control;
         }
@@ -287,9 +282,7 @@ static double monotonic_root(const font_edge *edge, double y, double from, doubl
 
     /* The root inside [from, to], or the nearest to it, moved onto its nearer end. */
     for (int at = 0; at < count; ++at) {
-        const double miss = roots[at] < from
-            ? from - roots[at]
-            : (roots[at] > to ? roots[at] - to : 0.0);
+        const double miss = roots[at] < from ? from - roots[at] : (roots[at] > to ? roots[at] - to : 0.0);
 
         if (miss < best_miss) {
             best_miss = miss;
@@ -681,10 +674,7 @@ static void refine(const font_edge *a, const font_edge *b, double *t, double *u)
  * at all. The search stops at MOST_CROSSINGS crossings, or after MOST_SEARCH_STEPS steps.
  */
 static void quad_quad_search(quad_search *search, const piece *a, const piece *b, int depth) {
-    if (search->found_count >= MOST_CROSSINGS ||
-        search->state->failed ||
-        ++search->steps > MOST_SEARCH_STEPS ||
-        !boxes_meet(a, b)) {
+    if (search->found_count >= MOST_CROSSINGS || search->state->failed || ++search->steps > MOST_SEARCH_STEPS || !boxes_meet(a, b)) {
         return;
     }
 
@@ -787,8 +777,7 @@ static int ascending_cut(const void *left, const void *right) {
 }
 
 /** The part of `edge` between parameters `from` and `to`, ending exactly at the given points. */
-static font_edge sub_edge(const font_edge *edge, double from, double to, font_vec start,
-    font_vec end) {
+static font_edge sub_edge(const font_edge *edge, double from, double to, font_vec start, font_vec end) {
     font_edge result = edge_part(edge, from, to);
 
     result.p[0] = start;
@@ -871,10 +860,7 @@ static int keep_as_boundary(const font_shape *shape, font_edge *edge) {
 
 /** Whether two edges are the same, running the same way. */
 static int same_edge(const font_edge *a, const font_edge *b) {
-    return a->quad == b->quad &&
-        same_point(a->p[0], b->p[0]) &&
-        same_point(a->p[2], b->p[2]) &&
-        (!a->quad || same_point(a->p[1], b->p[1]));
+    return a->quad == b->quad && same_point(a->p[0], b->p[0]) && same_point(a->p[2], b->p[2]) && (!a->quad || same_point(a->p[1], b->p[1]));
 }
 
 /** Pieces ordered by where they start, so the piece starting at a point is a short scan away. */
@@ -1045,8 +1031,7 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
         }
 
         /* Later copies among the pieces starting at about the same x are marked as taken. */
-        for (size_t later = at + 1u;
-            later < pieces.count && order[later].x <= order[at].x + SAME; ++later) {
+        for (size_t later = at + 1u; later < pieces.count && order[later].x <= order[at].x + SAME; ++later) {
             if (same_edge(piece_at, &pieces.edges[order[later].index])) {
                 used[order[later].index] = 1;
             }
@@ -1087,8 +1072,7 @@ edds_status font_shape_union(const font_shape *shape, font_shape *boundary, edds
             /* The next piece: the untaken one whose start is nearest this end, within 1e-6. */
             for (size_t at = first_from(order, pieces.count, edge.p[2].x - nearest);
                 at < pieces.count && order[at].x <= edge.p[2].x + nearest; ++at) {
-                const double distance = vec_length(
-                    vec_minus(pieces.edges[order[at].index].p[0], edge.p[2]));
+                const double distance = vec_length(vec_minus(pieces.edges[order[at].index].p[0], edge.p[2]));
 
                 if (!used[order[at].index] && distance < nearest) {
                     nearest = distance;

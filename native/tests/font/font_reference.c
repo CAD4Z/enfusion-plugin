@@ -61,9 +61,7 @@ static int load(const char *path, blob *out) {
     }
 
     /* The size: seek to the end, read the position, seek back to the start. */
-    if (fseek(file, 0, SEEK_END) != 0 ||
-        (size = ftell(file)) < 0 ||
-        fseek(file, 0, SEEK_SET) != 0) {
+    if (fseek(file, 0, SEEK_END) != 0 || (size = ftell(file)) < 0 || fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return 0;
     }
@@ -89,8 +87,7 @@ static uint32_t be32(const uint8_t *at) {
 
 /** Four bytes as a little-endian 32-bit integer. */
 static uint32_t le32(const uint8_t *at) {
-    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) |
-        ((uint32_t)at[3] << 24);
+    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) | ((uint32_t)at[3] << 24);
 }
 
 /** Two bytes as a little-endian 16-bit integer. */
@@ -294,8 +291,7 @@ static int read_fnt(const blob *file, fnt *out) {
  * wrote to *written; a match may reach back into earlier blocks. Returns 0 when the block is
  * malformed or would not fit the capacity.
  */
-static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t capacity,
-    size_t *written) {
+static int lz4_block(const uint8_t *input, size_t size, uint8_t *output, size_t capacity, size_t *written) {
     size_t in = 0, out = *written;
 
     /* Sequences, one by one: a token, literal bytes to copy, then a match to repeat. */
@@ -530,8 +526,7 @@ static void include(polygon *out, double x, double y) {
  * A quadratic piece as 64 lines, and its exact extremes for the box. With curved 0 it is one
  * straight line, and the control point (cx, cy) is not used.
  */
-static void add_curve(polygon *out, double x0, double y0, double cx, double cy, double x1,
-    double y1, int curved) {
+static void add_curve(polygon *out, double x0, double y0, double cx, double cy, double x1, double y1, int curved) {
     if (!curved) {
         add_segment(out, x0, y0, x1, y1);
         include(out, x0, y0);
@@ -567,8 +562,7 @@ static void add_curve(polygon *out, double x0, double y0, double cx, double cy, 
                 if (t > 0 && t < 1) {
                     const double s = 1.0 - t;
 
-                    include(out, s * s * x0 + 2 * s * t * cx + t * t * x1,
-                        s * s * y0 + 2 * s * t * cy + t * t * y1);
+                    include(out, s * s * x0 + 2 * s * t * cx + t * t * x1, s * s * y0 + 2 * s * t * cy + t * t * y1);
                 }
             }
         }
@@ -627,8 +621,7 @@ static void flatten(const font_fixture_outline *outline, double scale, polygon *
                 } else {
                     const size_t c = (first + step + 2u) % total;
 
-                    add_curve(out, points[a][0], points[a][1], points[b][0], points[b][1],
-                        points[c][0], points[c][1], 1);
+                    add_curve(out, points[a][0], points[a][1], points[b][0], points[b][1], points[c][0], points[c][1], 1);
                     step += 2u;
                 }
             }
@@ -649,8 +642,7 @@ static int filled(const polygon *shape, double x, double y) {
         const segment *edge = &shape->segments[at];
 
         if ((edge->y0 <= y && y < edge->y1) || (edge->y1 <= y && y < edge->y0)) {
-            const double cross_x = edge->x0 +
-                (y - edge->y0) * (edge->x1 - edge->x0) / (edge->y1 - edge->y0);
+            const double cross_x = edge->x0 + (y - edge->y0) * (edge->x1 - edge->x0) / (edge->y1 - edge->y0);
 
             if (cross_x > x) {
                 winding += edge->y1 > edge->y0 ? 1 : -1;
@@ -718,13 +710,11 @@ static int inked(const uint8_t *bgra, uint32_t width, uint32_t height, double u,
             }
 
             /* Stored BGRA: the field's red is byte 2, green 1, blue 0. */
-            corners[corner] =
-                bgra[((size_t)cy * width + (size_t)cx) * 4u + (size_t)(2 - c)] / 255.0;
+            corners[corner] = bgra[((size_t)cy * width + (size_t)cx) * 4u + (size_t)(2 - c)] / 255.0;
         }
 
         /* Across each pair of texels by fx, then between the two pairs by fy. */
-        channel[c] = (corners[0] * (1 - fx) + corners[1] * fx) * (1 - fy) +
-            (corners[2] * (1 - fx) + corners[3] * fx) * fy;
+        channel[c] = (corners[0] * (1 - fx) + corners[1] * fx) * (1 - fy) + (corners[2] * (1 - fx) + corners[3] * fx) * fy;
     }
 
     return median3(channel[0], channel[1], channel[2]) >= 0.5;
@@ -823,9 +813,7 @@ static int smallest_atlas(uint32_t cells, int32_t cell, uint32_t *width, uint32_
             }
 
             /* How many cells fit across, times how many fit down: a cell and its gap each. */
-            if ((uint64_t)(((1u << wide) + 1u) / (uint32_t)(cell + 1)) *
-                    (((1u << high) + 1u) / (uint32_t)(cell + 1)) >=
-                cells) {
+            if ((uint64_t)(((1u << wide) + 1u) / (uint32_t)(cell + 1)) * (((1u << high) + 1u) / (uint32_t)(cell + 1)) >= cells) {
                 *width  = 1u << wide;
                 *height = 1u << high;
                 return 1;
@@ -919,10 +907,8 @@ int main(int argc, char **argv) {
     double  size, scale;
     int32_t largest = 0;
 
-    if ((argc != 5 && argc != 6) ||
-        (strcmp(argv[1], "gpos") != 0 && strcmp(argv[1], "kern") != 0)) {
-        fputs("usage: enfusion-font-reference gpos|kern SIZE FONT.fnt ATLAS.edds [GOLDEN_PAIRS.json]\n",
-            stderr);
+    if ((argc != 5 && argc != 6) || (strcmp(argv[1], "gpos") != 0 && strcmp(argv[1], "kern") != 0)) {
+        fputs("usage: enfusion-font-reference gpos|kern SIZE FONT.fnt ATLAS.edds [GOLDEN_PAIRS.json]\n", stderr);
         return 2;
     }
 
@@ -1098,8 +1084,7 @@ int main(int argc, char **argv) {
     if (!smallest_atlas(unique_cells, font.cell, &expected_width, &expected_height) ||
         width != expected_width ||
         height != expected_height) {
-        fail("%s %ld", "the atlas is not the smallest power of two that holds its cells; width",
-            (long)width);
+        fail("%s %ld", "the atlas is not the smallest power of two that holds its cells; width", (long)width);
     }
 
     /* Alpha 255 everywhere; zeros everywhere outside the cells. */
@@ -1181,9 +1166,7 @@ int main(int argc, char **argv) {
                 faults = compare_glyph(&truth, box, font.cell, bgra, width, height, &ink);
 
                 if (faults != 0 || ink == 0) {
-                    fprintf(stderr,
-                        "U+%04X: %ld samples disagree with the outline beyond antialiasing\n",
-                        box->code, faults);
+                    fprintf(stderr, "U+%04X: %ld samples disagree with the outline beyond antialiasing\n", box->code, faults);
                     ++failures;
                 }
             }
@@ -1230,8 +1213,7 @@ int main(int argc, char **argv) {
         }
 
         if (mode == 0 || fabs(255.0 / mode - FIELD_RANGE) > 0.4) {
-            fail("%s %ld", "the measured field range does not match 1.5 R / sqrt 2; median step",
-                mode);
+            fail("%s %ld", "the measured field range does not match 1.5 R / sqrt 2; median step", mode);
         } else {
             fprintf(stderr, "field range %.3f px (median step %d)\n", 255.0 / mode, mode);
         }

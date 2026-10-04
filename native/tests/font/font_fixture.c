@@ -1123,8 +1123,7 @@ static void cmap_table(buffer *out, font_fixture_variant variant) {
     }
 
     if (with12) {
-        cmap_format12(&format12, crowded ? FONT_FIXTURE_CROWDED_FIRST : 0u,
-            crowded ? FONT_FIXTURE_CROWDED_COUNT : 0u, 1);
+        cmap_format12(&format12, crowded ? FONT_FIXTURE_CROWDED_FIRST : 0u, crowded ? FONT_FIXTURE_CROWDED_COUNT : 0u, 1);
     }
 
     /* A zero, the subtable count, and a record per subtable: two ids and where it starts. */
@@ -1181,8 +1180,7 @@ typedef struct pair_value {
  * PairPos format 1 with XAdvance on the first glyph only. Each glyph of firsts starts the pairs of
  * the set at the same index, set_sizes saying how many pairs each set holds.
  */
-static void pair_list(buffer *out, const uint16_t *firsts, size_t first_count,
-    const pair_value *const *sets, const size_t *set_sizes) {
+static void pair_list(buffer *out, const uint16_t *firsts, size_t first_count, const pair_value *const *sets, const size_t *set_sizes) {
     buffer       coverage = { 0 }, body = { 0 };
     const size_t header = 10u + 2u * first_count;
     size_t       at;
@@ -1526,8 +1524,7 @@ static void gpos_table(buffer *out) {
 }
 
 /** Writes a format 0 subtable of `kern`: its coverage, then each pair of glyphs with its value. */
-static void kern_subtable(buffer *out, int coverage, const uint16_t (*pairs)[2], const int *values,
-    size_t count) {
+static void kern_subtable(buffer *out, int coverage, const uint16_t (*pairs)[2], const int *values, size_t count) {
     unsigned search = 1, selector = 0;
 
     /* The largest power of two not above the pair count, and its exponent. */
@@ -1677,8 +1674,7 @@ static test_bytes truetype(font_fixture_variant variant) {
     const int      crowded      = variant == FONT_FIXTURE_CROWDED;
     const int      long_offsets = variant != FONT_FIXTURE_KERN;
     const unsigned glyph_count  = crowded ? FONT_FIXTURE_CROWDED_COUNT + 1u : GID_COUNT;
-    const unsigned metrics      = variant == FONT_FIXTURE_KERN ? GID_EMOJI + 1u
-                                                               : (crowded ? 2u : GID_COUNT);
+    const unsigned metrics      = variant == FONT_FIXTURE_KERN ? GID_EMOJI + 1u : (crowded ? 2u : GID_COUNT);
     const int      box[4]       = { -200, -200, 1100, 1100 };
 
     /* The table being written. */
@@ -1868,8 +1864,7 @@ size_t font_fixture_codes(font_fixture_variant variant, const uint32_t **codes) 
 }
 
 /** The outline of a character the variant maps, composed; see font_fixture.h. */
-int font_fixture_outline_of(font_fixture_variant variant, uint32_t code,
-    font_fixture_outline *outline) {
+int font_fixture_outline_of(font_fixture_variant variant, uint32_t code, font_fixture_outline *outline) {
     const uint32_t *codes    = NULL;
     const size_t    count    = font_fixture_codes(variant, &codes);
     points          composed = { 0 };

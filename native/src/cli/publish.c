@@ -26,9 +26,7 @@ static FILE *open_output(const cli_char *path) {
 
 /** `A` to `Z` lowered to `a` to `z`; every other character comes back as it is. */
 int ascii_lower(cli_char value) {
-    return value >= (cli_char)'A' && value <= (cli_char)'Z'
-        ? value + ((cli_char)'a' - (cli_char)'A')
-        : value;
+    return value >= (cli_char)'A' && value <= (cli_char)'Z' ? value + ((cli_char)'a' - (cli_char)'A') : value;
 }
 
 /** Whether `path` ends with `suffix`, in any ASCII case; `suffix` is written in lowercase. */
@@ -238,11 +236,9 @@ static int same_file(const cli_char *left, const cli_char *right) {
     /* Each path opened as an existing file, asking for no access and locking nothing for others. */
     const DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
-    HANDLE left_handle = CreateFileW(left, 0, share, NULL, OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    HANDLE left_handle = CreateFileW(left, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 
-    HANDLE right_handle = CreateFileW(right, 0, share, NULL, OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    HANDLE right_handle = CreateFileW(right, 0, share, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 
     int same = 0;
 
@@ -324,11 +320,9 @@ static cli_char *temporary_path(const cli_char *output, const char *kind, unsign
     }
 
 #ifdef _WIN32
-    if (swprintf(path, base + 96u, L"%ls.enfusion-%hs-%d-%u.tmp",
-            output, kind, cli_getpid(), attempt) < 0) {
+    if (swprintf(path, base + 96u, L"%ls.enfusion-%hs-%d-%u.tmp", output, kind, cli_getpid(), attempt) < 0) {
 #else
-    if (snprintf(path, base + 96u, "%s.enfusion-%s-%d-%u.tmp",
-            output, kind, cli_getpid(), attempt) < 0) {
+    if (snprintf(path, base + 96u, "%s.enfusion-%s-%d-%u.tmp", output, kind, cli_getpid(), attempt) < 0) {
 #endif
         free(path);
         return NULL;
@@ -406,8 +400,7 @@ int revision_of(const cli_char *path, file_revision *revision) {
     /* The write time in milliseconds, from its seconds and nanoseconds. */
     revision->exists   = 1;
     revision->size     = (uint64_t)attributes.st_size;
-    revision->modified = (uint64_t)attributes.st_mtim.tv_sec * 1000u +
-        (uint64_t)attributes.st_mtim.tv_nsec / 1000000u;
+    revision->modified = (uint64_t)attributes.st_mtim.tv_sec * 1000u + (uint64_t)attributes.st_mtim.tv_nsec / 1000000u;
 #endif
 
     return 1;
@@ -462,8 +455,7 @@ int same_revision(const file_revision *left, const file_revision *right) {
     const uint64_t later   = left->modified > right->modified ? left->modified : right->modified;
     const uint64_t earlier = left->modified > right->modified ? right->modified : left->modified;
 
-    return left->exists == right->exists &&
-        (!left->exists || (left->size == right->size && later - earlier <= 1u));
+    return left->exists == right->exists && (!left->exists || (left->size == right->size && later - earlier <= 1u));
 }
 
 /** The path with an ASCII suffix appended; malloc'd, or NULL. */
@@ -534,9 +526,7 @@ int backup_artifact(cli_artifact *artifact, const char *kind, const char *stage)
         free(artifact->backup);
         artifact->backup = temporary_path(artifact->target, kind, attempt);
 
-        if (artifact->backup != NULL &&
-            !path_exists(artifact->backup) &&
-            cli_rename(artifact->target, artifact->backup) == 0) {
+        if (artifact->backup != NULL && !path_exists(artifact->backup) && cli_rename(artifact->target, artifact->backup) == 0) {
             return 1;
         }
     }

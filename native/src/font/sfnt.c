@@ -148,9 +148,7 @@ static edds_status choose_cmap(font_face *face, edds_error *error) {
             continue;
         }
 
-        if (u16(table + offset) == 4u
-                ? !valid_format4(table + offset, limit)
-                : !valid_format12(table + offset, limit)) {
+        if (u16(table + offset) == 4u ? !valid_format4(table + offset, limit) : !valid_format12(table + offset, limit)) {
             return malformed(error, "a character map subtable is truncated or unsorted");
         }
 
@@ -162,8 +160,7 @@ static edds_status choose_cmap(font_face *face, edds_error *error) {
     }
 
     if (best == 0) {
-        font_fail(error, "unsupported-cmap",
-            "The font has no Unicode character map of format 4 or 12.");
+        font_fail(error, "unsupported-cmap", "The font has no Unicode character map of format 4 or 12.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -206,8 +203,7 @@ uint32_t font_face_glyph(const font_face *face, uint32_t code) {
                 glyph = (code + u16(deltas + 2u * at)) & 0xFFFFu;
             } else {
                 /* The range offset counts from where it is stored itself. */
-                const uint64_t address = (uint64_t)(ranges + 2u * at - subtable) +
-                    u16(ranges + 2u * at) + 2u * (uint64_t)(code - start);
+                const uint64_t address = (uint64_t)(ranges + 2u * at - subtable) + u16(ranges + 2u * at) + 2u * (uint64_t)(code - start);
 
                 if (address + 2u > face->cmap_limit) {
                     return 0;
@@ -279,8 +275,7 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     face->cap_height = -1;
 
     if (size > FONT_MAX_FILE_BYTES) {
-        font_fail(error, "font-file-limit", "A font file is at most %u bytes.",
-            FONT_MAX_FILE_BYTES);
+        font_fail(error, "font-file-limit", "A font file is at most %u bytes.", FONT_MAX_FILE_BYTES);
         return EDDS_INVALID_INPUT;
     }
 
@@ -293,14 +288,12 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     version = u32(data);
 
     if (version == TAG('O', 'T', 'T', 'O')) {
-        font_fail(error, "unsupported-outline-format",
-            "The font has CFF outlines; only TrueType outlines are supported.");
+        font_fail(error, "unsupported-outline-format", "The font has CFF outlines; only TrueType outlines are supported.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
     if (version == TAG('t', 't', 'c', 'f')) {
-        font_fail(error, "font-collection-unsupported",
-            "A font collection holds several fonts; pass one TrueType font.");
+        font_fail(error, "font-collection-unsupported", "A font collection holds several fonts; pass one TrueType font.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -369,16 +362,11 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     }
 
     if (variable) {
-        font_fail(error, "variable-font-unsupported",
-            "The font is variable; pass one static instance of it.");
+        font_fail(error, "variable-font-unsupported", "The font is variable; pass one static instance of it.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
-    if (!face->head.present ||
-        !face->hhea.present ||
-        !face->hmtx.present ||
-        !face->maxp.present ||
-        !face->cmap.present) {
+    if (!face->head.present || !face->hhea.present || !face->hmtx.present || !face->maxp.present || !face->cmap.present) {
         return malformed(error, "a required table (head, hhea, hmtx, maxp, cmap) is missing");
     }
 
@@ -435,8 +423,7 @@ edds_status font_face_open(font_face *face, const uint8_t *data, size_t size, ed
     }
 
     /* loca: an offset for every glyph, and one more for where the last one ends. */
-    if ((uint64_t)face->loca.length <
-        (face->long_offsets ? 4u : 2u) * ((uint64_t)face->glyph_count + 1u)) {
+    if ((uint64_t)face->loca.length < (face->long_offsets ? 4u : 2u) * ((uint64_t)face->glyph_count + 1u)) {
         return malformed(error, "the loca table is shorter than its glyphs");
     }
 
@@ -644,9 +631,7 @@ static int reserve_points(font_contours *contours, size_t needed) {
 /** Appends where a contour ends, growing the list as needed; 0 when memory runs out. */
 static int add_end(font_contours *contours, size_t end) {
     if (contours->contour_count == contours->contour_capacity) {
-        const size_t capacity = contours->contour_capacity == 0
-            ? 8u
-            : contours->contour_capacity * 2u;
+        const size_t capacity = contours->contour_capacity == 0 ? 8u : contours->contour_capacity * 2u;
         size_t      *grown    = realloc(contours->ends, capacity * sizeof *grown);
 
         if (grown == NULL) {
@@ -681,8 +666,7 @@ static edds_status out_of_memory(edds_error *error) {
 
 /** Reports a glyph over the point or the contour limit, and returns EDDS_INVALID_INPUT. */
 static edds_status glyph_limit(edds_error *error) {
-    font_fail(error, "glyph-size-limit", "A glyph has more than %u points or %u contours.",
-        FONT_MAX_GLYPH_POINTS, FONT_MAX_GLYPH_CONTOURS);
+    font_fail(error, "glyph-size-limit", "A glyph has more than %u points or %u contours.", FONT_MAX_GLYPH_POINTS, FONT_MAX_GLYPH_CONTOURS);
     return EDDS_INVALID_INPUT;
 }
 
@@ -891,8 +875,7 @@ static edds_status read_composite(
         edds_status   status;
 
         if (++state->components > FONT_MAX_COMPONENTS) {
-            font_fail(error, "glyph-size-limit", "A glyph has more than %u components.",
-                FONT_MAX_COMPONENTS);
+            font_fail(error, "glyph-size-limit", "A glyph has more than %u components.", FONT_MAX_COMPONENTS);
             return EDDS_INVALID_INPUT;
         }
 
@@ -968,8 +951,7 @@ static edds_status read_composite(
             dx = first;
             dy = second;
 
-            if ((flags & SCALED_COMPONENT_OFFSET) != 0 &&
-                (flags & UNSCALED_COMPONENT_OFFSET) == 0) {
+            if ((flags & SCALED_COMPONENT_OFFSET) != 0 && (flags & UNSCALED_COMPONENT_OFFSET) == 0) {
                 const double x = dx, y = dy;
 
                 dx = a * x + c * y;
@@ -994,8 +976,7 @@ static edds_status read_composite(
             }
         }
 
-        if (out->count + child.count > FONT_MAX_GLYPH_POINTS ||
-            out->contour_count + child.contour_count > FONT_MAX_GLYPH_CONTOURS) {
+        if (out->count + child.count > FONT_MAX_GLYPH_POINTS || out->contour_count + child.contour_count > FONT_MAX_GLYPH_CONTOURS) {
             font_contours_free(&child);
             return glyph_limit(error);
         }
@@ -1058,8 +1039,7 @@ static edds_status read_glyph(
     *advance = font_face_advance(face, glyph);
 
     if (depth > FONT_MAX_COMPONENT_DEPTH) {
-        font_fail(error, "glyph-size-limit", "Composite glyphs nest deeper than %u levels.",
-            FONT_MAX_COMPONENT_DEPTH);
+        font_fail(error, "glyph-size-limit", "Composite glyphs nest deeper than %u levels.", FONT_MAX_COMPONENT_DEPTH);
         return EDDS_INVALID_INPUT;
     }
 
@@ -1089,12 +1069,10 @@ static edds_status read_glyph(
     contours = s16(face->data + face->glyf.offset + start);
 
     if (contours >= 0) {
-        return read_simple(face->data + face->glyf.offset + start, end - start, (uint32_t)contours,
-            out, error);
+        return read_simple(face->data + face->glyf.offset + start, end - start, (uint32_t)contours, out, error);
     }
 
-    return read_composite(face, face->data + face->glyf.offset + start, end - start, depth, state,
-        out, advance, error);
+    return read_composite(face, face->data + face->glyf.offset + start, end - start, depth, state, out, advance, error);
 }
 
 /**

@@ -141,9 +141,8 @@ static edds_status color_shape(const font_shape *loops, font_shape *colored, edd
 
         /* The corners, each recorded as the edge that starts at it. */
         for (size_t at = 0; at < count; ++at) {
-            const font_vec before = normalized(
-                edge_direction(&edges[(at + count - 1u) % count], 1.0));
-            const font_vec after = normalized(edge_direction(&edges[at], 0.0));
+            const font_vec before = normalized(edge_direction(&edges[(at + count - 1u) % count], 1.0));
+            const font_vec after  = normalized(edge_direction(&edges[at], 0.0));
 
             if (is_corner(before, after, threshold)) {
                 corners[corner_count++] = at;
@@ -244,8 +243,7 @@ failed:
 
 /** Whether a is nearer than b; at the same distance, whether its `dot` is smaller. */
 static int closer(signed_distance a, signed_distance b) {
-    return fabs(a.distance) < fabs(b.distance) ||
-        (fabs(a.distance) == fabs(b.distance) && a.dot < b.dot);
+    return fabs(a.distance) < fabs(b.distance) || (fabs(a.distance) == fabs(b.distance) && a.dot < b.dot);
 }
 
 /**
@@ -394,15 +392,13 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
 
             if (t > 0 && t < 1) {
                 /* From the origin to the curve's point at t, and how far that is. */
-                const font_vec qe = vec_plus(vec_plus(qa, vec_times(ab, 2.0 * t)),
-                    vec_times(br, t * t));
+                const font_vec qe = vec_plus(vec_plus(qa, vec_times(ab, 2.0 * t)), vec_times(br, t * t));
 
                 const double distance = vec_length(qe);
 
                 if (distance <= fabs(nearest)) {
-                    nearest = nonzero_sign(vec_cross(vec_plus(ab, vec_times(br, t)), qe)) *
-                        distance;
-                    *param = t;
+                    nearest = nonzero_sign(vec_cross(vec_plus(ab, vec_times(br, t)), qe)) * distance;
+                    *param  = t;
                 }
             }
         }
@@ -415,8 +411,7 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
         } else if (*param < 0.5) {
             result.dot = fabs(vec_dot(normalized(edge_direction(edge, 0)), normalized(qa)));
         } else {
-            result.dot = fabs(vec_dot(normalized(edge_direction(edge, 1)),
-                normalized(vec_minus(edge->p[2], origin))));
+            result.dot = fabs(vec_dot(normalized(edge_direction(edge, 1)), normalized(vec_minus(edge->p[2], origin))));
         }
 
         return result;
@@ -428,8 +423,7 @@ static signed_distance edge_distance(const font_edge *edge, font_vec origin, dou
  * median sharp, and it is only ever a shorter distance, never a longer one. Returns that distance
  * where it applies, else the signed distance as it was.
  */
-static double pseudo_distance(const font_edge *edge, font_vec origin, signed_distance distance,
-    double param) {
+static double pseudo_distance(const font_edge *edge, font_vec origin, signed_distance distance, double param) {
     if (param < 0) {
         /* Before the start: the distance to the line the start tangent runs along. */
         const font_vec direction = normalized(edge_direction(edge, 0));
@@ -535,8 +529,7 @@ static font_vec glyph_point(const cell_field *field, double x, double y) {
 static void settle(cell_field *field, size_t texel) {
     const uint8_t value = encoded(field->truth[texel]);
 
-    field->bytes[3u * texel] = field->bytes[3u * texel + 1u] = field->bytes[3u * texel + 2u] =
-        value;
+    field->bytes[3u * texel] = field->bytes[3u * texel + 1u] = field->bytes[3u * texel + 2u] = value;
 }
 
 /**
@@ -544,8 +537,7 @@ static void settle(cell_field *field, size_t texel) {
  * samples, the interpolated median puts the edge on the wrong side of the outline. Returns whether
  * any texel was newly marked.
  */
-static int check_block(cell_field *field, const font_shape *colored, const font_shape *shape,
-    uint32_t u, uint32_t v) {
+static int check_block(cell_field *field, const font_shape *colored, const font_shape *shape, uint32_t u, uint32_t v) {
     /* The block's texels: top left, top right, bottom left, bottom right. */
     const size_t corners[4] = {
         (size_t)v * field->width + u, (size_t)v * field->width + u + 1u,
@@ -627,11 +619,9 @@ static void correct(cell_field *field, const font_shape *colored, const font_sha
 
     /* Each texel on its own: the side of its median against the sign of its true distance. */
     for (size_t texel = 0; texel < texels; ++texel) {
-        const uint8_t median = median_of(field->bytes[3u * texel], field->bytes[3u * texel + 1u],
-            field->bytes[3u * texel + 2u]);
+        const uint8_t median = median_of(field->bytes[3u * texel], field->bytes[3u * texel + 1u], field->bytes[3u * texel + 2u]);
 
-        if ((median >= 128u) != (field->truth[texel] > 0) &&
-            fabs(field->truth[texel]) > TOLERANCE) {
+        if ((median >= 128u) != (field->truth[texel] > 0) && fabs(field->truth[texel]) > TOLERANCE) {
             field->disputed[texel] = 1;
             settle(field, texel);
         }
@@ -818,8 +808,7 @@ edds_status font_field_render(
             }
 
             /* The true distance: to the nearest edge, positive where the outline winds. */
-            field.truth[texel] = (font_shape_winding(shape, origin) != 0 ? 1.0 : -1.0) *
-                fabs(nearest.distance);
+            field.truth[texel] = (font_shape_winding(shape, origin) != 0 ? 1.0 : -1.0) * fabs(nearest.distance);
         }
     }
 
@@ -828,8 +817,7 @@ edds_status font_field_render(
 
     /* The field into the cell's atlas pixels, three bytes each; alpha stays as it is. */
     for (uint32_t v = 0; v < field.height; ++v) {
-        uint8_t *row = atlas +
-            ((size_t)(field.top + (int32_t)v) * atlas_width + (size_t)field.left) * 4u;
+        uint8_t *row = atlas + ((size_t)(field.top + (int32_t)v) * atlas_width + (size_t)field.left) * 4u;
 
         for (uint32_t u = 0; u < field.width; ++u) {
             const size_t texel = (size_t)v * field.width + u;

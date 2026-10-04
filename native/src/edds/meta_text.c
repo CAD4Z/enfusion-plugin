@@ -31,8 +31,7 @@ int meta_read_text(FILE *input, char **source, size_t *size, edds_error *error) 
         (length = ftell(input)) < 0 ||
         fseek(input, 0, SEEK_SET) != 0 ||
         (uint64_t)length > EDDS_MAX_FILE_BYTES) {
-        fail(error, "metadata-size-limit",
-            "The metadata could not be measured within the input limit.");
+        fail(error, "metadata-size-limit", "The metadata could not be measured within the input limit.");
         return 0;
     }
 
@@ -83,8 +82,7 @@ static int skip_space(meta_scanner *scan) {
             /* A block comment runs to the star and slash that close it. */
             scan->at += 2;
 
-            while (scan->at + 1u < scan->size &&
-                !(scan->source[scan->at] == '*' && scan->source[scan->at + 1u] == '/')) {
+            while (scan->at + 1u < scan->size && !(scan->source[scan->at] == '*' && scan->source[scan->at + 1u] == '/')) {
                 ++scan->at;
             }
 
@@ -149,9 +147,7 @@ meta_token meta_next_token(meta_scanner *scan) {
         while (scan->at < scan->size && scan->source[scan->at] != '"') {
             char value = scan->source[scan->at++];
 
-            if (value == '\\' &&
-                scan->at < scan->size &&
-                (scan->source[scan->at] == '\\' || scan->source[scan->at] == '"')) {
+            if (value == '\\' && scan->at < scan->size && (scan->source[scan->at] == '\\' || scan->source[scan->at] == '"')) {
                 value = scan->source[scan->at++];
             }
 
@@ -254,19 +250,12 @@ int meta_valid_guid(const char *text) {
  * resource path after the closing brace, copied into `name`. Returns 0 when `value` is not of that
  * shape or the path does not fit.
  */
-int meta_parse_name(
-    const char *value,
-    char        guid[EDDS_METADATA_GUID_BYTES],
-    char       *name,
-    size_t      name_capacity) {
+int meta_parse_name(const char *value, char guid[EDDS_METADATA_GUID_BYTES], char *name, size_t name_capacity) {
     char        digits[EDDS_METADATA_GUID_BYTES];
     const char *close;
 
     /* An opening brace, sixteen characters, the first closing brace, and at least one more. */
-    if (value[0] != '{' ||
-        (close = strchr(value, '}')) == NULL ||
-        close - value != 17 ||
-        close[1] == '\0') {
+    if (value[0] != '{' || (close = strchr(value, '}')) == NULL || close - value != 17 || close[1] == '\0') {
         return 0;
     }
 

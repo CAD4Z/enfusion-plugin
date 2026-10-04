@@ -160,8 +160,7 @@ static int is_one_of(const char *value, const char *const *choices, size_t count
 
 /** Refuses a setting that is recognized but unsupported, naming it and its value. */
 static edds_status unsupported(edds_error *error, const char *key, const char *value) {
-    fail(error, "unsupported-setting", "Workbench setting %s=%s is recognized but unsupported.",
-        key, value);
+    fail(error, "unsupported-setting", "Workbench setting %s=%s is recognized but unsupported.", key, value);
 
     return EDDS_UNSUPPORTED_FORMAT;
 }
@@ -216,8 +215,7 @@ static edds_status recipe_setting(
     }
 
     if ((*seen & bit) != 0) {
-        fail(error, "duplicate-setting", "Workbench setting %s occurs more than once in PC.",
-            key->text);
+        fail(error, "duplicate-setting", "Workbench setting %s occurs more than once in PC.", key->text);
         return EDDS_INVALID_INPUT;
     }
 
@@ -225,8 +223,7 @@ static edds_status recipe_setting(
 
     /* `SourceFile` takes a quoted string; every other setting takes a word. */
     if (bit == SETTING_SOURCE) {
-        if (value->kind != META_TOKEN_STRING ||
-            !meta_copy_text(metadata->source_file, sizeof metadata->source_file, value->text)) {
+        if (value->kind != META_TOKEN_STRING || !meta_copy_text(metadata->source_file, sizeof metadata->source_file, value->text)) {
             goto malformed;
         }
 
@@ -247,9 +244,7 @@ static edds_status recipe_setting(
             goto malformed;
         }
 
-        return strcmp(value->text, "EnfusionDDS") == 0
-            ? EDDS_OK
-            : unsupported(error, key->text, value->text);
+        return strcmp(value->text, "EnfusionDDS") == 0 ? EDDS_OK : unsupported(error, key->text, value->text);
     }
 
     if (bit == SETTING_FORMAT) {
@@ -270,8 +265,7 @@ static edds_status recipe_setting(
 
     /* `Conversion`: a name the conversion table knows, refused when it is not supported. */
     if (bit == SETTING_CONVERSION) {
-        const edds_conversion_capability *capability =
-            edds_conversion_of_workbench_name(value->text);
+        const edds_conversion_capability *capability = edds_conversion_of_workbench_name(value->text);
 
         if (capability == NULL) {
             goto malformed;
@@ -384,8 +378,7 @@ static edds_status recipe_setting(
     return EDDS_OK;
 
 malformed:
-    fail(error, "malformed-setting", "Workbench setting %s has a malformed or unknown value.",
-        key->text);
+    fail(error, "malformed-setting", "Workbench setting %s has a malformed or unknown value.", key->text);
     return EDDS_INVALID_INPUT;
 }
 
@@ -394,10 +387,7 @@ malformed:
  * setting stops the reading at once; the first unsupported one is held back and returned only
  * after the whole recipe has been read and checked as one profile.
  */
-static edds_status parse_recipe(
-    meta_scanner  *scan,
-    edds_metadata *metadata,
-    edds_error    *error) {
+static edds_status parse_recipe(meta_scanner *scan, edds_metadata *metadata, edds_error *error) {
     uint32_t    seen          = 0;
     edds_status pending       = EDDS_OK;
     edds_error  pending_error = { { 0 }, { 0 } };
@@ -455,11 +445,8 @@ static edds_status parse_recipe(
         edds_error  combination;
         edds_status status = edds_profile_check(&metadata->profile, &combination);
 
-        if (status == EDDS_OK &&
-            metadata->source_format != EDDS_SOURCE_DDS &&
-            metadata->profile.contains_mips) {
-            fail(&combination, "unsupported-combination",
-                "ContainsMips is supported only for a DDS source.");
+        if (status == EDDS_OK && metadata->source_format != EDDS_SOURCE_DDS && metadata->profile.contains_mips) {
+            fail(&combination, "unsupported-combination", "ContainsMips is supported only for a DDS source.");
             status = EDDS_UNSUPPORTED_FORMAT;
         }
 
@@ -481,11 +468,7 @@ static edds_status parse_recipe(
  * platform, of which only the PC recipe of a source resource class is read and the rest skipped.
  * A second such recipe is refused; an unsupported setting is returned only at the end.
  */
-static edds_status parse_configurations(
-    meta_scanner  *scan,
-    edds_metadata *metadata,
-    int           *found_pc,
-    edds_error    *error) {
+static edds_status parse_configurations(meta_scanner *scan, edds_metadata *metadata, int *found_pc, edds_error *error) {
     edds_status pending       = EDDS_OK;
     edds_error  pending_error = { { 0 }, { 0 } };
 
@@ -535,8 +518,7 @@ static edds_status parse_configurations(
             edds_status status;
 
             if (*found_pc) {
-                fail(error, "duplicate-pc-recipe",
-                    "Metadata contains more than one source-image PC recipe.");
+                fail(error, "duplicate-pc-recipe", "Metadata contains more than one source-image PC recipe.");
                 return EDDS_INVALID_INPUT;
             }
 
@@ -626,9 +608,7 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
     scan.at     = 0;
     value       = meta_next_token(&scan);
 
-    if (value.kind != META_TOKEN_WORD ||
-        strcmp(value.text, "MetaFileClass") != 0 ||
-        meta_next_token(&scan).kind != META_TOKEN_OPEN) {
+    if (value.kind != META_TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 || meta_next_token(&scan).kind != META_TOKEN_OPEN) {
         fail(error, "malformed-metadata", "Metadata must contain one MetaFileClass block.");
         goto done;
     }
@@ -655,8 +635,7 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
                 field.kind != META_TOKEN_STRING ||
                 !meta_parse_name(field.text, metadata->guid, metadata->name,
                     sizeof metadata->name)) {
-                fail(error, "malformed-guid",
-                    "Metadata Name must begin with one 64-bit hexadecimal GUID.");
+                fail(error, "malformed-guid", "Metadata Name must begin with one 64-bit hexadecimal GUID.");
                 goto done;
             }
 
@@ -666,8 +645,7 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
             edds_status configuration_status;
 
             if (found_configurations || field.kind != META_TOKEN_OPEN) {
-                fail(error, "malformed-metadata",
-                    "Metadata must contain one Configurations block.");
+                fail(error, "malformed-metadata", "Metadata must contain one Configurations block.");
                 goto done;
             }
 
@@ -688,23 +666,17 @@ edds_status edds_metadata_parse(FILE *input, edds_metadata *metadata, edds_error
     }
 
     /* Nothing after the block, and every entry the file must have. */
-    if (meta_next_token(&scan).kind != META_TOKEN_END ||
-        !found_name ||
-        !found_configurations ||
-        !found_pc) {
-        fail(error, "incomplete-metadata",
-            "Metadata requires Name and one source-image PC recipe.");
+    if (meta_next_token(&scan).kind != META_TOKEN_END || !found_name || !found_configurations || !found_pc) {
+        fail(error, "incomplete-metadata", "Metadata requires Name and one source-image PC recipe.");
         goto done;
     }
 
     /* The resource class of the PC recipe must match the extension of its `SourceFile`. */
     {
-        const edds_source_capability *capability =
-            edds_source_capability_of_format(metadata->source_format);
+        const edds_source_capability *capability = edds_source_capability_of_format(metadata->source_format);
 
         if (capability == NULL || !extension_is(metadata->source_file, capability->extension)) {
-            fail(error, "source-format-mismatch",
-                "The PC resource class must match the SourceFile extension.");
+            fail(error, "source-format-mismatch", "The PC resource class must match the SourceFile extension.");
             goto done;
         }
     }
@@ -800,8 +772,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
 
     /* The names; a NULL among them means a value outside its enum or table. */
     {
-        const edds_source_capability *capability =
-            edds_source_capability_of_format(metadata->source_format);
+        const edds_source_capability *capability = edds_source_capability_of_format(metadata->source_format);
 
         resource = capability == NULL ? NULL : capability->resource_class;
     }
@@ -819,8 +790,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         strlen(metadata->guid) != 16u ||
         !safe_string(metadata->name) ||
         !safe_string(metadata->source_file)) {
-        fail(error, "invalid-metadata-value",
-            "The structured metadata value is incomplete or unsupported.");
+        fail(error, "invalid-metadata-value", "The structured metadata value is incomplete or unsupported.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -833,8 +803,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         }
 
         if (metadata->source_format != EDDS_SOURCE_DDS && metadata->profile.contains_mips) {
-            fail(error, "unsupported-combination",
-                "ContainsMips is supported only for a DDS source.");
+            fail(error, "unsupported-combination", "ContainsMips is supported only for a DDS source.");
             return EDDS_UNSUPPORTED_FORMAT;
         }
     }
@@ -842,8 +811,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
     quality_text(metadata->profile.conversion_quality, quality);
 
     if (!meta_valid_guid(metadata->guid)) {
-        fail(error, "malformed-guid",
-            "The metadata GUID must be exactly 16 hexadecimal characters.");
+        fail(error, "malformed-guid", "The metadata GUID must be exactly 16 hexadecimal characters.");
         return EDDS_INVALID_INPUT;
     }
 

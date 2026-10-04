@@ -17,8 +17,7 @@ static edds_status malformed(edds_error *error, const char *what) {
 
 /** Reports more pairs than FONT_MAX_PAIRS, and returns EDDS_UNSUPPORTED_FORMAT. */
 static edds_status too_many_pairs(edds_error *error) {
-    font_fail(error, "kerning-limit", "The font has more than %zu kerning pairs in this set.",
-        FONT_MAX_PAIRS);
+    font_fail(error, "kerning-limit", "The font has more than %zu kerning pairs in this set.", FONT_MAX_PAIRS);
     return EDDS_UNSUPPORTED_FORMAT;
 }
 
@@ -141,9 +140,7 @@ static uint32_t class_of(const gpos_reader *gpos, uint32_t class_def, uint32_t g
     if (u16(table) == 1u) {
         const uint32_t first = u16(table + 2), count = u16(table + 4);
 
-        return glyph >= first && glyph - first < count
-            ? u16(table + 6u + 2u * (glyph - first))
-            : 0u;
+        return glyph >= first && glyph - first < count ? u16(table + 6u + 2u * (glyph - first)) : 0u;
     } else {
         uint32_t low = 0, high = u16(table + 2);
 
@@ -194,8 +191,7 @@ static int valid_class_def(const gpos_reader *gpos, uint32_t class_def) {
  * `gpos->subtables`. A format other than 1 or 2 is refused, and so is a subtable past
  * FONT_MAX_PAIR_SUBTABLES.
  */
-static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_t base,
-    edds_error *error) {
+static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_t base, edds_error *error) {
     pair_subtable subtable;
     unsigned      first_format, second_format;
 
@@ -219,9 +215,7 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
     subtable.record_size = subtable.first_size + 2u * bits_set(second_format);
 
     /* XAdvance is there when bit 2 is set, after the fields of bits 0 and 1. */
-    subtable.x_advance = (first_format & 0x0004u) != 0
-        ? (int)(2u * bits_set(first_format & 0x0003u))
-        : -1;
+    subtable.x_advance = (first_format & 0x0004u) != 0 ? (int)(2u * bits_set(first_format & 0x0003u)) : -1;
 
     if (!valid_coverage(gpos, subtable.coverage)) {
         return malformed(error, "a PairPos coverage");
@@ -250,13 +244,9 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
             return malformed(error, "a class PairPos subtable is truncated");
         }
 
-        subtable.class_first = u16(gpos->data + base + 8) == 0
-            ? 0u
-            : base + u16(gpos->data + base + 8);
+        subtable.class_first = u16(gpos->data + base + 8) == 0 ? 0u : base + u16(gpos->data + base + 8);
 
-        subtable.class_second = u16(gpos->data + base + 10) == 0
-            ? 0u
-            : base + u16(gpos->data + base + 10);
+        subtable.class_second = u16(gpos->data + base + 10) == 0 ? 0u : base + u16(gpos->data + base + 10);
 
         subtable.class_first_count  = u16(gpos->data + base + 12);
         subtable.class_second_count = u16(gpos->data + base + 14);
@@ -277,8 +267,7 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
          * Every subtable is asked about every character of the set; a font of thousands is a font
          * built to keep the generator busy rather than one somebody kerned.
          */
-        font_fail(error, "kerning-limit",
-            "The font's kern feature has more than %u pair subtables.", FONT_MAX_PAIR_SUBTABLES);
+        font_fail(error, "kerning-limit", "The font's kern feature has more than %u pair subtables.", FONT_MAX_PAIR_SUBTABLES);
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -287,8 +276,7 @@ static edds_status add_pair_subtable(gpos_reader *gpos, uint32_t lookup, uint32_
         pair_subtable *grown    = realloc(gpos->subtables, capacity * sizeof *grown);
 
         if (grown == NULL) {
-            font_fail(error, "allocation-failed",
-                "Memory for the kerning lookups could not be allocated.");
+            font_fail(error, "allocation-failed", "Memory for the kerning lookups could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
 
@@ -349,9 +337,7 @@ static edds_status mark_script_lookups(
 
     for (uint32_t index = 0; index <= indices; ++index) {
         /* The required feature, when there is one, applies like any listed one. */
-        const uint32_t feature = index == indices
-            ? u16(gpos->data + system + 2)
-            : u16(gpos->data + system + 6u + 2u * index);
+        const uint32_t feature = index == indices ? u16(gpos->data + system + 2) : u16(gpos->data + system + 6u + 2u * index);
         uint32_t       table, lookups;
 
         if (feature == 0xFFFFu && index == indices) {
@@ -422,8 +408,7 @@ static edds_status read_gpos(gpos_reader *gpos, edds_error *error) {
     marked = calloc(65536u, 1);
 
     if (marked == NULL) {
-        font_fail(error, "allocation-failed",
-            "Memory for the kerning lookups could not be allocated.");
+        font_fail(error, "allocation-failed", "Memory for the kerning lookups could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -431,14 +416,11 @@ static edds_status read_gpos(gpos_reader *gpos, edds_error *error) {
     for (uint32_t at = 0; at < script_count && status == EDDS_OK; ++at) {
         const uint32_t tag = u32(gpos->data + scripts + 2u + 6u * at);
 
-        if (tag != TAG('D', 'F', 'L', 'T') &&
-            tag != TAG('l', 'a', 't', 'n') &&
-            tag != TAG('c', 'y', 'r', 'l')) {
+        if (tag != TAG('D', 'F', 'L', 'T') && tag != TAG('l', 'a', 't', 'n') && tag != TAG('c', 'y', 'r', 'l')) {
             continue;
         }
 
-        status = mark_script_lookups(gpos, scripts + u16(gpos->data + scripts + 2u + 6u * at + 4u),
-            features, marked, error);
+        status = mark_script_lookups(gpos, scripts + u16(gpos->data + scripts + 2u + 6u * at + 4u), features, marked, error);
     }
 
     /* Lookups apply in LookupList order, whichever feature listed them first. */
@@ -544,8 +526,7 @@ static int pair_value(const gpos_reader *gpos, const pair_subtable *subtable, in
             return 0;
         }
 
-        record = gpos->data + subtable->base + 16u +
-            ((uint64_t)row * subtable->class_second_count + column) * subtable->record_size;
+        record = gpos->data + subtable->base + 16u + ((uint64_t)row * subtable->class_second_count + column) * subtable->record_size;
         *value = subtable->x_advance < 0 ? 0 : s16(record + subtable->x_advance);
 
         return 1;
@@ -713,12 +694,8 @@ static edds_status read_kern(
                 const size_t   first_right = first_slot(slots, slot_count, right_glyph);
 
                 /* Every character of the left glyph against every character of the right one. */
-                for (size_t left = first_left;
-                    left < slot_count && slots[left].glyph == left_glyph;
-                    ++left) {
-                    for (size_t right = first_right;
-                        right < slot_count && slots[right].glyph == right_glyph;
-                        ++right) {
+                for (size_t left = first_left; left < slot_count && slots[left].glyph == left_glyph; ++left) {
+                    for (size_t right = first_right; right < slot_count && slots[right].glyph == right_glyph; ++right) {
                         if (*entry_count == capacity) {
                             kern_entry *grown;
 
@@ -730,8 +707,7 @@ static edds_status read_kern(
                             grown    = realloc(*entries, capacity * sizeof *grown);
 
                             if (grown == NULL) {
-                                font_fail(error, "allocation-failed",
-                                    "Memory for the kern pairs could not be allocated.");
+                                font_fail(error, "allocation-failed", "Memory for the kern pairs could not be allocated.");
                                 return EDDS_INTERNAL_FAILURE;
                             }
 
@@ -768,11 +744,8 @@ typedef struct pair_list {
  * Scales a value from font units to atlas pixels, rounding halves away from zero, and appends the
  * pair, unless the rounded value is 0 or a character lies outside the BMP.
  */
-static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, double units,
-    double scale, edds_error *error) {
-    const double rounded = units * scale >= 0
-        ? floor(units * scale + 0.5)
-        : -floor(-units * scale + 0.5);
+static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, double units, double scale, edds_error *error) {
+    const double rounded = units * scale >= 0 ? floor(units * scale + 0.5) : -floor(-units * scale + 0.5);
 
     if (rounded == 0 || left > 0xFFFFu || right > 0xFFFFu) {
         return EDDS_OK;
@@ -789,8 +762,7 @@ static edds_status keep_pair(pair_list *list, uint32_t left, uint32_t right, dou
         grown          = realloc(list->pairs, list->capacity * sizeof *grown);
 
         if (grown == NULL) {
-            font_fail(error, "allocation-failed",
-                "Memory for the kerning pairs could not be allocated.");
+            font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
 
@@ -836,8 +808,7 @@ static edds_status gpos_pairs(
         done   = calloc(count == 0 ? 1u : count, sizeof *done);
 
         if (totals == NULL || done == NULL) {
-            font_fail(error, "allocation-failed",
-                "Memory for the kerning pairs could not be allocated.");
+            font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
             status = EDDS_INTERNAL_FAILURE;
         }
     }
@@ -888,8 +859,7 @@ static edds_status gpos_pairs(
         /* The sums that are not 0 become pairs. */
         for (size_t right = 0; status == EDDS_OK && right < count; ++right) {
             if (totals[right] != 0) {
-                status = keep_pair(list, codes[left], codes[right], (double)totals[right],
-                    scale, error);
+                status = keep_pair(list, codes[left], codes[right], (double)totals[right], scale, error);
             }
         }
     }
@@ -919,8 +889,7 @@ static edds_status kern_pairs(
     edds_status status;
 
     if (slots == NULL) {
-        font_fail(error, "allocation-failed",
-            "Memory for the kerning pairs could not be allocated.");
+        font_fail(error, "allocation-failed", "Memory for the kerning pairs could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -937,8 +906,7 @@ static edds_status kern_pairs(
 
     qsort(slots, slot_count, sizeof *slots, slot_order);
 
-    status = read_kern(face->data + face->kern.offset, face->kern.length, slots, slot_count,
-        &entries, &entry_count, error);
+    status = read_kern(face->data + face->kern.offset, face->kern.length, slots, slot_count, &entries, &entry_count, error);
 
     /* Sorted, the entries of one pair of characters lie together, in subtable order. */
     if (status == EDDS_OK) {
@@ -948,15 +916,11 @@ static edds_status kern_pairs(
             int64_t      total = 0;
             const size_t first = at;
 
-            for (; at < entry_count &&
-                entries[at].left == entries[first].left &&
-                entries[at].right == entries[first].right;
-                ++at) {
+            for (; at < entry_count && entries[at].left == entries[first].left && entries[at].right == entries[first].right; ++at) {
                 total = entries[at].replace ? entries[at].value : total + entries[at].value;
             }
 
-            status = keep_pair(list, codes[entries[first].left], codes[entries[first].right],
-                (double)total, scale, error);
+            status = keep_pair(list, codes[entries[first].left], codes[entries[first].right], (double)total, scale, error);
         }
     }
 

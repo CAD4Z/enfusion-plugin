@@ -281,14 +281,12 @@ edds_status edds_pool_execute(edds_pool *pool, uint64_t initial_charge,
             edds_pool_release(pool, charge);
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "cancelled");
-            (void)snprintf(error->message, sizeof error->message,
-                "The batch was cancelled before this conversion attempt started.");
+            (void)snprintf(error->message, sizeof error->message, "The batch was cancelled before this conversion attempt started.");
             return EDDS_CANCELLED;
         }
 
         /* One attempt. A charge over the whole budget runs alone, with no quota at all. */
-        result = edds_memory_run(charge > pool->budget ? UINT64_MAX : charge,
-            operation, context, error);
+        result = edds_memory_run(charge > pool->budget ? UINT64_MAX : charge, operation, context, error);
         edds_pool_release(pool, charge);
 
         /* Done, unless the quota refused an allocation; `required` is then what it needed. */
@@ -444,8 +442,7 @@ edds_status edds_pool_run(
     if (pool.next < count) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "batch-pool-incomplete");
-        (void)snprintf(error->message, sizeof error->message,
-            "The batch worker pool did not run every job.");
+        (void)snprintf(error->message, sizeof error->message, "The batch worker pool did not run every job.");
         return EDDS_INTERNAL_FAILURE;
     }
 

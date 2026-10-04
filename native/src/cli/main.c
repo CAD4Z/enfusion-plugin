@@ -45,8 +45,7 @@ int CLI_ENTRY(int argc, cli_char **argv) {
 
     memset(&error, 0, sizeof error);
     (void)snprintf(error.code, sizeof error.code, "invalid-command");
-    (void)snprintf(error.message, sizeof error.message,
-        "Expected protocol or an area: edds, font.");
+    (void)snprintf(error.message, sizeof error.message, "Expected protocol or an area: edds, font.");
 
     return report_failure(EDDS_INVALID_INVOCATION, &error);
 }

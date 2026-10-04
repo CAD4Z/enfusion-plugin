@@ -63,11 +63,7 @@ typedef struct edds_batch_record {
  * Returns EDDS_OK with `*record` filled in; EDDS_INVALID_INVOCATION when the line is not a valid
  * record; or, for a job whose profile edds_profile_check refuses, that refusal.
  */
-edds_status edds_batch_parse_line(
-    const char        *line,
-    size_t             size,
-    edds_batch_record *record,
-    edds_error        *error);
+edds_status edds_batch_parse_line(const char *line, size_t size, edds_batch_record *record, edds_error *error);
 
 /**
  * Frames NDJSON lines out of a byte stream. Where a read happened to split is not something the

@@ -6,12 +6,7 @@
 
 /** Characters that only separate the others: control characters, the space, line separators. */
 static int separates(uint32_t code) {
-    return code < 0x20u ||
-        code == 0x20u ||
-        code == 0x7Fu ||
-        (code >= 0x80u && code <= 0x9Fu) ||
-        code == 0x2028u ||
-        code == 0x2029u;
+    return code < 0x20u || code == 0x20u || code == 0x7Fu || (code >= 0x80u && code <= 0x9Fu) || code == 0x2028u || code == 0x2029u;
 }
 
 /**
@@ -85,8 +80,7 @@ static int ascending(const void *left, const void *right) {
  * owns `codes`. More distinct characters than FONT_MAX_CHARACTERS are refused, and `codes` is
  * freed.
  */
-static edds_status finish(uint32_t *codes, size_t count, font_characters *characters,
-    edds_error *error) {
+static edds_status finish(uint32_t *codes, size_t count, font_characters *characters, edds_error *error) {
     size_t unique = 0;
 
     qsort(codes, count, sizeof *codes, ascending);
@@ -100,8 +94,7 @@ static edds_status finish(uint32_t *codes, size_t count, font_characters *charac
 
     if (unique > FONT_MAX_CHARACTERS) {
         free(codes);
-        font_fail(error, "character-set-limit", "A font holds at most %u characters.",
-            FONT_MAX_CHARACTERS);
+        font_fail(error, "character-set-limit", "A font holds at most %u characters.", FONT_MAX_CHARACTERS);
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -115,11 +108,7 @@ static edds_status finish(uint32_t *codes, size_t count, font_characters *charac
  * Reads a character-set file: every UTF-8 character in it that does not only separate the others
  * joins the set. On success the caller owns `characters` and frees it with font_characters_free.
  */
-edds_status font_characters_parse(
-    const uint8_t   *text,
-    size_t           size,
-    font_characters *characters,
-    edds_error      *error) {
+edds_status font_characters_parse(const uint8_t *text, size_t size, font_characters *characters, edds_error *error) {
     uint32_t *codes;
     size_t    count = 0;
     size_t    at    = 0;
@@ -133,8 +122,7 @@ edds_status font_characters_parse(
     memset(characters, 0, sizeof *characters);
 
     if (size > FONT_MAX_CHARACTER_FILE_BYTES) {
-        font_fail(error, "character-file-limit", "A character set file is at most %u bytes.",
-            FONT_MAX_CHARACTER_FILE_BYTES);
+        font_fail(error, "character-file-limit", "A character set file is at most %u bytes.", FONT_MAX_CHARACTER_FILE_BYTES);
         return EDDS_INVALID_INPUT;
     }
 
@@ -142,8 +130,7 @@ edds_status font_characters_parse(
     codes = malloc((size == 0 ? 1u : size) * sizeof *codes);
 
     if (codes == NULL) {
-        font_fail(error, "allocation-failed",
-            "Memory for the character set could not be allocated.");
+        font_fail(error, "allocation-failed", "Memory for the character set could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -159,8 +146,7 @@ edds_status font_characters_parse(
 
         if (length == 0) {
             free(codes);
-            font_fail(error, "malformed-characters",
-                "The character set is not valid UTF-8 at byte %llu.", (unsigned long long)at);
+            font_fail(error, "malformed-characters", "The character set is not valid UTF-8 at byte %llu.", (unsigned long long)at);
             return EDDS_INVALID_INPUT;
         }
 
@@ -195,8 +181,7 @@ edds_status font_characters_builtin(font_characters *characters, edds_error *err
     memset(characters, 0, sizeof *characters);
 
     if (codes == NULL) {
-        font_fail(error, "allocation-failed",
-            "Memory for the character set could not be allocated.");
+        font_fail(error, "allocation-failed", "Memory for the character set could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 

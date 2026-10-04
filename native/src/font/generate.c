@@ -76,8 +76,7 @@ static double rounded(double value) {
  * Appends a rectangle from (x0, y0) to (x1, y1) as one more contour of four on-curve corners,
  * running clockwise or the other way round as `clockwise` says. 0 when memory runs out.
  */
-static int add_rectangle(font_contours *contours, double x0, double y0, double x1, double y1,
-    int clockwise) {
+static int add_rectangle(font_contours *contours, double x0, double y0, double x1, double y1, int clockwise) {
     const size_t base = contours->count;
     font_point  *points;
     size_t      *ends;
@@ -137,8 +136,7 @@ static int add_rectangle(font_contours *contours, double x0, double y0, double x
  * space it lacks (no contours at all) or a box (a square frame). On success the caller owns
  * `contours` and frees them with font_contours_free.
  */
-static edds_status job_contours(const font_face *face, glyph_job *job, font_contours *contours,
-    uint32_t *advance, edds_error *error) {
+static edds_status job_contours(const font_face *face, glyph_job *job, font_contours *contours, uint32_t *advance, edds_error *error) {
     const double em = face->units_per_em;
 
     memset(contours, 0, sizeof *contours);
@@ -167,8 +165,7 @@ static edds_status job_contours(const font_face *face, glyph_job *job, font_cont
         if (!add_rectangle(contours, x0, y0, x1, y1, 1) ||
             !add_rectangle(contours, x0 + stroke, y0 + stroke, x1 - stroke, y1 - stroke, 0)) {
             font_contours_free(contours);
-            font_fail(error, "allocation-failed",
-                "Memory for the missing-glyph box could not be allocated.");
+            font_fail(error, "allocation-failed", "Memory for the missing-glyph box could not be allocated.");
             return EDDS_INTERNAL_FAILURE;
         }
     }
@@ -180,8 +177,7 @@ static edds_status job_contours(const font_face *face, glyph_job *job, font_cont
  * The outline in atlas pixels, its union, and the whole-pixel box the engine centres in a cell.
  * The shapes stay in the job, for the caller to free, whether or not this succeeds.
  */
-static edds_status prepare_job(const font_face *face, glyph_job *job, double scale,
-    edds_error *error) {
+static edds_status prepare_job(const font_face *face, glyph_job *job, double scale, edds_error *error) {
     font_contours contours;
     uint32_t      advance = 0;
     double        box[4];
@@ -245,8 +241,7 @@ static void free_jobs(glyph_job *jobs, size_t count) {
  * and the number of cells in a row go to the out parameters; 0 when no atlas up to 4096 by 4096
  * holds them all.
  */
-static int choose_atlas(size_t cells, uint32_t cell, uint32_t *width, uint32_t *height,
-    uint32_t *columns) {
+static int choose_atlas(size_t cells, uint32_t cell, uint32_t *width, uint32_t *height, uint32_t *columns) {
     /* Smallest area first; within one area, the squarest shape first. 2^24 is 4096 by 4096. */
     for (uint32_t area_bits = 0; area_bits <= 24u; ++area_bits) {
         for (int height_bits = (int)(area_bits / 2u); height_bits >= 0; --height_bits) {
@@ -286,8 +281,7 @@ static void render_task(void *context, uint32_t index, edds_pool *pool) {
         job->status = EDDS_CANCELLED;
         font_fail(&job->error, "cancelled", "The font generation was cancelled.");
     } else {
-        job->status = font_field_render(&job->boundary, &job->shape, &job->placement,
-            run->atlas, run->atlas_width, &job->error);
+        job->status = font_field_render(&job->boundary, &job->shape, &job->placement, run->atlas, run->atlas_width, &job->error);
     }
 
     /* Under the pool's output lock: one more job finished, and the progress from 0.1 to 0.95. */
@@ -295,8 +289,7 @@ static void render_task(void *context, uint32_t index, edds_pool *pool) {
     ++run->finished;
 
     if (run->progress != NULL) {
-        run->progress(run->progress_context,
-            0.1 + 0.85 * (double)run->finished / (double)run->count);
+        run->progress(run->progress_context, 0.1 + 0.85 * (double)run->finished / (double)run->count);
     }
 
     edds_pool_unlock_output(pool);
@@ -329,8 +322,7 @@ static int push_code(uint32_t **list, size_t *count, uint32_t code) {
  * rounded the way Font Editor rounds. The glyph is looked up in the font whether or not the set
  * holds it.
  */
-static edds_status cap_height_of(const font_face *face, double scale, float *cap_height,
-    edds_error *error) {
+static edds_status cap_height_of(const font_face *face, double scale, float *cap_height, edds_error *error) {
     static const uint32_t probes[] = { 0x48u, 0x41Du };
 
     if (face->cap_height > 0) {
@@ -482,9 +474,8 @@ edds_status font_generate(
 
         for (size_t at = 0; at < character_count; ++at) {
             const uint32_t glyph     = font_face_glyph(&face, characters[at].code);
-            const int      mandatory = characters[at].code == FONT_SPACE ||
-                characters[at].code == FONT_MISSING_BOX;
-            size_t job = job_count;
+            const int      mandatory = characters[at].code == FONT_SPACE || characters[at].code == FONT_MISSING_BOX;
+            size_t         job       = job_count;
 
             if (glyph == 0 && !mandatory) {
                 if (!push_code(&output->missing, &output->missing_count, characters[at].code)) {
@@ -494,8 +485,7 @@ edds_status font_generate(
                 continue;
             }
 
-            if (glyph == 0 &&
-                !push_code(&output->drawn, &output->drawn_count, characters[at].code)) {
+            if (glyph == 0 && !push_code(&output->drawn, &output->drawn_count, characters[at].code)) {
                 goto out_of_memory;
             }
 
@@ -508,9 +498,7 @@ edds_status font_generate(
 
             /* A glyph not met before gets a cell of its own. */
             if (job == job_count) {
-                jobs[job].origin = glyph != 0
-                    ? FROM_FONT
-                    : (characters[at].code == FONT_SPACE ? DRAWN_SPACE : DRAWN_BOX);
+                jobs[job].origin = glyph != 0 ? FROM_FONT : (characters[at].code == FONT_SPACE ? DRAWN_SPACE : DRAWN_BOX);
                 jobs[job].glyph  = glyph;
                 ++job_count;
             }
@@ -559,8 +547,7 @@ edds_status font_generate(
     /* The atlas: square cells of the largest box side plus the margin. */
     output->cell = largest + CELL_MARGIN;
 
-    if (!choose_atlas(job_count, output->cell, &output->atlas_width, &output->atlas_height,
-            &columns)) {
+    if (!choose_atlas(job_count, output->cell, &output->atlas_width, &output->atlas_height, &columns)) {
         font_fail(error, "atlas-too-large",
             "%zu glyphs in %u-pixel cells do not fit one %u by %u atlas.",
             job_count, output->cell, FONT_MAX_ATLAS, FONT_MAX_ATLAS);
@@ -612,8 +599,7 @@ edds_status font_generate(
         run.progress_context = progress_context;
         run.finished         = 0;
 
-        status = edds_pool_run((uint32_t)job_count, EDDS_POOL_MEMORY_BUDGET, render_task,
-            &run, error);
+        status = edds_pool_run((uint32_t)job_count, EDDS_POOL_MEMORY_BUDGET, render_task, &run, error);
 
         if (status != EDDS_OK) {
             goto done;
@@ -653,8 +639,7 @@ edds_status font_generate(
     }
 
     /* The kerning between the characters the font holds. */
-    status = font_face_kerning(&face, codes, glyphs, character_count, scale, &pairs,
-        &pair_count, error);
+    status = font_face_kerning(&face, codes, glyphs, character_count, scale, &pairs, &pair_count, error);
 
     if (status != EDDS_OK) {
         goto done;
@@ -721,8 +706,7 @@ void font_output_free(font_output *output) {
 }
 
 /** What a TrueType file says about itself: its family and style, units per em and glyph count. */
-edds_status font_source_describe(const uint8_t *data, size_t size, font_source_info *info,
-    edds_error *error) {
+edds_status font_source_describe(const uint8_t *data, size_t size, font_source_info *info, edds_error *error) {
     font_face   face;
     edds_status status;
 

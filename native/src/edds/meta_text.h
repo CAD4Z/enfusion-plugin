@@ -64,10 +64,6 @@ int meta_valid_guid(const char *text);
  * path. The GUID is copied character for character, case included. Returns 0 when `value` is not
  * of that shape or the path does not fit `name`.
  */
-int meta_parse_name(
-    const char *value,
-    char        guid[EDDS_METADATA_GUID_BYTES],
-    char       *name,
-    size_t      name_capacity);
+int meta_parse_name(const char *value, char guid[EDDS_METADATA_GUID_BYTES], char *name, size_t name_capacity);
 
 #endif

@@ -32,8 +32,7 @@ static edds_status fail(edds_error *error, const char *code, const char *format,
 
 /** Steps over the spaces, tabs and line breaks JSON allows between its parts. */
 static void space(json_scan *scan) {
-    while (scan->at < scan->end &&
-        (*scan->at == ' ' || *scan->at == '\t' || *scan->at == '\r' || *scan->at == '\n')) {
+    while (scan->at < scan->end && (*scan->at == ' ' || *scan->at == '\t' || *scan->at == '\r' || *scan->at == '\n')) {
         ++scan->at;
     }
 }
@@ -519,11 +518,7 @@ static int bool_value(json_scan *scan, int *result) {
  * Returns 0 when it is malformed. A profile that reads well but that edds_profile_check refuses
  * also returns 0, with the refusal in `*profile_status` and `*profile_error`.
  */
-static int profile_value(
-    json_scan    *scan,
-    edds_profile *profile,
-    edds_status  *profile_status,
-    edds_error   *profile_error) {
+static int profile_value(json_scan *scan, edds_profile *profile, edds_status *profile_status, edds_error *profile_error) {
     unsigned fields = 0;
 
     if (!take(scan, '{')) {
@@ -842,8 +837,7 @@ static int expected_value(json_scan *scan, edds_batch_job *job) {
  * header (`count` not NULL) its "jobCount" into `*count`; each once and nothing else. Returns 1
  * when the record is exactly that.
  */
-static int simple_record(const char *line, size_t size, const char *expected_kind,
-    uint32_t *count) {
+static int simple_record(const char *line, size_t size, const char *expected_kind, uint32_t *count) {
     json_scan scan   = { line, line + size };
     unsigned  fields = 0;
 
@@ -1037,32 +1031,21 @@ static int job_record(
  * Two readings of the line: discover finds its protocol version and kind, then the reader of that
  * kind reads it again in full and refuses anything it does not know.
  */
-edds_status edds_batch_parse_line(
-    const char        *line,
-    size_t             size,
-    edds_batch_record *record,
-    edds_error        *error) {
+edds_status edds_batch_parse_line(const char *line, size_t size, edds_batch_record *record, edds_error *error) {
     uint32_t    version        = 0;
     char        kind[32]       = { 0 };
     edds_status profile_status = EDDS_OK;
 
-    if (line == NULL ||
-        record == NULL ||
-        error == NULL ||
-        size == 0u ||
-        size > EDDS_BATCH_MAX_LINE_BYTES) {
-        return fail(error, "batch-line-size",
-            "A batch NDJSON record is empty or exceeds the hard line limit.");
+    if (line == NULL || record == NULL || error == NULL || size == 0u || size > EDDS_BATCH_MAX_LINE_BYTES) {
+        return fail(error, "batch-line-size", "A batch NDJSON record is empty or exceeds the hard line limit.");
     }
 
     if (!discover(line, size, &version, kind)) {
-        return fail(error, "malformed-batch-record",
-            "A batch input line is not a valid NDJSON object.");
+        return fail(error, "malformed-batch-record", "A batch input line is not a valid NDJSON object.");
     }
 
     if (version != 1u) {
-        return fail(error, "incompatible-batch-version",
-            "A batch input record uses an incompatible protocol version.");
+        return fail(error, "incompatible-batch-version", "A batch input record uses an incompatible protocol version.");
     }
 
     memset(record, 0, sizeof *record);
@@ -1105,8 +1088,7 @@ edds_status edds_batch_parse_line(
     return fail(error, "unknown-batch-record", "A batch input record has an unknown kind.");
 
 malformed:
-    return fail(error, "malformed-batch-record",
-        "A batch input record is incomplete, duplicated, or unsupported.");
+    return fail(error, "malformed-batch-record", "A batch input record is incomplete, duplicated, or unsupported.");
 }
 
 /** Clears the reader: no line gathered, nothing being swallowed. */

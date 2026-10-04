@@ -183,9 +183,7 @@ edds_status font_fnt_write(
     for (size_t at = 0; at < entry_count;) {
         size_t run = 1;
 
-        while (at + run < entry_count &&
-            entries[at + run].code == entries[at].code + run &&
-            run < 0xFFFFu) {
+        while (at + run < entry_count && entries[at + run].code == entries[at].code + run && run < 0xFFFFu) {
             ++run;
         }
 
@@ -257,8 +255,7 @@ static uint32_t be32(const uint8_t *at) {
 
 /** The 32-bit number stored little-endian at `at`, the way chunk fields are. */
 static uint32_t read32(const uint8_t *at) {
-    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) |
-        ((uint32_t)at[3] << 24);
+    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) | ((uint32_t)at[3] << 24);
 }
 
 /** The 16-bit number stored little-endian at `at`. */
@@ -286,8 +283,7 @@ static edds_status malformed(edds_error *error, const char *what) {
  * fields. A name that is empty, too long or not terminated, or a metric that is not a finite
  * number, is refused.
  */
-static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *info,
-    edds_error *error) {
+static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *info, edds_error *error) {
     uint32_t       name_size;
     const uint8_t *at;
 
@@ -330,8 +326,7 @@ static edds_status read_head(const uint8_t *chunk, uint32_t size, font_info *inf
  * Reads the body of GLPS into `info`: after eight skipped bytes, the number of glyphs and of runs,
  * then the runs, which must add up to the number of glyphs. The runs go to a new `info->ranges`.
  */
-static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *info,
-    edds_error *error) {
+static edds_status read_glps(const uint8_t *chunk, uint32_t size, font_info *info, edds_error *error) {
     uint64_t total = 0;
 
     if (size < 16u) {
@@ -398,8 +393,7 @@ edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
         (length = ftell(input)) < 0 ||
         fseek(input, 0, SEEK_SET) != 0 ||
         (uint64_t)length > FONT_MAX_FILE_BYTES) {
-        font_fail(error, "fnt-size-limit", "The FNT file could not be measured within %u bytes.",
-            FONT_MAX_FILE_BYTES);
+        font_fail(error, "fnt-size-limit", "The FNT file could not be measured within %u bytes.", FONT_MAX_FILE_BYTES);
         return EDDS_INVALID_INPUT;
     }
 
@@ -418,10 +412,7 @@ edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
     }
 
     /* One FORM of type FNT5, whose size covers the rest of the file exactly. */
-    if (size < 12u ||
-        memcmp(data, "FORM", 4) != 0 ||
-        memcmp(data + 8, "FNT5", 4) != 0 ||
-        (uint64_t)be32(data + 4) + 8u != size) {
+    if (size < 12u || memcmp(data, "FORM", 4) != 0 || memcmp(data + 8, "FNT5", 4) != 0 || (uint64_t)be32(data + 4) + 8u != size) {
         free(data);
         return malformed(error, "it is not one FORM of type FNT5");
     }
@@ -444,11 +435,9 @@ edds_status font_inspect(FILE *input, font_info *info, edds_error *error) {
 
         /* HEAD and GLPS are read, and may occur only once; TCRD and KERN are only measured. */
         if (memcmp(data + at, "HEAD", 4) == 0) {
-            status = head++ ? malformed(error, "HEAD occurs twice")
-                            : read_head(data + at + 8u, chunk_size, info, error);
+            status = head++ ? malformed(error, "HEAD occurs twice") : read_head(data + at + 8u, chunk_size, info, error);
         } else if (memcmp(data + at, "GLPS", 4) == 0) {
-            status = glyphs++ ? malformed(error, "GLPS occurs twice")
-                              : read_glps(data + at + 8u, chunk_size, info, error);
+            status = glyphs++ ? malformed(error, "GLPS occurs twice") : read_glps(data + at + 8u, chunk_size, info, error);
         } else if (memcmp(data + at, "TCRD", 4) == 0) {
             ++boxes;
             box_bytes = chunk_size;

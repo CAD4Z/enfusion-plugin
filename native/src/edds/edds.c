@@ -45,10 +45,7 @@ typedef struct stored_mip {
 
 /** Reads a 32-bit number stored low byte first. */
 static uint32_t u32le(const uint8_t *at) {
-    return (uint32_t)at[0] |
-        ((uint32_t)at[1] << 8) |
-        ((uint32_t)at[2] << 16) |
-        ((uint32_t)at[3] << 24);
+    return (uint32_t)at[0] | ((uint32_t)at[1] << 8) | ((uint32_t)at[2] << 16) | ((uint32_t)at[3] << 24);
 }
 
 /** Fills `error` with a code and a printf-style message; does nothing when `error` is NULL. */
@@ -170,8 +167,7 @@ static edds_pixel_format classify(const edds_info *info) {
         info->r_mask == 0x00ff0000u &&
         info->g_mask == 0x0000ff00u &&
         info->b_mask == 0x000000ffu) {
-        if ((info->pixel_format_flags & DDPF_ALPHAPIXELS) != 0 &&
-            info->a_mask == 0xff000000u) {
+        if ((info->pixel_format_flags & DDPF_ALPHAPIXELS) != 0 && info->a_mask == 0xff000000u) {
             return EDDS_PIXEL_BGRA8;
         }
 
@@ -192,8 +188,7 @@ static int topology_is_previewable(const edds_info *info) {
         return 0;
     }
 
-    if ((info->pixel_format_flags & DDPF_FOURCC) != 0 &&
-        strcmp(info->four_cc, "DX10") == 0) {
+    if ((info->pixel_format_flags & DDPF_FOURCC) != 0 && strcmp(info->four_cc, "DX10") == 0) {
         return info->resource_dimension == DDS_RESOURCE_DIMENSION_TEXTURE2D &&
             info->array_size == 1 &&
             (info->misc_flag & DDS_RESOURCE_MISC_TEXTURECUBE) == 0;
@@ -233,8 +228,7 @@ static edds_status scan_lz4(
     consumed = 4;
 
     if (total == 0 || total > EDDS_MAX_PREVIEW_BYTES) {
-        fail(error, "decoded-size-limit",
-            "The LZ4 decoded size %u is outside the supported limit.", total);
+        fail(error, "decoded-size-limit", "The LZ4 decoded size %u is outside the supported limit.", total);
         return EDDS_INVALID_INPUT;
     }
 
@@ -247,11 +241,8 @@ static edds_status scan_lz4(
             return EDDS_CANCELLED;
         }
 
-        if (count >= EDDS_MAX_LZ4_BLOCKS ||
-            stored_bytes - consumed < 4 ||
-            !read_exact(input, word, sizeof word)) {
-            fail(error, "invalid-lz4-frame",
-                "The LZ4 block table is malformed or exceeds %u blocks.", EDDS_MAX_LZ4_BLOCKS);
+        if (count >= EDDS_MAX_LZ4_BLOCKS || stored_bytes - consumed < 4 || !read_exact(input, word, sizeof word)) {
+            fail(error, "invalid-lz4-frame", "The LZ4 block table is malformed or exceeds %u blocks.", EDDS_MAX_LZ4_BLOCKS);
             return EDDS_INVALID_INPUT;
         }
 
@@ -259,11 +250,8 @@ static edds_status scan_lz4(
         compressed  = framed & 0x7fffffffu;
         consumed   += 4;
 
-        if (compressed == 0 ||
-            compressed > EDDS_MAX_LZ4_STORED_BLOCK ||
-            compressed > stored_bytes - consumed) {
-            fail(error, "invalid-lz4-block",
-                "An LZ4 block has an invalid stored size of %u bytes.", compressed);
+        if (compressed == 0 || compressed > EDDS_MAX_LZ4_STORED_BLOCK || compressed > stored_bytes - consumed) {
+            fail(error, "invalid-lz4-block", "An LZ4 block has an invalid stored size of %u bytes.", compressed);
             return EDDS_INVALID_INPUT;
         }
 
@@ -282,8 +270,7 @@ static edds_status scan_lz4(
     }
 
     if (!saw_final || consumed != stored_bytes) {
-        fail(error, "invalid-lz4-final-block",
-            "The LZ4 framing has no unique final block at the payload boundary.");
+        fail(error, "invalid-lz4-final-block", "The LZ4 framing has no unique final block at the payload boundary.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -348,12 +335,8 @@ edds_status edds_inspect(
         return EDDS_INVALID_INPUT;
     }
 
-    if (memcmp(header, "DDS ", 4) != 0 ||
-        u32le(header + 4) != 124 ||
-        u32le(header + 76) != 32 ||
-        memcmp(header + 36, "ENF1", 4) != 0) {
-        fail(error, "invalid-edds-header",
-            "The input is not a supported DDS header with an ENF1 marker.");
+    if (memcmp(header, "DDS ", 4) != 0 || u32le(header + 4) != 124 || u32le(header + 76) != 32 || memcmp(header + 36, "ENF1", 4) != 0) {
+        fail(error, "invalid-edds-header", "The input is not a supported DDS header with an ENF1 marker.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -370,10 +353,7 @@ edds_status edds_inspect(
     memcpy(info->four_cc, header + 84, 4);
     info->four_cc[4] = '\0';
 
-    if (info->four_cc[0] == '\0' &&
-        info->four_cc[1] == '\0' &&
-        info->four_cc[2] == '\0' &&
-        info->four_cc[3] == '\0') {
+    if (info->four_cc[0] == '\0' && info->four_cc[1] == '\0' && info->four_cc[2] == '\0' && info->four_cc[3] == '\0') {
         (void)memcpy(info->four_cc, "NONE", 5);
     } else {
         for (uint32_t at = 0; at < 4; ++at) {
@@ -394,12 +374,8 @@ edds_status edds_inspect(
     info->caps          = u32le(header + 108);
     info->caps2         = u32le(header + 112);
 
-    if (info->width == 0 ||
-        info->height == 0 ||
-        info->width > EDDS_MAX_DIMENSION ||
-        info->height > EDDS_MAX_DIMENSION) {
-        fail(error, "dimension-limit", "Texture dimensions must be between 1 and %u.",
-            EDDS_MAX_DIMENSION);
+    if (info->width == 0 || info->height == 0 || info->width > EDDS_MAX_DIMENSION || info->height > EDDS_MAX_DIMENSION) {
+        fail(error, "dimension-limit", "Texture dimensions must be between 1 and %u.", EDDS_MAX_DIMENSION);
         return EDDS_INVALID_INPUT;
     }
 
@@ -414,8 +390,7 @@ edds_status edds_inspect(
     }
 
     /* A FourCC of `DX10` means the DX10 header follows, and the mip table only after it. */
-    if ((info->pixel_format_flags & DDPF_FOURCC) != 0 &&
-        strcmp(info->four_cc, "DX10") == 0) {
+    if ((info->pixel_format_flags & DDPF_FOURCC) != 0 && strcmp(info->four_cc, "DX10") == 0) {
         if (size < DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES + (uint64_t)mip_count * 8u ||
             !read_exact(input, header + DDS_HEADER_BYTES, DDS_DX10_HEADER_BYTES)) {
             fail(error, "truncated-dx10-header", "The DDS DX10 header is truncated.");
@@ -480,8 +455,7 @@ edds_status edds_inspect(
         } else if (memcmp(descriptor, "LZ4 ", 4) == 0) {
             stored[stored_index].container = EDDS_CONTAINER_LZ4;
         } else {
-            fail(error, "unsupported-container", "Mip %u has an unknown ENF1 container tag.",
-                level);
+            fail(error, "unsupported-container", "Mip %u has an unknown ENF1 container tag.", level);
             return EDDS_INVALID_INPUT;
         }
 
@@ -489,10 +463,8 @@ edds_status edds_inspect(
         stored[stored_index].data_offset  = payload_at;
         stored[stored_index].block_count  = 0;
 
-        if (stored[stored_index].stored_bytes == 0 ||
-            stored[stored_index].stored_bytes > size - payload_at) {
-            fail(error, "truncated-mip-payload", "Mip %u extends beyond the input boundary.",
-                level);
+        if (stored[stored_index].stored_bytes == 0 || stored[stored_index].stored_bytes > size - payload_at) {
+            fail(error, "truncated-mip-payload", "Mip %u extends beyond the input boundary.", level);
             return EDDS_INVALID_INPUT;
         }
 
@@ -518,8 +490,7 @@ edds_status edds_inspect(
 
         /* When the format can be previewed, a mip's size fixes the bytes it must decode to. */
         if (info->preview_supported) {
-            expected = edds_gpu_mip_bytes(info->pixel_format, mip_dimension(info->width, level),
-                mip_dimension(info->height, level));
+            expected = edds_gpu_mip_bytes(info->pixel_format, mip_dimension(info->width, level), mip_dimension(info->height, level));
 
             if (expected == 0 || stored[stored_index].decoded_bytes != expected) {
                 fail(error, "unexpected-mip-size",
@@ -561,11 +532,7 @@ edds_status edds_inspect(
  * Adds to `length` the bytes that extend an LZ4 length: each byte is added, and one of 255 means
  * another follows. Returns 0 when the input ends first or the sum would overflow.
  */
-static int extend_length(
-    const uint8_t *source,
-    size_t         source_size,
-    size_t        *source_at,
-    size_t        *length) {
+static int extend_length(const uint8_t *source, size_t source_size, size_t *source_at, size_t *length) {
     uint8_t addition;
 
     do {
@@ -606,13 +573,11 @@ static int decode_lz4_block(
         size_t        offset;
 
         /* The literals: as many as the token's high four bits say, more when those are 15. */
-        if (literal_length == 15 &&
-            !extend_length(source, source_size, &source_at, &literal_length)) {
+        if (literal_length == 15 && !extend_length(source, source_size, &source_at, &literal_length)) {
             return 0;
         }
 
-        if (literal_length > source_size - source_at ||
-            literal_length > output_capacity - *output_at) {
+        if (literal_length > source_size - source_at || literal_length > output_capacity - *output_at) {
             return 0;
         }
 
@@ -641,8 +606,7 @@ static int decode_lz4_block(
 
         match_length = (token & 0x0fu) + 4u;
 
-        if ((token & 0x0fu) == 15 &&
-            !extend_length(source, source_size, &source_at, &match_length)) {
+        if ((token & 0x0fu) == 15 && !extend_length(source, source_size, &source_at, &match_length)) {
             return 0;
         }
 
@@ -678,9 +642,7 @@ static edds_status decode_lz4(
     int      saw_final = 0;
 
     /* The decoded size that opens the mip must still be the one the inspection read. */
-    if (!seek_to(input, mip->data_offset) ||
-        !read_exact(input, word, sizeof word) ||
-        u32le(word) != mip->decoded_bytes) {
+    if (!seek_to(input, mip->data_offset) || !read_exact(input, word, sizeof word) || u32le(word) != mip->decoded_bytes) {
         fail(error, "changed-input", "The LZ4 payload no longer matches its inspection.");
         return EDDS_INVALID_INPUT;
     }
@@ -706,9 +668,7 @@ static edds_status decode_lz4(
         compressed_size  = framed & 0x7fffffffu;
         consumed        += 4;
 
-        if (compressed_size == 0 ||
-            compressed_size > EDDS_MAX_LZ4_STORED_BLOCK ||
-            compressed_size > mip->stored_bytes - consumed) {
+        if (compressed_size == 0 || compressed_size > EDDS_MAX_LZ4_STORED_BLOCK || compressed_size > mip->stored_bytes - consumed) {
             fail(error, "changed-input", "An LZ4 block no longer matches its inspection.");
             return EDDS_INVALID_INPUT;
         }
@@ -726,18 +686,15 @@ static edds_status decode_lz4(
             !decode_lz4_block(compressed, compressed_size, output, mip->decoded_bytes,
                 &output_at)) {
             edds_free(compressed);
-            fail(error, "invalid-lz4-data",
-                "An LZ4 block cannot be decoded within the declared boundary.");
+            fail(error, "invalid-lz4-data", "An LZ4 block cannot be decoded within the declared boundary.");
             return EDDS_INVALID_INPUT;
         }
 
         edds_free(compressed);
         consumed += compressed_size;
 
-        if ((framed & 0x80000000u) == 0 &&
-            output_at - block_output_at != LZ4_DECODED_BLOCK_BYTES) {
-            fail(error, "invalid-lz4-block-size",
-                "A non-final LZ4 block did not decode to 65536 bytes.");
+        if ((framed & 0x80000000u) == 0 && output_at - block_output_at != LZ4_DECODED_BLOCK_BYTES) {
+            fail(error, "invalid-lz4-block-size", "A non-final LZ4 block did not decode to 65536 bytes.");
             return EDDS_INVALID_INPUT;
         }
 
@@ -748,8 +705,7 @@ static edds_status decode_lz4(
     }
 
     if (!saw_final || consumed != mip->stored_bytes || output_at != mip->decoded_bytes) {
-        fail(error, "invalid-lz4-output",
-            "The LZ4 stream does not produce its declared output size.");
+        fail(error, "invalid-lz4-output", "The LZ4 stream does not produce its declared output size.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -784,8 +740,7 @@ edds_status edds_preview(
     }
 
     if (input == NULL || info == NULL || rgba == NULL || rgba_size == NULL) {
-        fail(error, "invalid-api-argument",
-            "The input, inspection, and preview outputs are required.");
+        fail(error, "invalid-api-argument", "The input, inspection, and preview outputs are required.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -795,8 +750,7 @@ edds_status edds_preview(
     }
 
     if (!info->preview_supported) {
-        fail(error, "unsupported-pixel-format",
-            "This DDS pixel format or texture topology cannot be previewed.");
+        fail(error, "unsupported-pixel-format", "This DDS pixel format or texture topology cannot be previewed.");
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -807,8 +761,7 @@ edds_status edds_preview(
     mip = &info->mips[level];
 
     if (!expected_rgba_bytes(mip->width, mip->height, &decoded_bytes)) {
-        fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.",
-            level);
+        fail(error, "decoded-size-limit", "Mip %u decodes to more pixels than one preview holds.", level);
         return EDDS_INVALID_INPUT;
     }
 
@@ -835,8 +788,7 @@ edds_status edds_preview(
 
     /* Then the runtime format decoded into RGBA, which goes to the caller. */
     if (status == EDDS_OK) {
-        if (!edds_gpu_decode(info->pixel_format, raw, mip->decoded_bytes,
-                mip->width, mip->height, pixels)) {
+        if (!edds_gpu_decode(info->pixel_format, raw, mip->decoded_bytes, mip->width, mip->height, pixels)) {
             fail(error, "invalid-gpu-payload",
                 "Mip %u does not hold whole %s blocks for its dimensions.",
                 level, edds_pixel_format_name(info->pixel_format));

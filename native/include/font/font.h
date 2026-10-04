@@ -94,11 +94,7 @@ typedef struct font_characters {
  * other control characters separate, they are not members; the space is always in a font anyway.
  * The caller releases the set with font_characters_free.
  */
-edds_status font_characters_parse(
-    const uint8_t   *text,
-    size_t           size,
-    font_characters *characters,
-    edds_error      *error);
+edds_status font_characters_parse(const uint8_t *text, size_t size, font_characters *characters, edds_error *error);
 
 /**
  * Basic Latin, Latin-1 and Cyrillic U+0400-U+045F. The caller releases the set with
@@ -118,11 +114,7 @@ typedef struct font_source_info {
 } font_source_info;
 
 /** Opens a TrueType file only to fill `info` with its names, units per em and glyph count. */
-edds_status font_source_describe(
-    const uint8_t    *data,
-    size_t            size,
-    font_source_info *info,
-    edds_error       *error);
+edds_status font_source_describe(const uint8_t *data, size_t size, font_source_info *info, edds_error *error);
 
 /** What font_generate makes a font from. */
 typedef struct font_request {

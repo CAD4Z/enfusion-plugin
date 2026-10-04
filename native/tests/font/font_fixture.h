@@ -70,8 +70,7 @@ size_t font_fixture_codes(font_fixture_variant variant, const uint32_t **codes);
  * the variant does not map the character or memory runs out. The caller frees the outline with
  * font_fixture_outline_free.
  */
-int font_fixture_outline_of(font_fixture_variant variant, uint32_t code,
-    font_fixture_outline *outline);
+int font_fixture_outline_of(font_fixture_variant variant, uint32_t code, font_fixture_outline *outline);
 
 /** Frees what font_fixture_outline_of allocated, and empties the outline. */
 void font_fixture_outline_free(font_fixture_outline *outline);

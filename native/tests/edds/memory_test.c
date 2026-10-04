@@ -48,8 +48,7 @@ static edds_status convert_source(void *context, edds_error *error) {
     /* The source bytes written out, then converted from the start of the file. */
     (void)fwrite(input->source.data, 1, input->source.size, source);
     rewind(source);
-    status = edds_convert(source, input->format, output, &input->profile,
-        NULL, NULL, NULL, NULL, error);
+    status = edds_convert(source, input->format, output, &input->profile, NULL, NULL, NULL, NULL, error);
 
     (void)fclose(source);
     (void)fclose(output);
@@ -144,8 +143,7 @@ static int compressed_images_finish_even_when_the_initial_charge_is_too_small(vo
     CHECK(measured.peak > edds_pool_charge_of(batch.source.size));
 
     /* Eight conversions over the pool, sharing a budget of 8 MiB, all succeed. */
-    CHECK(edds_pool_run(8u, 8u * 1024u * 1024u,
-              convert_compressed_item, &batch, &error) == EDDS_OK);
+    CHECK(edds_pool_run(8u, 8u * 1024u * 1024u, convert_compressed_item, &batch, &error) == EDDS_OK);
 
     for (uint32_t at = 0; at < 8u; ++at) {
         CHECK(batch.results[at] == EDDS_OK);
@@ -207,8 +205,7 @@ static int every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota(void) 
 
             /* With each power of two below the peak as the quota: refused, within it, no leak. */
             for (uint64_t limit = 1u; limit < full.peak; limit *= 2u) {
-                const edds_memory_result limited = edds_memory_run(limit, convert_source, &input,
-                    &error);
+                const edds_memory_result limited = edds_memory_run(limit, convert_source, &input, &error);
 
                 CHECK(limited.status != EDDS_OK);
                 CHECK(strcmp(error.code, "operation-memory-leak") != 0);
@@ -257,8 +254,7 @@ static void cancelled_item(void *context, uint32_t index, edds_pool *pool) {
     edds_error       error;
 
     (void)index;
-    batch->result = edds_pool_execute(pool, 1u, operation_that_must_not_start, batch,
-        already_cancelled, NULL, &error);
+    batch->result = edds_pool_execute(pool, 1u, operation_that_must_not_start, batch, already_cancelled, NULL, &error);
 }
 
 /**
@@ -310,8 +306,7 @@ static int swizzling_unwinds_partial_buffers_and_rejects_short_channels(void) {
 
         /* With each power of two below the peak as the quota: refused, within it, no leak. */
         for (uint64_t quota = 1; quota < full.peak; quota *= 2) {
-            const edds_memory_result limited = edds_memory_run(quota, convert_source, &input,
-                &error);
+            const edds_memory_result limited = edds_memory_run(quota, convert_source, &input, &error);
 
             CHECK(limited.status != EDDS_OK && limited.peak <= quota && limited.required > quota);
             CHECK(strcmp(error.code, "operation-memory-leak") != 0);

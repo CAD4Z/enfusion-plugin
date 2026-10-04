@@ -198,10 +198,7 @@ static const char *quality_json(uint32_t value, char buffer[8]) {
  * metadata when there is some. With `unsupported_metadata_reason`, only the metadata's identity
  * is written, under that reason.
  */
-static void write_inspection(
-    const edds_info     *info,
-    const edds_metadata *metadata,
-    const char          *unsupported_metadata_reason) {
+static void write_inspection(const edds_info *info, const edds_metadata *metadata, const char *unsupported_metadata_reason) {
     char        format_buffer[32];
     char        quality_buffer[8];
     /* The channels a decode of the file carries, which is the runtime fact, not the source's. */
@@ -272,8 +269,7 @@ static void write_inspection(
         fputs(",\"sourceFormat\":", stdout);
 
         {
-            const edds_source_capability *capability =
-                edds_source_capability_of_format(metadata->source_format);
+            const edds_source_capability *capability = edds_source_capability_of_format(metadata->source_format);
 
             json_string(capability == NULL ? "" : capability->wire_name);
         }
@@ -285,8 +281,7 @@ static void write_inspection(
             metadata->profile.compress_threshold, metadata->profile.remove_mips);
 
         {
-            const edds_conversion_capability *conversion =
-                edds_conversion_capability_of(metadata->profile.conversion);
+            const edds_conversion_capability *conversion = edds_conversion_capability_of(metadata->profile.conversion);
 
             json_string(conversion == NULL ? "None" : conversion->workbench_name);
         }
@@ -303,8 +298,7 @@ static void write_inspection(
         json_string(metadata_mipmap_function(metadata->profile.mipmap_function));
         fputs(",\"MipMapFilter\":", stdout);
         json_string(metadata_mipmap_filter(metadata->profile.mipmap_filter));
-        (void)printf(",\"TiledTexture\":%s}}",
-            metadata->profile.tiled_texture ? "true" : "false");
+        (void)printf(",\"TiledTexture\":%s}}", metadata->profile.tiled_texture ? "true" : "false");
     }
 
     fputs("}\n", stdout);
@@ -312,14 +306,12 @@ static void write_inspection(
 
 /** Writes `bytes` to stdout as Base64, padded with `=`. */
 static void write_base64(const uint8_t *bytes, size_t size) {
-    static const char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    size_t at = 0;
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t            at         = 0;
 
     /* Every three bytes become four characters of six bits each. */
     while (size - at >= 3) {
-        const uint32_t value = ((uint32_t)bytes[at] << 16) |
-            ((uint32_t)bytes[at + 1] << 8) | bytes[at + 2];
+        const uint32_t value = ((uint32_t)bytes[at] << 16) | ((uint32_t)bytes[at + 1] << 8) | bytes[at + 2];
 
         putchar(alphabet[(value >> 18) & 63u]);
         putchar(alphabet[(value >> 12) & 63u]);
@@ -436,37 +428,25 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
             options->input = argv[++at];
         } else if (equals(argv[at], "--output") && options->output == NULL && at + 1 < argc) {
             options->output = argv[++at];
-        } else if (equals(argv[at], "--target-format") &&
-            options->target_format == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--target-format") && options->target_format == NULL && at + 1 < argc) {
             options->target_format = argv[++at];
-        } else if (equals(argv[at], "--format-compress") &&
-            options->format_compress == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--format-compress") && options->format_compress == NULL && at + 1 < argc) {
             options->format_compress = argv[++at];
-        } else if (equals(argv[at], "--compress-threshold") &&
-            !options->threshold_seen &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--compress-threshold") && !options->threshold_seen && at + 1 < argc) {
             options->threshold_seen = unsigned_argument(argv[++at], &options->compress_threshold);
 
             if (!options->threshold_seen) {
                 return 0;
             }
-        } else if (equals(argv[at], "--remove-mips") &&
-            !options->remove_mips_seen &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--remove-mips") && !options->remove_mips_seen && at + 1 < argc) {
             options->remove_mips_seen = unsigned_argument(argv[++at], &options->remove_mips);
 
             if (!options->remove_mips_seen) {
                 return 0;
             }
-        } else if (equals(argv[at], "--conversion") &&
-            options->conversion == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--conversion") && options->conversion == NULL && at + 1 < argc) {
             options->conversion = argv[++at];
-        } else if (equals(argv[at], "--conversion-quality") &&
-            !options->quality_seen &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--conversion-quality") && !options->quality_seen && at + 1 < argc) {
             options->quality_seen = quality_argument(argv[++at], &options->conversion_quality);
 
             if (!options->quality_seen) {
@@ -474,57 +454,35 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
             }
         } else if (equals(argv[at], "--swizzling") && options->swizzling == NULL && at + 1 < argc) {
             options->swizzling = argv[++at];
-        } else if (equals(argv[at], "--contains-mips") &&
-            options->contains_mips == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--contains-mips") && options->contains_mips == NULL && at + 1 < argc) {
             options->contains_mips = argv[++at];
-        } else if (equals(argv[at], "--generate-mips") &&
-            options->generate_mips == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--generate-mips") && options->generate_mips == NULL && at + 1 < argc) {
             options->generate_mips = argv[++at];
         } else if (equals(argv[at], "--normalize") && options->normalize == NULL && at + 1 < argc) {
             options->normalize = argv[++at];
-        } else if (equals(argv[at], "--mipmap-function") &&
-            options->mipmap_function == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--mipmap-function") && options->mipmap_function == NULL && at + 1 < argc) {
             options->mipmap_function = argv[++at];
-        } else if (equals(argv[at], "--mipmap-filter") &&
-            options->mipmap_filter == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--mipmap-filter") && options->mipmap_filter == NULL && at + 1 < argc) {
             options->mipmap_filter = argv[++at];
-        } else if (equals(argv[at], "--tiled-texture") &&
-            options->tiled_texture == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--tiled-texture") && options->tiled_texture == NULL && at + 1 < argc) {
             options->tiled_texture = argv[++at];
         } else if (equals(argv[at], "--metadata") && options->metadata == NULL && at + 1 < argc) {
             options->metadata = argv[++at];
-        } else if (equals(argv[at], "--resource-name") &&
-            options->resource_name == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--resource-name") && options->resource_name == NULL && at + 1 < argc) {
             options->resource_name = argv[++at];
-        } else if (equals(argv[at], "--source-file") &&
-            options->source_file == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--source-file") && options->source_file == NULL && at + 1 < argc) {
             options->source_file = argv[++at];
         } else if (equals(argv[at], "--guid") && options->guid == NULL && at + 1 < argc) {
             options->guid = argv[++at];
-        } else if (equals(argv[at], "--expect-source-revision") &&
-            options->expected_source_revision == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--expect-source-revision") && options->expected_source_revision == NULL && at + 1 < argc) {
             options->expected_source_revision = argv[++at];
-        } else if (equals(argv[at], "--expect-output-revision") &&
-            options->expected_output_revision == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--expect-output-revision") && options->expected_output_revision == NULL && at + 1 < argc) {
             options->expected_output_revision = argv[++at];
-        } else if (equals(argv[at], "--expect-metadata-revision") &&
-            options->expected_metadata_revision == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--expect-metadata-revision") && options->expected_metadata_revision == NULL && at + 1 < argc) {
             options->expected_metadata_revision = argv[++at];
         } else if (equals(argv[at], "--identity-only") && !options->identity_only) {
             options->identity_only = 1;
-        } else if (equals(argv[at], "--cancel-file") &&
-            options->cancel_file == NULL &&
-            at + 1 < argc) {
+        } else if (equals(argv[at], "--cancel-file") && options->cancel_file == NULL && at + 1 < argc) {
             options->cancel_file = argv[++at];
         } else {
             return 0;
@@ -569,10 +527,7 @@ static int has_expected_revisions(const parsed_arguments *options) {
  * place. Returns EDDS_OK, or an unsupported-setting refusal for a value the converter does not
  * take.
  */
-static edds_status profile_of(
-    const parsed_arguments *options,
-    edds_profile           *profile,
-    edds_error             *error) {
+static edds_status profile_of(const parsed_arguments *options, edds_profile *profile, edds_error *error) {
     edds_default_profile(profile);
 
     /* Flag by flag: a value that is not one the flag takes is refused. */
@@ -731,9 +686,7 @@ unsupported:
  * metadata are still the revisions it planned the conversion with. Returns EDDS_OK, or a
  * `stale-...` refusal that names the first one that is not.
  */
-static edds_status validate_revisions(
-    const parsed_arguments *options,
-    edds_error             *error) {
+static edds_status validate_revisions(const parsed_arguments *options, edds_error *error) {
     /* Where the metadata is when `--metadata` names none: the output path plus `.meta`. */
     cli_char *metadata_path;
 
@@ -755,8 +708,7 @@ static edds_status validate_revisions(
     if (metadata_path == NULL) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "allocation-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "Memory for the revision check could not be allocated.");
+        (void)snprintf(error->message, sizeof error->message, "Memory for the revision check could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -769,9 +721,7 @@ static edds_status validate_revisions(
 
     /* Each file as it is now, against the revision the caller expects of it. */
     for (unsigned at = 0; at < 3u; ++at) {
-        if (!parse_revision(values[at], &expected) ||
-            !revision_of(paths[at], &actual) ||
-            !same_revision(&expected, &actual)) {
+        if (!parse_revision(values[at], &expected) || !revision_of(paths[at], &actual) || !same_revision(&expected, &actual)) {
             free(metadata_path);
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "stale-%s", names[at]);
@@ -828,10 +778,7 @@ static size_t append_message(edds_error *error, size_t at, const char *format, .
  * The source format the path's extension names. Returns EDDS_OK with it in `format`, or an
  * unsupported-format refusal that lists the extensions there are.
  */
-static edds_status source_format_of(
-    const cli_char     *path,
-    edds_source_format *format,
-    edds_error         *error) {
+static edds_status source_format_of(const cli_char *path, edds_source_format *format, edds_error *error) {
     size_t count = 0;
 
     /* The source formats there are, each with its one extension. */
@@ -857,8 +804,7 @@ static edds_status source_format_of(
     written = append_message(error, 0, "Only");
 
     for (size_t at = 0; at < count; ++at) {
-        written = append_message(error, written, "%s %s",
-            at == 0 ? "" : (at + 1u == count ? " and" : ","), capabilities[at].extension);
+        written = append_message(error, written, "%s %s", at == 0 ? "" : (at + 1u == count ? " and" : ","), capabilities[at].extension);
     }
 
     (void)append_message(error, written, " source paths are supported.");
@@ -892,8 +838,7 @@ static edds_status metadata_value_of(
         !metadata_text(metadata->guid, sizeof metadata->guid, guid)) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "invalid-metadata-identity");
-        (void)snprintf(error->message, sizeof error->message,
-            "Resource name, source file, and GUID must fit the native metadata schema.");
+        (void)snprintf(error->message, sizeof error->message, "Resource name, source file, and GUID must fit the native metadata schema.");
         status = EDDS_INVALID_INPUT;
     }
 
@@ -928,8 +873,7 @@ static edds_status validate_previous_metadata(
     if (input == NULL) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "metadata-open-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "Existing metadata could not be opened.");
+        (void)snprintf(error->message, sizeof error->message, "Existing metadata could not be opened.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -993,8 +937,7 @@ static edds_status convert_atomically(
     if (same_path(options->input, options->output)) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "same-input-output");
-        (void)snprintf(error->message, sizeof error->message,
-            "Input and output must be different files.");
+        (void)snprintf(error->message, sizeof error->message, "Input and output must be different files.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -1013,8 +956,7 @@ static edds_status convert_atomically(
     if (expected_metadata == NULL) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "allocation-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The metadata destination could not be prepared.");
+        (void)snprintf(error->message, sizeof error->message, "The metadata destination could not be prepared.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1022,8 +964,7 @@ static edds_status convert_atomically(
         free(expected_metadata);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "metadata-not-sibling");
-        (void)snprintf(error->message, sizeof error->message,
-            "Texture metadata must be the output path plus .meta.");
+        (void)snprintf(error->message, sizeof error->message, "Texture metadata must be the output path plus .meta.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -1031,8 +972,7 @@ static edds_status convert_atomically(
         free(expected_metadata);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "detached-metadata-conflict");
-        (void)snprintf(error->message, sizeof error->message,
-            "Detached conversion refused because sibling .edds.meta already exists.");
+        (void)snprintf(error->message, sizeof error->message, "Detached conversion refused because sibling .edds.meta already exists.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -1066,8 +1006,7 @@ static edds_status convert_atomically(
     if (source == NULL) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "input-open-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The source image could not be opened (system error %d).", errno);
+        (void)snprintf(error->message, sizeof error->message, "The source image could not be opened (system error %d).", errno);
         return EDDS_INVALID_INPUT;
     }
 
@@ -1077,8 +1016,7 @@ static edds_status convert_atomically(
         (void)fclose(source);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "temporary-open-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "A sibling temporary output could not be created.");
+        (void)snprintf(error->message, sizeof error->message, "A sibling temporary output could not be created.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1090,24 +1028,21 @@ static edds_status convert_atomically(
     if (status == EDDS_OK && !sync_output(temporary_output, "output-flush")) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "temporary-flush-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The temporary EDDS could not be flushed to disk.");
+        (void)snprintf(error->message, sizeof error->message, "The temporary EDDS could not be flushed to disk.");
         status = EDDS_INTERNAL_FAILURE;
     }
 
     if (fclose(source) != 0 && status == EDDS_OK) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "input-close-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The source image could not be closed after reading.");
+        (void)snprintf(error->message, sizeof error->message, "The source image could not be closed after reading.");
         status = EDDS_INVALID_INPUT;
     }
 
     if (fclose(temporary_output) != 0 && status == EDDS_OK) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "temporary-close-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The temporary EDDS could not be closed.");
+        (void)snprintf(error->message, sizeof error->message, "The temporary EDDS could not be closed.");
         status = EDDS_INTERNAL_FAILURE;
     }
 
@@ -1124,8 +1059,7 @@ static edds_status convert_atomically(
             cleanup_artifact(&output_artifact, 0);
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "metadata-temporary-open-failed");
-            (void)snprintf(error->message, sizeof error->message,
-                "A sibling temporary metadata file could not be created.");
+            (void)snprintf(error->message, sizeof error->message, "A sibling temporary metadata file could not be created.");
             return EDDS_INTERNAL_FAILURE;
         }
 
@@ -1134,16 +1068,13 @@ static edds_status convert_atomically(
             : edds_metadata_write(temporary_metadata, &metadata, error);
 
         if (status == EDDS_OK && !sync_output(temporary_metadata, "metadata-flush")) {
-            status = injected("metadata-flush")
-                ? injected_failure(error, "metadata-flush")
-                : EDDS_INTERNAL_FAILURE;
+            status = injected("metadata-flush") ? injected_failure(error, "metadata-flush") : EDDS_INTERNAL_FAILURE;
         }
 
         if (fclose(temporary_metadata) != 0 && status == EDDS_OK) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "metadata-temporary-close-failed");
-            (void)snprintf(error->message, sizeof error->message,
-                "The temporary metadata file could not be closed.");
+            (void)snprintf(error->message, sizeof error->message, "The temporary metadata file could not be closed.");
             status = EDDS_INTERNAL_FAILURE;
         }
 
@@ -1167,8 +1098,7 @@ static edds_status convert_atomically(
     if (status == EDDS_OK && was_cancelled(NULL)) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "cancelled");
-        (void)snprintf(error->message, sizeof error->message,
-            "The conversion was cancelled before publishing its artifacts.");
+        (void)snprintf(error->message, sizeof error->message, "The conversion was cancelled before publishing its artifacts.");
         status = EDDS_CANCELLED;
     }
 
@@ -1183,8 +1113,7 @@ static edds_status convert_atomically(
 
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "transaction-journal-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The recovery record could not be written; no destination was replaced.");
+        (void)snprintf(error->message, sizeof error->message, "The recovery record could not be written; no destination was replaced.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1208,8 +1137,7 @@ static edds_status convert_atomically(
         cleanup_transaction(&transaction, metadata_restored && output_restored);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "artifact-backup-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The previous EDDS/metadata pair could not be moved aside atomically.");
+        (void)snprintf(error->message, sizeof error->message, "The previous EDDS/metadata pair could not be moved aside atomically.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1230,9 +1158,7 @@ static edds_status convert_atomically(
         const int cancelled = was_cancelled(NULL);
 
         if (published) {
-            published = !cancelled &&
-                !injected("transaction-commit") &&
-                cli_rename(transaction.pending, transaction.committed) == 0;
+            published = !cancelled && !injected("transaction-commit") && cli_rename(transaction.pending, transaction.committed) == 0;
         }
 
         if (!published) {
@@ -1243,8 +1169,7 @@ static edds_status convert_atomically(
             cleanup_artifact(&metadata_artifact, 0);
             cleanup_transaction(&transaction, metadata_restored && output_restored);
             memset(error, 0, sizeof *error);
-            (void)snprintf(error->code, sizeof error->code,
-                "%s", cancelled ? "cancelled" : "artifact-commit-failed");
+            (void)snprintf(error->code, sizeof error->code, "%s", cancelled ? "cancelled" : "artifact-commit-failed");
             (void)snprintf(error->message, sizeof error->message,
                 "The converted EDDS/metadata pair was not committed; its previous artifacts were restored where possible.");
             return cancelled ? EDDS_CANCELLED : EDDS_INTERNAL_FAILURE;
@@ -1289,8 +1214,7 @@ static int convert_command(const parsed_arguments *options) {
     if (output == NULL) {
         memset(&error, 0, sizeof error);
         (void)snprintf(error.code, sizeof error.code, "committed-output-open-failed");
-        (void)snprintf(error.message, sizeof error.message,
-            "The committed EDDS could not be inspected.");
+        (void)snprintf(error.message, sizeof error.message, "The committed EDDS could not be inspected.");
         return report_failure(EDDS_INTERNAL_FAILURE, &error);
     }
 
@@ -1466,12 +1390,10 @@ static int read_batch_line(char *line, size_t capacity, size_t *size, edds_error
         }
 
         /* A line over the protocol's limit, or one too long for `line`, is refused. */
-        if (framed == EDDS_BATCH_LINE_OVERFLOW ||
-            (framed == EDDS_BATCH_LINE_READY && length + 1u > capacity)) {
+        if (framed == EDDS_BATCH_LINE_OVERFLOW || (framed == EDDS_BATCH_LINE_READY && length + 1u > capacity)) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "batch-line-size");
-            (void)snprintf(error->message, sizeof error->message,
-                "A batch NDJSON record exceeds the hard line limit.");
+            (void)snprintf(error->message, sizeof error->message, "A batch NDJSON record exceeds the hard line limit.");
             return -1;
         }
 
@@ -1489,10 +1411,7 @@ static int read_batch_line(char *line, size_t capacity, size_t *size, edds_error
  * record and nothing after it. Returns EDDS_OK with `*count` jobs in `*jobs`, which the caller
  * owns, or the refusal. Jobs that would write the same output are marked as colliding.
  */
-static edds_status read_batch(
-    native_batch_job **jobs,
-    uint32_t          *count,
-    edds_error        *error) {
+static edds_status read_batch(native_batch_job **jobs, uint32_t *count, edds_error *error) {
     /* One line of stdin, the record parsed from it, and the jobs loaded so far. */
     char              *line   = malloc(EDDS_BATCH_MAX_LINE_BYTES + 1u);
     edds_batch_record *record = malloc(sizeof *record);
@@ -1508,8 +1427,7 @@ static edds_status read_batch(
         free(record);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "batch-allocation-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The batch input buffer could not be allocated.");
+        (void)snprintf(error->message, sizeof error->message, "The batch input buffer could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1523,8 +1441,7 @@ static edds_status read_batch(
         if (read == 0) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "missing-batch-header");
-            (void)snprintf(error->message, sizeof error->message,
-                "Batch stdin ended before its header.");
+            (void)snprintf(error->message, sizeof error->message, "Batch stdin ended before its header.");
         }
 
         return EDDS_INVALID_INVOCATION;
@@ -1532,15 +1449,11 @@ static edds_status read_batch(
 
     status = edds_batch_parse_line(line, size, record, error);
 
-    if (status != EDDS_OK ||
-        record->kind != EDDS_BATCH_HEADER ||
-        record->job_count == 0u ||
-        record->job_count > EDDS_BATCH_MAX_JOBS) {
+    if (status != EDDS_OK || record->kind != EDDS_BATCH_HEADER || record->job_count == 0u || record->job_count > EDDS_BATCH_MAX_JOBS) {
         if (status == EDDS_OK) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "batch-job-count");
-            (void)snprintf(error->message, sizeof error->message,
-                "A batch must contain between 1 and %u jobs.", EDDS_BATCH_MAX_JOBS);
+            (void)snprintf(error->message, sizeof error->message, "A batch must contain between 1 and %u jobs.", EDDS_BATCH_MAX_JOBS);
             status = EDDS_INVALID_INVOCATION;
         }
 
@@ -1557,35 +1470,27 @@ static edds_status read_batch(
         free(record);
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "batch-allocation-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The bounded batch job table could not be allocated.");
+        (void)snprintf(error->message, sizeof error->message, "The bounded batch job table could not be allocated.");
         return EDDS_INTERNAL_FAILURE;
     }
 
     /* Then the jobs, one record each, every one with an id of its own. */
     for (uint32_t at = 0; at < *count; ++at) {
         read   = read_batch_line(line, EDDS_BATCH_MAX_LINE_BYTES + 1u, &size, error);
-        status = read > 0
-            ? edds_batch_parse_line(line, size, record, error)
-            : EDDS_INVALID_INVOCATION;
+        status = read > 0 ? edds_batch_parse_line(line, size, record, error) : EDDS_INVALID_INVOCATION;
 
         if (read == 0) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "missing-batch-job");
-            (void)snprintf(error->message, sizeof error->message,
-                "Batch stdin ended before every declared job.");
+            (void)snprintf(error->message, sizeof error->message, "Batch stdin ended before every declared job.");
         }
 
-        if (read < 0 ||
-            status != EDDS_OK ||
-            record->kind != EDDS_BATCH_JOB ||
-            !native_batch_job_of(&record->job, &loaded[at])) {
+        if (read < 0 || status != EDDS_OK || record->kind != EDDS_BATCH_JOB || !native_batch_job_of(&record->job, &loaded[at])) {
             if (status == EDDS_OK && read > 0) {
                 const int early = record->kind != EDDS_BATCH_JOB;
 
                 memset(error, 0, sizeof *error);
-                (void)snprintf(error->code, sizeof error->code, "%s",
-                    early ? "missing-batch-job" : "invalid-batch-job");
+                (void)snprintf(error->code, sizeof error->code, "%s", early ? "missing-batch-job" : "invalid-batch-job");
                 (void)snprintf(error->message, sizeof error->message, "%s",
                     early ? "The batch ended or restarted before every declared job."
                           : "A batch job path or identity is not valid UTF-8 for this platform.");
@@ -1606,8 +1511,7 @@ static edds_status read_batch(
             if (strcmp(loaded[before].id, loaded[at].id) == 0) {
                 memset(error, 0, sizeof *error);
                 (void)snprintf(error->code, sizeof error->code, "duplicate-batch-id");
-                (void)snprintf(error->message, sizeof error->message,
-                    "Every batch job id must be unique.");
+                (void)snprintf(error->message, sizeof error->message, "Every batch job id must be unique.");
 
                 for (uint32_t free_at = 0; free_at <= at; ++free_at) {
                     free_batch_job(&loaded[free_at]);
@@ -1632,8 +1536,7 @@ static edds_status read_batch(
         if (status == EDDS_OK) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "invalid-batch-end");
-            (void)snprintf(error->message, sizeof error->message,
-                "Batch stdin must end after one end record.");
+            (void)snprintf(error->message, sizeof error->message, "Batch stdin must end after one end record.");
             status = EDDS_INVALID_INVOCATION;
         }
 
@@ -1714,11 +1617,7 @@ static void write_batch_diagnostic(const char *id, edds_status status, const edd
  * A job's `result` JSON line on stdout when it did not convert: `status` (`Failed` or
  * `Cancelled`), the reason, and whether it may be retried.
  */
-static void write_batch_failed(
-    const char       *id,
-    const char       *status,
-    const edds_error *error,
-    int               retryable) {
+static void write_batch_failed(const char *id, const char *status, const edds_error *error, int retryable) {
     fputs("{\"protocolVersion\":1,\"kind\":\"result\",\"id\":", stdout);
     json_string(id);
     fputs(",\"status\":", stdout);
@@ -1729,16 +1628,14 @@ static void write_batch_failed(
 }
 
 /** Inspects a job's committed output: EDDS_OK with what it found in `info`, or the refusal. */
-static edds_status inspect_converted(const native_batch_job *job, edds_info *info,
-    edds_error *error) {
+static edds_status inspect_converted(const native_batch_job *job, edds_info *info, edds_error *error) {
     FILE       *output = open_input(job->options.output);
     edds_status status;
 
     if (output == NULL) {
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "committed-output-open-failed");
-        (void)snprintf(error->message, sizeof error->message,
-            "The committed EDDS could not be inspected.");
+        (void)snprintf(error->message, sizeof error->message, "The committed EDDS could not be inspected.");
         return EDDS_INTERNAL_FAILURE;
     }
 
@@ -1814,8 +1711,7 @@ static void batch_progress(void *context, double progress) {
 static edds_status convert_batch_attempt(void *context, edds_error *error) {
     batch_reporter *reporter = context;
 
-    return convert_atomically(&reporter->job->options, &reporter->job->profile,
-        batch_progress, reporter, error);
+    return convert_atomically(&reporter->job->options, &reporter->job->profile, batch_progress, reporter, error);
 }
 
 /** One image, on whichever worker claimed it. Everything shared is touched under a pool lock. */
@@ -1842,8 +1738,7 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
     if (was_cancelled(NULL)) {
         memset(&error, 0, sizeof error);
         (void)snprintf(error.code, sizeof error.code, "cancelled");
-        (void)snprintf(error.message, sizeof error.message,
-            "The batch was cancelled before this job started.");
+        (void)snprintf(error.message, sizeof error.message, "The batch was cancelled before this job started.");
 
         edds_pool_lock_output(pool);
         write_batch_failed(job->id, "Cancelled", &error, 0);
@@ -1857,8 +1752,7 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
     if (job->collision) {
         memset(&error, 0, sizeof error);
         (void)snprintf(error.code, sizeof error.code, "output-collision");
-        (void)snprintf(error.message, sizeof error.message,
-            "Multiple batch jobs resolve to the same output; no winner was selected.");
+        (void)snprintf(error.message, sizeof error.message, "Multiple batch jobs resolve to the same output; no winner was selected.");
 
         edds_pool_lock_output(pool);
         write_batch_diagnostic(job->id, EDDS_INVALID_INPUT, &error);
@@ -1876,12 +1770,8 @@ static void batch_job_task(void *context, uint32_t at, edds_pool *pool) {
     edds_pool_unlock_output(pool);
 
     /* File size is only the initial quota; allocations enforce it even for compressed sources. */
-    charge = edds_pool_charge_of(
-        revision_of(job->options.input, &source_revision) && source_revision.exists
-            ? source_revision.size
-            : 0u);
-    status = edds_pool_execute(pool, charge, convert_batch_attempt, &reporter,
-        was_cancelled, NULL, &error);
+    charge = edds_pool_charge_of(revision_of(job->options.input, &source_revision) && source_revision.exists ? source_revision.size : 0u);
+    status = edds_pool_execute(pool, charge, convert_batch_attempt, &reporter, was_cancelled, NULL, &error);
     inject_batch_cancel_after_first_commit(at, status);
 
     if (status == EDDS_OK) {
@@ -1999,12 +1889,8 @@ int edds_command(int argc, cli_char **argv) {
         return result;
     }
 
-    if (argc < 2 ||
-        (!equals(argv[1], "inspect") &&
-            !equals(argv[1], "preview") &&
-            !equals(argv[1], "convert"))) {
-        return invalid_invocation("invalid-command",
-            "Expected inspect, preview, convert, or batch.");
+    if (argc < 2 || (!equals(argv[1], "inspect") && !equals(argv[1], "preview") && !equals(argv[1], "convert"))) {
+        return invalid_invocation("invalid-command", "Expected inspect, preview, convert, or batch.");
     }
 
     preview_command = equals(argv[1], "preview");
@@ -2040,8 +1926,7 @@ int edds_command(int argc, cli_char **argv) {
         (preview_command && options.metadata != NULL) ||
         (!convert && options.cancel_file != NULL) ||
         (options.identity_only && (preview_command || convert || options.metadata == NULL))) {
-        return invalid_invocation("invalid-options",
-            "The command options are incomplete, duplicated, or unsupported.");
+        return invalid_invocation("invalid-options", "The command options are incomplete, duplicated, or unsupported.");
     }
 
     if (convert) {
@@ -2054,8 +1939,7 @@ int edds_command(int argc, cli_char **argv) {
     if (input == NULL) {
         memset(&error, 0, sizeof error);
         (void)snprintf(error.code, sizeof error.code, "input-open-failed");
-        (void)snprintf(error.message, sizeof error.message,
-            "The input file could not be opened (system error %d).", errno);
+        (void)snprintf(error.message, sizeof error.message, "The input file could not be opened (system error %d).", errno);
         return report_failure(EDDS_INVALID_INPUT, &error);
     }
 
@@ -2075,8 +1959,7 @@ int edds_command(int argc, cli_char **argv) {
                 (void)fclose(input);
                 memset(&error, 0, sizeof error);
                 (void)snprintf(error.code, sizeof error.code, "metadata-open-failed");
-                (void)snprintf(error.message, sizeof error.message,
-                    "The explicit metadata file could not be opened.");
+                (void)snprintf(error.message, sizeof error.message, "The explicit metadata file could not be opened.");
                 return report_failure(EDDS_INVALID_INPUT, &error);
             }
 
@@ -2088,8 +1971,7 @@ int edds_command(int argc, cli_char **argv) {
              * identity is still reported, with the parser's message as the reason.
              */
             if (status == EDDS_UNSUPPORTED_FORMAT && options.identity_only) {
-                (void)snprintf(unsupported_metadata_reason, sizeof unsupported_metadata_reason,
-                    "%s", error.message);
+                (void)snprintf(unsupported_metadata_reason, sizeof unsupported_metadata_reason, "%s", error.message);
                 status = EDDS_OK;
             }
 
@@ -2101,16 +1983,14 @@ int edds_command(int argc, cli_char **argv) {
             inspected_metadata = &metadata;
         }
 
-        write_inspection(&info, inspected_metadata,
-            unsupported_metadata_reason[0] == '\0' ? NULL : unsupported_metadata_reason);
+        write_inspection(&info, inspected_metadata, unsupported_metadata_reason[0] == '\0' ? NULL : unsupported_metadata_reason);
         (void)fclose(input);
 
         return ferror(stdout) ? EDDS_INTERNAL_FAILURE : 0;
     }
 
     /* Preview: the `--mip` level decoded to RGBA. */
-    status = edds_preview(input, &info, options.mip, was_cancelled, NULL, &rgba, &rgba_size,
-        &error);
+    status = edds_preview(input, &info, options.mip, was_cancelled, NULL, &rgba, &rgba_size, &error);
     (void)fclose(input);
 
     if (status != EDDS_OK) {

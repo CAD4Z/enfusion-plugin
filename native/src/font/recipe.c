@@ -105,8 +105,7 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
         }
 
         if ((seen & bit) != 0) {
-            font_fail(error, "duplicate-setting",
-                "Font recipe setting %s occurs more than once in PC.", key.text);
+            font_fail(error, "duplicate-setting", "Font recipe setting %s occurs more than once in PC.", key.text);
             return EDDS_INVALID_INPUT;
         }
 
@@ -115,8 +114,7 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
         /* FontSize is a bare whole number; SourceFile and Characters are quoted paths. */
         if (bit == SETTING_SIZE) {
             if (value.kind != META_TOKEN_WORD || !size_value(value.text, &recipe->font_size)) {
-                font_fail(error, "malformed-setting",
-                    "Font recipe setting FontSize must be a whole number.");
+                font_fail(error, "malformed-setting", "Font recipe setting FontSize must be a whole number.");
                 return EDDS_INVALID_INPUT;
             }
 
@@ -126,15 +124,13 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
         if (value.kind != META_TOKEN_STRING ||
             !meta_copy_text(bit == SETTING_SOURCE ? recipe->source_file : recipe->characters,
                 EDDS_METADATA_PATH_BYTES, value.text)) {
-            font_fail(error, "malformed-setting",
-                "Font recipe setting %s must be a quoted path.", key.text);
+            font_fail(error, "malformed-setting", "Font recipe setting %s must be a quoted path.", key.text);
             return EDDS_INVALID_INPUT;
         }
     }
 
     if ((seen & SETTING_SOURCE) == 0 || recipe->source_file[0] == '\0') {
-        font_fail(error, "missing-source-file",
-            "The font recipe does not name a SourceFile in PC.");
+        font_fail(error, "missing-source-file", "The font recipe does not name a SourceFile in PC.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -145,8 +141,7 @@ static edds_status parse_pc(meta_scanner *scan, font_recipe *recipe, edds_error 
  * Reads the Configurations block, up to its closing brace. The one `FNTResourceClass PC` block
  * goes to parse_pc and every other configuration is skipped; no PC, or a second one, is refused.
  */
-static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
-    edds_error *error) {
+static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe, edds_error *error) {
     int found_pc = 0;
 
     /* Each configuration: a resource class, a platform, an optional `: parent`, then a block. */
@@ -187,8 +182,7 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
             edds_status status;
 
             if (found_pc) {
-                font_fail(error, "duplicate-pc-recipe",
-                    "The font recipe has more than one PC configuration.");
+                font_fail(error, "duplicate-pc-recipe", "The font recipe has more than one PC configuration.");
                 return EDDS_INVALID_INPUT;
             }
 
@@ -204,8 +198,7 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
     }
 
     if (!found_pc) {
-        font_fail(error, "missing-pc-recipe",
-            "The font recipe has no FNTResourceClass PC configuration.");
+        font_fail(error, "missing-pc-recipe", "The font recipe has no FNTResourceClass PC configuration.");
         return EDDS_INVALID_INPUT;
     }
 
@@ -216,8 +209,7 @@ static edds_status parse_configurations(meta_scanner *scan, font_recipe *recipe,
  * Walks the MetaFileClass block. With `recipe` NULL it stops at a valid Name and reads nothing
  * else, which is all a recipe that is about to be replaced has to give.
  */
-static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADATA_GUID_BYTES],
-    edds_error *error) {
+static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADATA_GUID_BYTES], edds_error *error) {
     /* The text of the file, the scanner over it, and its first token. */
     char        *source = NULL;
     size_t       size   = 0;
@@ -240,9 +232,7 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
     scan.at     = 0;
     value       = meta_next_token(&scan);
 
-    if (value.kind != META_TOKEN_WORD ||
-        strcmp(value.text, "MetaFileClass") != 0 ||
-        meta_next_token(&scan).kind != META_TOKEN_OPEN) {
+    if (value.kind != META_TOKEN_WORD || strcmp(value.text, "MetaFileClass") != 0 || meta_next_token(&scan).kind != META_TOKEN_OPEN) {
         status = malformed(error, "it must be one MetaFileClass block");
         goto done;
     }
@@ -265,11 +255,8 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
 
         if (strcmp(key.text, "Name") == 0) {
             /* `Name "{GUID}path"`, once: the GUID goes to `guid`, the path to the recipe. */
-            if (found_name ||
-                field.kind != META_TOKEN_STRING ||
-                !meta_parse_name(field.text, guid, name, sizeof name)) {
-                font_fail(error, "malformed-guid",
-                    "The recipe Name must begin with one 64-bit hexadecimal GUID.");
+            if (found_name || field.kind != META_TOKEN_STRING || !meta_parse_name(field.text, guid, name, sizeof name)) {
+                font_fail(error, "malformed-guid", "The recipe Name must begin with one 64-bit hexadecimal GUID.");
                 goto done;
             }
 
@@ -313,8 +300,7 @@ static edds_status parse(FILE *input, font_recipe *recipe, char guid[EDDS_METADA
     }
 
     if (meta_next_token(&scan).kind != META_TOKEN_END || !found_configurations) {
-        status = malformed(error,
-            "it must hold Name and one Configurations block, and nothing after");
+        status = malformed(error, "it must hold Name and one Configurations block, and nothing after");
         goto done;
     }
 
@@ -381,16 +367,12 @@ edds_status font_recipe_write(FILE *output, const font_recipe *recipe, edds_erro
     }
 
     if (!meta_valid_guid(recipe->guid)) {
-        font_fail(error, "malformed-guid",
-            "The recipe GUID must be exactly 16 hexadecimal characters.");
+        font_fail(error, "malformed-guid", "The recipe GUID must be exactly 16 hexadecimal characters.");
         return EDDS_INVALID_INPUT;
     }
 
-    if (!quotable(recipe->name, 0) ||
-        !quotable(recipe->source_file, 0) ||
-        !quotable(recipe->characters, 1)) {
-        font_fail(error, "invalid-recipe-value",
-            "Recipe names and paths must be non-empty text without quotes.");
+    if (!quotable(recipe->name, 0) || !quotable(recipe->source_file, 0) || !quotable(recipe->characters, 1)) {
+        font_fail(error, "invalid-recipe-value", "Recipe names and paths must be non-empty text without quotes.");
         return EDDS_INVALID_INPUT;
     }
 

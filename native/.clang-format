@@ -9,9 +9,9 @@
 # reflowed, so a table laid out in rows keeps its rows and a long string stays one literal.
 #
 # By hand, because no tool checks them:
-# - Lines stop at 100 columns. A call that does not fit breaks after its leading arguments; a
-#   condition that does not fit puts each operand of its && or || on a line of its own, and so
-#   does a chain of ?: on each of its conditions.
+# - A statement that fits in 140 columns stays on one line. One that does not: a call breaks after
+#   its leading arguments; a condition puts each operand of its && or || on a line of its own, and
+#   so does a chain of ?: on each of its conditions. Comments keep wrapping at 100.
 # - Blank lines between the steps of a function: after the declarations, around every if, for,
 #   while, do and switch, and before the final return. A long declaration list is split into
 #   groups by what they hold, each under a comment that says it. A group is what lines up, so a

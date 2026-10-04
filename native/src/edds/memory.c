@@ -66,9 +66,7 @@ void *edds_alloc(size_t size) {
         }
 
         if ((uint64_t)bytes > scope->limit - scope->used) {
-            scope->required = (uint64_t)bytes > UINT64_MAX - scope->used
-                ? UINT64_MAX
-                : scope->used + (uint64_t)bytes;
+            scope->required = (uint64_t)bytes > UINT64_MAX - scope->used ? UINT64_MAX : scope->used + (uint64_t)bytes;
             return NULL;
         }
     }
@@ -194,8 +192,7 @@ void *edds_realloc(void *allocation, size_t size) {
  * status with the peak and any refused quota. A run inside another run is refused, and memory the
  * operation leaves allocated is freed and turns its status into a failure.
  */
-edds_memory_result edds_memory_run(uint64_t limit, edds_memory_operation_fn operation,
-    void *context, edds_error *error) {
+edds_memory_result edds_memory_run(uint64_t limit, edds_memory_operation_fn operation, void *context, edds_error *error) {
     memory_scope       scope  = { 0 };
     edds_memory_result result = { EDDS_INTERNAL_FAILURE, 0, 0 };
 
@@ -204,8 +201,7 @@ edds_memory_result edds_memory_run(uint64_t limit, edds_memory_operation_fn oper
         if (error != NULL) {
             memset(error, 0, sizeof *error);
             (void)snprintf(error->code, sizeof error->code, "memory-scope-misuse");
-            (void)snprintf(error->message, sizeof error->message,
-                "A codec memory scope was opened inside another one.");
+            (void)snprintf(error->message, sizeof error->message, "A codec memory scope was opened inside another one.");
         }
 
         return result;
@@ -228,8 +224,7 @@ edds_memory_result edds_memory_run(uint64_t limit, edds_memory_operation_fn oper
         result.required = 0;
         memset(error, 0, sizeof *error);
         (void)snprintf(error->code, sizeof error->code, "operation-memory-leak");
-        (void)snprintf(error->message, sizeof error->message,
-            "The conversion did not release its working memory.");
+        (void)snprintf(error->message, sizeof error->message, "The conversion did not release its working memory.");
     }
 
     active_scope = NULL;
