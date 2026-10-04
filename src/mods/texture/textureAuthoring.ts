@@ -1,4 +1,4 @@
-import { textureHdrRefusalOf } from './textureHdr';
+import { TEXTURE_HDR_FIXED_FIELDS, textureHdrRefusalOf } from './textureHdr';
 import { textureSwizzleRefusalOf, type TextureSwizzleSource } from './textureSwizzles';
 import type { EddsConversion, EddsInspection, EddsPreview } from './edds';
 import { cachePreview } from './textureAnalysis';
@@ -69,7 +69,7 @@ export function textureProfileFieldsOf(
           editable: false,
           reason: `Conversion=${profile.Conversion} stores its channels as they are, so quality has nothing to trade.`,
         },
-    hdr ? { key: 'Swizzling', editable: false, reason: 'HDR supports no swizzling.' }
+    hdr ? { key: 'Swizzling', editable: false, reason: TEXTURE_HDR_FIXED_FIELDS.Swizzling }
       : { key: 'Swizzling', editable: true },
     suppliedRefusal !== undefined
       ? { key: 'ContainsMips', editable: false, reason: suppliedRefusal }
@@ -89,9 +89,9 @@ export function textureProfileFieldsOf(
           reason: 'GenerateMips is disabled while ContainsMips supplies the chain.',
         }
       : { key: 'GenerateMips', editable: true },
-    hdr ? { key: 'Normalize', editable: false, reason: 'HDR preserves radiance without normalization.' }
+    hdr ? { key: 'Normalize', editable: false, reason: TEXTURE_HDR_FIXED_FIELDS.Normalize }
       : { key: 'Normalize', editable: true },
-    hdr ? { key: 'MipMapFunction', editable: false, reason: 'HDR supports float Filter only.' } : profile.GenerateMips
+    hdr ? { key: 'MipMapFunction', editable: false, reason: TEXTURE_HDR_FIXED_FIELDS.MipMapFunction } : profile.GenerateMips
       ? { key: 'MipMapFunction', editable: true }
       : {
           key: 'MipMapFunction',

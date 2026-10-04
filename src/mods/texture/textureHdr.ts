@@ -1,5 +1,15 @@
 import type { TextureProfile, TextureSourceFormat } from './textureConversion';
 
+/**
+ * The profile fields a Radiance source fixes, each with the reason the editors give: Workbench's
+ * importer was captured filtering HDR in float, with no swizzle and no normalization.
+ */
+export const TEXTURE_HDR_FIXED_FIELDS = {
+  Swizzling: 'HDR supports no swizzling.',
+  Normalize: 'HDR preserves radiance without normalization.',
+  MipMapFunction: 'HDR supports float Filter only.',
+} as const;
+
 /** Captured DayZ Workbench float-source contract, shared by plans, reducers and controls. */
 export function textureHdrRefusalOf(
   profile: TextureProfile,
@@ -17,9 +27,9 @@ export function textureHdrRefusalOf(
   if (profile.Conversion !== 'None' && profile.Conversion !== 'HDRCompression') {
     return 'HDR supports Conversion=None or HDRCompression only.';
   }
-  if (profile.Swizzling !== 'None' || profile.Normalize || profile.MipMapFunction !== 'Filter') {
-    return 'HDR supports float filtering without swizzling or normalization.';
-  }
+  if (profile.Swizzling !== 'None') return TEXTURE_HDR_FIXED_FIELDS.Swizzling;
+  if (profile.Normalize) return TEXTURE_HDR_FIXED_FIELDS.Normalize;
+  if (profile.MipMapFunction !== 'Filter') return TEXTURE_HDR_FIXED_FIELDS.MipMapFunction;
   if (source !== undefined) {
     const powerOfTwo = (value: number) => value > 0 && (value & (value - 1)) === 0;
     if (profile.GenerateCubemap && (source.width !== source.height * 2 ||
