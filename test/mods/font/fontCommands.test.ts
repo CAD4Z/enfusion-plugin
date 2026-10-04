@@ -70,7 +70,8 @@ test('font names stay one Windows filename and atlas sizes stay in the engine ra
   }
   for (const size of [7, 41, 32.5, NaN]) assert.equal(fontCommandPlanOf({ ...input, size }).kind, 'refused');
   for (const size of [8, 32, 40]) assert.equal(fontCommandPlanOf({ ...input, size }).kind, 'ready');
-  assert.equal(fontCommandPlanOf({ ...input, name: 'Шрифт Regular' }).kind, 'ready');
+  // "Shrift Regular", Russian for "font": a name outside ASCII is still one valid filename.
+  assert.equal(fontCommandPlanOf({ ...input, name: '\u0428\u0440\u0438\u0444\u0442 Regular' }).kind, 'ready');
   assert.equal(defaultFontName('Inter Display', 'Semi Bold', 32), 'SDF_InterDisplaySemiBold32');
   assert.equal(defaultFontName('Bad/Family', 'Regular?', 8), 'SDF_BadFamilyRegular8');
 });

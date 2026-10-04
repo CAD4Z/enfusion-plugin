@@ -229,7 +229,7 @@ export async function run(): Promise<void> {
     assert.equal(machineValue(previewed.stdout).byteLength, 2 * 1 * 4);
   }
 
-  // HDRCompression is refused by the shipped executable too, not only by the build under test.
+  // HDRCompression needs a Radiance source: the shipped executable refuses it for this PNG too.
   await assert.rejects(
     executeFile(
       executable,
@@ -248,9 +248,11 @@ async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executabl
   const generator = new FontGenerator(extensionPath);
   const source = vscode.Uri.joinPath(workspace, 'Font smoke.ttf');
   const characters = vscode.Uri.joinPath(workspace, 'Font smoke.txt');
+  // "SDF_Proverka32", Russian for "check": a name outside ASCII must survive the CLI and the recipe.
+  const name = 'SDF_\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u043032';
   assert.deepEqual(await generator.inspect(source.fsPath), { family: 'Fixture Sans', style: 'Regular' });
   const session = await loadFontCommand(source, {
-    kind: 'generate', name: 'SDF_Проверка32', size: 32, characters: characters.fsPath,
+    kind: 'generate', name, size: 32, characters: characters.fsPath,
   });
   await assertFontCommandCurrent(session);
   const made = await generator.generate(session, new AbortController().signal);
@@ -277,7 +279,7 @@ async function fontSmoke(extensionPath: string, workspace: vscode.Uri, executabl
   await vscode.workspace.fs.writeFile(metadata, new TextEncoder().encode(recipe + '\n// regenerate smoke\n'));
   await vscode.commands.executeCommand('enfusion.font.regenerate', output);
   assert.equal(new TextDecoder().decode(await vscode.workspace.fs.readFile(metadata)), recipe);
-  const replacement = await loadFontCommand(source, { kind: 'generate', name: 'SDF_Проверка32', size: 24 });
+  const replacement = await loadFontCommand(source, { kind: 'generate', name, size: 24 });
   assert.equal(replacement.plan.action, 'replace');
   assert.equal((await generator.generate(replacement, new AbortController().signal)).guid, made.guid);
   // Native publication must reject the old confirmation even if the caller skips its early check.
