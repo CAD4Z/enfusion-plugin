@@ -74,7 +74,10 @@ jobs:
           { head -c 300000 /dev/zero | tr '\0' 'x'; printf '\n{}\n'; } \
             > native/.build-sanitize/fuzz-corpus/batch-oversized-line
       - name: Fuzz EDDS, images, metadata, and batch NDJSON smoke
-        run: native/.build-sanitize/edds-fuzz -runs=2000 native/.build-sanitize/fuzz-corpus
+        # Include all BC6H modes and both RGBE encodings in the existing sanitizer campaign.
+        run: |
+          python3 native/tests/edds/hdr_fixtures.py native/.build-sanitize/enfusion native/.build-sanitize/fuzz-corpus
+          native/.build-sanitize/edds-fuzz -runs=2000 native/.build-sanitize/fuzz-corpus
       - name: Build owned font fuzz seed corpus
         run: |
           mkdir -p native/.build-sanitize/font-corpus

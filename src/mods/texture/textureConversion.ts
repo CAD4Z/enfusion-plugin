@@ -1,3 +1,4 @@
+import { textureHdrRefusalOf } from './textureHdr';
 import { resolveWindows, samePath, windowsFolder, windowsName } from '../paths';
 import {
   TEXTURE_SOURCE_REFUSAL,
@@ -26,6 +27,7 @@ export interface TextureProfile {
   /** True only when the DDS source proves a complete supplied mip chain. */
   readonly ContainsMips: boolean;
   readonly GenerateMips: boolean;
+  readonly GenerateCubemap: boolean;
   /** Normalizes the source before the chain stage; distinct from MipMapFunction=Normalize. */
   readonly Normalize: boolean;
   readonly MipMapFunction: TextureMipFunction;
@@ -43,6 +45,7 @@ export const DEFAULT_TEXTURE_PROFILE: TextureProfile = {
   Swizzling: 'None',
   ContainsMips: false,
   GenerateMips: true,
+  GenerateCubemap: false,
   Normalize: false,
   MipMapFunction: 'Filter',
   MipMapFilter: 'Box',
@@ -179,6 +182,8 @@ export function textureConversionPlanOf(input: TextureConversionInput): TextureC
   const profile = action === 'reconvert' && owner !== undefined
     ? owner.profile
     : DEFAULT_TEXTURE_PROFILE;
+  const hdrRefusal = textureHdrRefusalOf(profile, sourceFormat);
+  if (hdrRefusal !== undefined) return { kind: 'refused', reason: hdrRefusal };
   const revisions = {
     source: input.sourceRevision,
     ...(input.outputRevision === undefined ? {} : { output: input.outputRevision }),

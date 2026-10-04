@@ -166,6 +166,11 @@ export class TextureConversionEditor
               apply({ kind: 'change-profile', field: 'ContainsMips', value: request.value });
             }
             return;
+          case 'change-cubemap':
+            if (typeof request.value === 'boolean') {
+              apply({ kind: 'change-profile', field: 'GenerateCubemap', value: request.value });
+            }
+            break;
           case 'change-mips':
             if (typeof request.value === 'boolean') {
               apply({ kind: 'change-profile', field: 'GenerateMips', value: request.value });

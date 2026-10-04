@@ -1091,7 +1091,7 @@ if(NOT hdr_result EQUAL 4 OR EXISTS "${CMAKE_CURRENT_BINARY_DIR}/black-box-gpu-h
   message(FATAL_ERROR "HDRCompression was not refused as unsupported: ${hdr_output}")
 endif()
 string(JSON hdr_code GET "${hdr_output}" error code)
-if(NOT hdr_code STREQUAL "unsupported-setting")
+if(NOT hdr_code STREQUAL "unsupported-hdr-combination")
   message(FATAL_ERROR "HDRCompression refusal changed shape: ${hdr_output}")
 endif()
 

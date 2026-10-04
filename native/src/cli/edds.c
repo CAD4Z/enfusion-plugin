@@ -89,7 +89,7 @@ static void usage(void) {
     fputs(
         "usage:\n"
         "  enfusion edds inspect --machine --protocol 1 --input PATH [--metadata PATH.meta [--identity-only]]\n"
-        "  enfusion edds preview --machine --protocol 1 --mip N --input PATH\n"
+        "  enfusion edds preview --machine --protocol 1 --mip N --input PATH [--face N --float | --all-faces]\n"
         "  enfusion edds batch --machine --protocol 1 [--cancel-file PATH] < jobs.ndjson\n"
         "  enfusion edds convert --machine --protocol 1 --input PATH --output PATH [PROFILE FLAGS]\n"
         "      [--metadata PATH.meta --resource-name NAME --source-file NAME --guid HEX]\n"
@@ -210,6 +210,8 @@ static void write_inspection(const edds_info *info, const edds_metadata *metadat
         info->width, info->height, info->mip_count, pixel_format(info, format_buffer),
         channels, info->preview_supported ? "true" : "false");
 
+    (void)printf(",\"faceCount\":%u,\"hdr\":%s", info->face_count,
+        info->pixel_format == EDDS_PIXEL_BC6H || info->pixel_format == EDDS_PIXEL_RGBA32F ? "true" : "false");
     if (!info->preview_supported) {
         fputs(",\"previewUnsupportedReason\":", stdout);
         json_string(preview_refusal(info));
@@ -298,7 +300,8 @@ static void write_inspection(const edds_info *info, const edds_metadata *metadat
         json_string(metadata_mipmap_function(metadata->profile.mipmap_function));
         fputs(",\"MipMapFilter\":", stdout);
         json_string(metadata_mipmap_filter(metadata->profile.mipmap_filter));
-        (void)printf(",\"TiledTexture\":%s}}", metadata->profile.tiled_texture ? "true" : "false");
+        (void)printf(",\"TiledTexture\":%s,\"GenerateCubemap\":%s}}",
+            metadata->profile.tiled_texture ? "true" : "false", metadata->profile.generate_cubemap ? "true" : "false");
     }
 
     fputs("}\n", stdout);
@@ -338,16 +341,35 @@ static void write_base64(const uint8_t *bytes, size_t size) {
 }
 
 /** The `preview` JSON line on stdout: the size of one mip level and its RGBA pixels in Base64. */
-static void write_preview(const edds_info *info, uint32_t mip, const uint8_t *rgba, size_t size) {
+static void write_preview(const edds_info *info, uint32_t mip, uint32_t face, int linear,
+    const uint8_t *rgba, size_t size, uint8_t **faces) {
     const edds_mip *selected = &info->mips[mip];
 
     (void)printf(
         "{\"protocolVersion\":1,\"kind\":\"preview\",\"mip\":%u,"
-        "\"width\":%u,\"height\":%u,\"pixelFormat\":\"RGBA8\","
+        "\"width\":%u,\"height\":%u,\"face\":%u,\"pixelFormat\":\"%s\","
         "\"byteLength\":%llu,\"pixelsBase64\":\"",
-        mip, selected->width, selected->height, (unsigned long long)size);
+        mip, selected->width, selected->height, face, linear ? "RGBA32F" : "RGBA8", (unsigned long long)size);
     write_base64(rgba, size);
-    fputs("\"}\n", stdout);
+    fputs("\"", stdout);
+
+    if (!linear && (info->pixel_format == EDDS_PIXEL_BC6H || info->pixel_format == EDDS_PIXEL_RGBA32F)) {
+        fputs(",\"displayMapping\":\"Reinhard, gamma 2.2\"", stdout);
+    }
+
+    if (faces != NULL && info->face_count == 6) {
+        fputs(",\"facesBase64\":[", stdout);
+
+        for (uint32_t i = 0; i < 6; ++i) {
+            fputs(i == 0 ? "\"" : ",\"", stdout);
+            write_base64(i == 0 ? rgba : faces[i], size);
+            fputs("\"", stdout);
+        }
+
+        fputs("]", stdout);
+    }
+
+    fputs("}\n", stdout);
 }
 
 /** The flags of an edds command; a flag that was not given stays 0 or NULL. */
@@ -358,6 +380,10 @@ typedef struct parsed_arguments {
     uint32_t protocol;
 
     /** `--mip` with its number. */
+    uint32_t face;
+    int      face_seen;
+    int      linear;
+    int      all_faces;
     int      mip_seen;
     uint32_t mip;
 
@@ -382,6 +408,7 @@ typedef struct parsed_arguments {
     const cli_char *mipmap_function;
     const cli_char *mipmap_filter;
     const cli_char *tiled_texture;
+    const cli_char *generate_cubemap;
 
     /** `--metadata`, and the identity it is written with. */
     const cli_char *metadata;
@@ -424,6 +451,18 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
             if (!options->mip_seen) {
                 return 0;
             }
+
+        } else if (equals(argv[at], "--face") && !options->face_seen && at + 1 < argc) {
+            options->face_seen = unsigned_argument(argv[++at], &options->face);
+
+            if (!options->face_seen) {
+                return 0;
+            }
+
+        } else if (equals(argv[at], "--all-faces") && !options->all_faces) {
+            options->all_faces = 1;
+        } else if (equals(argv[at], "--float") && !options->linear) {
+            options->linear = 1;
         } else if (equals(argv[at], "--input") && options->input == NULL && at + 1 < argc) {
             options->input = argv[++at];
         } else if (equals(argv[at], "--output") && options->output == NULL && at + 1 < argc) {
@@ -464,6 +503,8 @@ static int parse_options(int argc, cli_char **argv, int first, parsed_arguments 
             options->mipmap_function = argv[++at];
         } else if (equals(argv[at], "--mipmap-filter") && options->mipmap_filter == NULL && at + 1 < argc) {
             options->mipmap_filter = argv[++at];
+        } else if (equals(argv[at], "--generate-cubemap") && options->generate_cubemap == NULL && at + 1 < argc) {
+            options->generate_cubemap = argv[++at];
         } else if (equals(argv[at], "--tiled-texture") && options->tiled_texture == NULL && at + 1 < argc) {
             options->tiled_texture = argv[++at];
         } else if (equals(argv[at], "--metadata") && options->metadata == NULL && at + 1 < argc) {
@@ -507,7 +548,7 @@ static int has_profile_options(const parsed_arguments *options) {
         options->normalize != NULL ||
         options->mipmap_function != NULL ||
         options->mipmap_filter != NULL ||
-        options->tiled_texture != NULL;
+        options->tiled_texture != NULL || options->generate_cubemap != NULL;
 }
 
 /** Whether any part of the identity is given: `--resource-name`, `--source-file` or `--guid`. */
@@ -656,6 +697,14 @@ static edds_status profile_of(const parsed_arguments *options, edds_profile *pro
         } else if (equals(options->mipmap_filter, "triangle")) {
             profile->mipmap_filter = EDDS_FILTER_TRIANGLE;
         } else {
+            goto unsupported;
+        }
+    }
+
+    if (options->generate_cubemap != NULL) {
+        if (equals(options->generate_cubemap, "true")) {
+            profile->generate_cubemap = 1;
+        } else if (!equals(options->generate_cubemap, "false")) {
             goto unsupported;
         }
     }
@@ -1908,8 +1957,11 @@ int edds_command(int argc, cli_char **argv) {
         !options.protocol_seen ||
         options.protocol != EDDS_PROTOCOL_VERSION ||
         options.input == NULL ||
-        (preview_command && (!options.mip_seen || has_profile_options(&options))) ||
-        (!preview_command && options.mip_seen) ||
+        (preview_command &&
+            (!options.mip_seen ||
+                has_profile_options(&options) ||
+                (options.all_faces && (options.linear || options.face_seen)))) ||
+        (!preview_command && (options.mip_seen || options.face_seen || options.linear || options.all_faces)) ||
         (convert &&
             (options.output == NULL ||
                 ((options.metadata == NULL) != !has_metadata_identity(&options)) ||
@@ -1990,14 +2042,52 @@ int edds_command(int argc, cli_char **argv) {
     }
 
     /* Preview: the `--mip` level decoded to RGBA. */
-    status = edds_preview(input, &info, options.mip, was_cancelled, NULL, &rgba, &rgba_size, &error);
-    (void)fclose(input);
-
+    status = edds_preview_surface(options.face, options.linear, input, &info, options.mip, was_cancelled, NULL, &rgba, &rgba_size, &error);
     if (status != EDDS_OK) {
+        (void)fclose(input);
         return report_failure(status, &error);
     }
 
-    write_preview(&info, options.mip, rgba, rgba_size);
+    uint8_t *faces[6] = { 0 };
+
+    if (options.all_faces && info.face_count == 6) {
+        if (rgba_size > EDDS_MAX_PREVIEW_BYTES / 6) {
+            (void)fclose(input);
+            edds_free(rgba);
+
+            return invalid_invocation("preview-size-limit", "All six faces exceed the preview memory limit; request one --face instead.");
+        }
+
+        for (uint32_t face = 1; face < 6; ++face) {
+            size_t size = 0;
+
+            status = edds_preview_surface(face, 0, input, &info, options.mip, was_cancelled, NULL, &faces[face], &size, &error);
+
+            if (status != EDDS_OK) {
+                break;
+            }
+        }
+
+        if (status != EDDS_OK) {
+            (void)fclose(input);
+
+            for (uint32_t i = 1; i < 6; ++i) {
+                edds_free(faces[i]);
+            }
+
+            edds_free(rgba);
+
+            return report_failure(status, &error);
+        }
+    }
+
+    (void)fclose(input);
+    write_preview(&info, options.mip, options.face, options.linear, rgba, rgba_size, options.all_faces ? faces : NULL);
+
+    for (uint32_t i = 1; i < 6; ++i) {
+        edds_free(faces[i]);
+    }
+
     edds_free(rgba);
 
     return ferror(stdout) ? EDDS_INTERNAL_FAILURE : 0;

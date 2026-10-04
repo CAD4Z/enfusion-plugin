@@ -1,3 +1,4 @@
+import { textureHdrRefusalOf } from './textureHdr';
 import { isTextureSwizzling, textureSwizzleRefusalOf } from './textureSwizzles';
 /**
  * The versioned values that cross the EDDS converter's process boundary.
@@ -94,6 +95,8 @@ export interface EddsPreview {
   readonly width: number;
   readonly height: number;
   readonly rgba: Uint8Array;
+  readonly faces?: readonly Uint8Array[];
+  readonly displayMapping?: string;
 }
 
 export interface EddsConversion {
@@ -300,7 +303,18 @@ export function previewOf(source: string): EddsPreview {
 
   const encoded = stringOf(value, 'pixelsBase64');
   const rgba = base64Of(encoded, byteLength);
-  return { level, width, height, rgba };
+  const displayMapping = value.displayMapping === undefined ? undefined : stringOf(value, 'displayMapping');
+  let faces: readonly Uint8Array[] | undefined;
+  if (value.facesBase64 !== undefined) {
+    const encodedFaces = arrayOf(value, 'facesBase64');
+    if (encodedFaces.length !== 6 || width !== height || byteLength * 6 > EDDS_MAX_PREVIEW_BYTES) {
+      throw new Error('Cube preview requires six square faces within the memory limit.');
+    }
+    faces = encodedFaces.map((face) => base64Of(stringValue(face, 'face'), byteLength));
+  }
+  return { level, width, height, rgba, ...(faces === undefined ? {} : { faces }),
+    ...(displayMapping === undefined ? {} : { displayMapping }) };
+
 }
 
 /** A structured failure is useful text; the process exit code remains its authoritative category. */
@@ -431,12 +445,13 @@ function profileOf(
     Swizzling: swizzling,
     ContainsMips: containsMips,
     GenerateMips: generateMips,
+    GenerateCubemap: value.GenerateCubemap === undefined ? false : booleanOf(value, 'GenerateCubemap'),
     Normalize: normalize,
     MipMapFunction: mipMapFunction,
     MipMapFilter: mipMapFilter,
     TiledTexture: tiledTexture,
   };
-  const refusal = textureSwizzleRefusalOf(profile);
+  const refusal = textureHdrRefusalOf(profile, sourceFormat) ?? textureSwizzleRefusalOf(profile);
   if (refusal !== undefined) throw new Error(refusal);
   return profile;
 }

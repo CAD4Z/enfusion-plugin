@@ -29,7 +29,9 @@ export type DecodablePixelFormat =
   | 'DXT5'
   | 'BC4'
   | 'BC5'
-  | 'BC7';
+  | 'BC7'
+  | 'BC6H'
+  | 'RGBA32F';
 
 export type TextureChannels = 'R' | 'RG' | 'RGB' | 'RGBA';
 
@@ -61,7 +63,7 @@ export const TEXTURE_CONVERSIONS: readonly TextureConversionCapability[] = [
     name: 'None',
     wire: 'none',
     label: 'None (uncompressed colour)',
-    formats: ['BGRX8', 'BGRA8'],
+    formats: ['BGRX8', 'BGRA8', 'RGBA32F'],
     channels: 'RGBA',
     usesQuality: false,
     supported: true,
@@ -124,10 +126,10 @@ export const TEXTURE_CONVERSIONS: readonly TextureConversionCapability[] = [
     name: 'HDRCompression',
     wire: 'hdr-compression',
     label: 'HDR (BC6H)',
-    formats: [],
+    formats: ['BC6H'],
     channels: 'RGB',
     usesQuality: true,
-    supported: false,
+    supported: true,
   },
 ];
 

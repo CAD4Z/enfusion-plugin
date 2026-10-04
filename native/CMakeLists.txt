@@ -38,11 +38,13 @@ add_library(edds_core STATIC
   src/edds/swizzling.c
   src/edds/gpu.c
   src/edds/bc7.c
+  src/edds/bc6.c
   src/edds/decode/png.c
   src/edds/decode/tga.c
   src/edds/decode/jpeg.c
   src/edds/decode/tiff.c
   src/edds/decode/dds.c
+  src/edds/decode/hdr.c
   src/edds/convert.c
   src/edds/metadata.c
   src/edds/meta_text.c
@@ -52,6 +54,9 @@ target_include_directories(edds_core
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/edds")
 target_link_libraries(edds_core PUBLIC Threads::Threads)
+if(UNIX)
+  target_link_libraries(edds_core PUBLIC m)
+endif()
 enfusion_configure_target(edds_core)
 
 # SDF fonts from static TrueType: the reader, the field, the atlas layout and FNT5. The atlas
@@ -90,6 +95,9 @@ install(FILES NOTICE.txt THIRD-PARTY.md DESTINATION .)
 
 include(CTest)
 if(BUILD_TESTING AND ENFUSION_BUILD_TESTS)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME edds_hdr COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/edds/hdr_test.py" "$<TARGET_FILE:enfusion>")
   # EDDS: synthetic sources and an independent reader. Production code is not its own oracle.
   add_library(edds_test_fixture STATIC tests/edds/fixture.c)
   target_include_directories(edds_test_fixture PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tests/edds")

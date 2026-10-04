@@ -325,9 +325,43 @@ static int swizzling_unwinds_partial_buffers_and_rejects_short_channels(void) {
     return 1;
 }
 
+/** Every float-chain and BC6H stage must release partially allocated face/mip buffers. */
+static int hdr_unwinds_allocation_failures(void) {
+    static const char header[] = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 8 +X 16\n";
+    uint8_t           bytes[sizeof header - 1 + 16 * 8 * 4];
+    conversion_input  input = { 0 };
+    edds_error        error;
+    memcpy(bytes, header, sizeof header - 1);
+    for (size_t i = sizeof header - 1; i < sizeof bytes; i += 4) {
+        bytes[i]     = 128;
+        bytes[i + 1] = 64;
+        bytes[i + 2] = 32;
+        bytes[i + 3] = 132;
+    }
+    input.source.data = bytes;
+    input.source.size = sizeof bytes;
+    input.format      = EDDS_SOURCE_HDR;
+    for (uint32_t mode = 0; mode < 8; ++mode) {
+        edds_default_profile(&input.profile);
+        input.profile.generate_cubemap = (mode & 1) != 0;
+        input.profile.conversion       = (mode & 2) ? EDDS_CONVERSION_HDR : EDDS_CONVERSION_NONE;
+        input.profile.mipmap_filter    = (mode & 4) ? EDDS_FILTER_KAISER : EDDS_FILTER_BOX;
+        edds_memory_result full        = edds_memory_run(UINT64_MAX, convert_source, &input, &error);
+        CHECK(full.status == EDDS_OK);
+        for (uint64_t quota = 1; quota < full.peak; quota *= 2) {
+            edds_memory_result limited = edds_memory_run(quota, convert_source, &input, &error);
+            CHECK(limited.status != EDDS_OK);
+            CHECK(limited.required > quota);
+            CHECK(limited.peak <= quota);
+            CHECK(strcmp(error.code, "operation-memory-leak") != 0);
+        }
+    }
+    return 1;
+}
+
 /** Runs the tests in order and stops at the first failure: exits 0 when all pass, 1 otherwise. */
 int main(void) {
-    return a_conversion_cannot_allocate_past_its_quota() &&
+    return hdr_unwinds_allocation_failures() && a_conversion_cannot_allocate_past_its_quota() &&
             compressed_images_finish_even_when_the_initial_charge_is_too_small() &&
             every_codec_unwinds_allocations_when_a_stage_runs_out_of_quota() &&
             swizzling_unwinds_partial_buffers_and_rejects_short_channels() &&

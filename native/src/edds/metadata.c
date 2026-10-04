@@ -333,7 +333,7 @@ static edds_status recipe_setting(
 
     /*
      * The rest are whole numbers: a percentage up to 100, a count of mips, and switches that are 0
-     * or 1. `GenerateCubemap` is supported only as 0.
+     * or 1. `GenerateCubemap` is a boolean; source topology is checked during conversion.
      */
     if (!unsigned_value(value, &number)) {
         goto malformed;
@@ -365,8 +365,11 @@ static edds_status recipe_setting(
         }
 
         metadata->profile.normalize = number != 0;
-    } else if (bit == SETTING_CUBEMAP && number != 0u) {
-        return unsupported(error, key->text, value->text);
+    } else if (bit == SETTING_CUBEMAP) {
+        if (number > 1) {
+            goto malformed;
+        }
+        metadata->profile.generate_cubemap = number != 0;
     } else if (bit == SETTING_TILED) {
         if (number > 1u) {
             goto malformed;
@@ -443,7 +446,7 @@ static edds_status parse_recipe(meta_scanner *scan, edds_metadata *metadata, edd
      */
     {
         edds_error  combination;
-        edds_status status = edds_profile_check(&metadata->profile, &combination);
+        edds_status status = edds_profile_source_check(&metadata->profile, metadata->source_format, &combination);
 
         if (status == EDDS_OK && metadata->source_format != EDDS_SOURCE_DDS && metadata->profile.contains_mips) {
             fail(&combination, "unsupported-combination", "ContainsMips is supported only for a DDS source.");
@@ -796,7 +799,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
 
     {
         /* Canonical metadata never records a recipe this converter would refuse to run. */
-        const edds_status status = edds_profile_check(&metadata->profile, error);
+        const edds_status status = edds_profile_source_check(&metadata->profile, metadata->source_format, error);
 
         if (status != EDDS_OK) {
             return status;
@@ -835,6 +838,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         "   MipMapFunction %s\n"
         "   MipMapFilter %s\n"
         "   TiledTexture %d\n"
+        "   GenerateCubemap %d\n"
         "  }\n"
         "  %s XBOX_ONE : PC {\n"
         "  }\n"
@@ -859,6 +863,7 @@ edds_status edds_metadata_write(FILE *output, const edds_metadata *metadata, edd
         mipmap_function,
         mipmap_filter,
         metadata->profile.tiled_texture,
+        metadata->profile.generate_cubemap,
         resource,
         resource,
         resource);

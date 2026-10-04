@@ -670,6 +670,11 @@ static int profile_value(json_scan *scan, edds_profile *profile, edds_status *pr
             } else {
                 return 0;
             }
+        } else if (strcmp(key, "GenerateCubemap") == 0) {
+            bit = 1u << 14;
+            if (!bool_value(scan, &profile->generate_cubemap)) {
+                return 0;
+            }
         } else if (strcmp(key, "TiledTexture") == 0) {
             bit = 1u << 12;
 
@@ -699,7 +704,7 @@ static int profile_value(json_scan *scan, edds_profile *profile, edds_status *pr
     }
 
     /* All thirteen bits: every setting is there. */
-    if (fields != 0x1fffu) {
+    if ((fields & ~(1u << 14)) != 0x1fffu) {
         return 0;
     }
 

@@ -25,6 +25,7 @@ typedef struct edds_decoded_source {
     uint32_t height;
     int      has_alpha;
     uint8_t *rgba;
+    float   *float_rgba;
 
     /** Zero for ordinary images; DDS supplies a complete chain including level zero. */
     uint32_t         supplied_mip_count;
@@ -71,6 +72,7 @@ edds_status edds_decode_png(FILE *input, edds_decoded_source *image, edds_error 
 edds_status edds_decode_tga(FILE *input, edds_decoded_source *image, edds_error *error);
 edds_status edds_decode_jpeg(FILE *input, edds_decoded_source *image, edds_error *error);
 edds_status edds_decode_tiff(FILE *input, edds_decoded_source *image, edds_error *error);
+edds_status edds_decode_hdr(FILE *input, edds_decoded_source *image, edds_error *error);
 edds_status edds_decode_dds(FILE *input, edds_decoded_source *image, edds_error *error);
 
 #endif

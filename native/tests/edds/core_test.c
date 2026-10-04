@@ -1107,6 +1107,7 @@ static int metadata_round_trip_is_canonical_and_preserves_identity(void) {
         "   MipMapFunction Filter\n"
         "   MipMapFilter Box\n"
         "   TiledTexture 1\n"
+        "   GenerateCubemap 0\n"
         "  }\n"
         "  PNGResourceClass XBOX_ONE : PC {\n"
         "  }\n"
@@ -1170,7 +1171,7 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
         const char *setting;
         const char *code;
     } cases[] = {
-        { "Conversion HDRCompression", "unsupported-setting" },
+        { "Conversion HDRCompression", "unsupported-hdr-combination" },
         { "MipMapFilter Triangle", "unsupported-setting" },
         { "GenerateMips 0 MipMapFunction ColorNoise", "unsupported-combination" },
         { "GenerateMips 0 MipMapFunction Normalize", "unsupported-combination" },
@@ -1202,7 +1203,7 @@ static int known_but_unsupported_metadata_is_never_defaulted(void) {
 
 /**
  * Every registered resource class parses back to its own format, and only to its own.
- * For each of the five source formats, metadata under the default profile (supplied mips for a
+ * For each of the six source formats, metadata under the default profile (supplied mips for a
  * DDS) is written; the text must name the format's resource class and parse back to the same
  * format and source file.
  */
@@ -1210,7 +1211,7 @@ static int every_resource_class_round_trips_through_metadata(void) {
     size_t                        count        = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
 
-    CHECK(count == 5u);
+    CHECK(count == 6u);
 
     for (size_t at = 0; at < count; ++at) {
         /* The text written, the file it is written to, and the file it is parsed back from. */
@@ -2582,14 +2583,14 @@ static int damaged_tiff_input_fails_without_partial_output(void) {
 
 /**
  * One table every part of the converter reads, rather than four remembered lists of its own.
- * Each of the five source capabilities is found again by its format and by its resource class;
+ * Each of the six source capabilities is found again by its format and by its resource class;
  * an alias, NULL and an unknown format find none.
  */
 static int the_source_contract_names_only_registered_resource_classes(void) {
     size_t                        count        = 0;
     const edds_source_capability *capabilities = edds_source_capabilities(&count);
 
-    CHECK(capabilities != NULL && count == 5u);
+    CHECK(capabilities != NULL && count == 6u);
 
     for (size_t at = 0; at < count; ++at) {
         CHECK(edds_source_capability_of_format(capabilities[at].format) == &capabilities[at]);
@@ -3348,7 +3349,6 @@ static int the_uncompressed_channel_formats_are_lossless(void) {
  */
 static int every_lossy_conversion_stays_inside_its_error_bound(void) {
     /* Lists of channels, by their place in RGBA. */
-    static const unsigned colour[]       = { 0, 1, 2 };
     static const unsigned colour_alpha[] = { 0, 1, 2, 3 };
     static const unsigned red[]          = { 0 };
     static const unsigned red_green[]    = { 0, 1 };
@@ -3730,7 +3730,7 @@ static int truncated_gpu_blocks_are_refused(void) {
 
 /**
  * Every conversion and every quality the CLI accepts survives a trip through the metadata text.
- * TGA metadata under each of the eight conversions and six qualities: a conversion that is not
+ * TGA or HDR metadata under each of the eight conversions and six qualities: a conversion that is not
  * supported, or a quality other than 1 on one that does not use quality, cannot be written; every
  * other one parses back with the same conversion and quality.
  */
@@ -3751,12 +3751,18 @@ static int every_conversion_round_trips_through_metadata(void) {
             edds_error    error;
             FILE         *written;
 
-            /* Metadata for a TGA, under this conversion and quality. */
+            /* HDRCompression needs an HDR source; the other cases use a TGA. */
             memset(&metadata, 0, sizeof metadata);
             memcpy(metadata.guid, "0123456789ABCDEF", 17);
             (void)snprintf(metadata.name, sizeof metadata.name, "Probe/pixel.edds");
             (void)snprintf(metadata.source_file, sizeof metadata.source_file, "pixel.tga");
             metadata.source_format = EDDS_SOURCE_TGA;
+
+            if (capabilities[at].conversion == EDDS_CONVERSION_HDR) {
+                metadata.source_format = EDDS_SOURCE_HDR;
+                (void)snprintf(metadata.source_file, sizeof metadata.source_file, "pixel.hdr");
+            }
+
             edds_default_profile(&metadata.profile);
             metadata.profile.conversion         = capabilities[at].conversion;
             metadata.profile.conversion_quality = qualities[quality];

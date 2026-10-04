@@ -119,7 +119,7 @@ export class EddsConverter {
       await this.compatible(scheduledSignal);
       return previewOf(
         await this.invoke(
-          [EDDS_AREA, 'preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input],
+          [EDDS_AREA, 'preview', '--machine', '--protocol', '1', '--mip', String(mip), '--input', input, '--all-faces'],
           scheduledSignal,
         ),
       );
@@ -163,6 +163,7 @@ export class EddsConverter {
             '--swizzling', textureSwizzleWireOf(profile.Swizzling),
             '--contains-mips', String(profile.ContainsMips),
             '--generate-mips', String(profile.GenerateMips),
+            '--generate-cubemap', String(profile.GenerateCubemap),
             '--normalize', String(profile.Normalize),
             '--mipmap-function', profile.MipMapFunction === 'ColorNoise'
               ? 'color-noise' : profile.MipMapFunction.toLowerCase(),

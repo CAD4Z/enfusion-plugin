@@ -5,6 +5,7 @@ native/.build*/
 *.vsix
 *.tsbuildinfo
 *.log
+__pycache__/
 .vscode-test/
 .vscode/*
 !.vscode/launch.json

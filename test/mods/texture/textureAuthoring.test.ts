@@ -196,6 +196,7 @@ test('every Workbench key is visible while unsupported dependent values explain 
       reason,
     ]),
     [
+      ['GenerateCubemap', false, 'HDRCompression and GenerateCubemap require a Radiance HDR source.'],
       ['TargetFormat', false, 'This conversion slice supports EnfusionDDS only.'],
       ['FormatCompress', true, undefined],
       ['CompressTreshold', true, undefined],

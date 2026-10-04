@@ -1,3 +1,4 @@
+import { textureHdrRefusalOf } from './textureHdr';
 import { textureSwizzleRefusalOf } from './textureSwizzles';
 import type { EddsConversion } from './edds';
 import type { TextureRendering } from './textureAuthoring';
@@ -74,6 +75,7 @@ type EditableBatchProfileKey =
   | 'RemoveMips'
   | 'ContainsMips'
   | 'GenerateMips'
+  | 'GenerateCubemap'
   | 'Normalize'
   | 'TiledTexture'
   | 'MipMapFunction'
@@ -236,6 +238,7 @@ function changed(
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
   });
+  if (textureHdrRefusalOf(draft, state.plan.jobs.map((job) => job.sourceFormat)) !== undefined) return unchanged(state);
   if (textureSwizzleRefusalOf(draft) !== undefined) return unchanged(state);
   const plan = withTextureBatchProfile(state.plan, draft);
   const revision = state.revision + 1;

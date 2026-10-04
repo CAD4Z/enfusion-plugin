@@ -156,7 +156,10 @@ export interface RuntimeMemory {
 export function runtimeMemoryOf(inspection: EddsInspection, level: number): AnalysisValue<RuntimeMemory> {
   if (inspection.channels === 'UNKNOWN') return unavailable('Runtime storage is unknown for this pixel format.');
   const dds = inspection.dds;
-  if (dds.depth > 1 || dds.arraySize > 1 || (dds.caps2 & 0x200) !== 0 || (dds.miscFlag & 4) !== 0) {
+  const completeCube = inspection.pixels.kind === 'supported' && inspection.width === inspection.height &&
+    (dds.caps2 & 0xfe00) === 0xfe00 &&
+    (dds.fourCC !== 'DX10' || (dds.arraySize === 6 && (dds.miscFlag & 4) !== 0));
+  if (dds.depth > 1 || (!completeCube && (dds.arraySize > 1 || (dds.caps2 & 0x200) !== 0 || (dds.miscFlag & 4) !== 0))) {
     return unavailable('Runtime size requires decoded payload sizes for every texture surface.');
   }
   const mipBytes = inspection.mips.find((mip) => mip.level === level)?.decodedBytes;
@@ -215,6 +218,12 @@ function referenceOf(input: TextureAnalysisInput): AnalysisValue<AnalysisPixels>
 
 /** One pure projection shared by standalone and source-image viewports. */
 export function analysisOf(input: TextureAnalysisInput, selection: AnalysisSelection): TextureAnalysis {
+  if (input.inspection.pixelFormat === 'BC6H' || input.inspection.pixelFormat === 'RGBA32F' ||
+      (input.inspection.dds.caps2 & 0x200) !== 0) {
+    const reason = unavailable('Byte analysis is unavailable for HDR display mapping or a multi-face texture. Use native preview --float --face N for linear HDR samples.');
+    return { pixels: reason, histogram: reason, error: reason,
+      memory: runtimeMemoryOf(input.inspection, input.result?.level ?? input.selectedMip ?? 0) };
+  }
   const preview = selection.side === 'source' ? input.source : input.result;
   const reason = input.reason ?? (input.inspection.pixels.kind === 'unsupported'
     ? input.inspection.pixels.reason : 'Decoded pixels are not available yet.');
@@ -242,7 +251,9 @@ export function cachePreview<T extends { readonly result: EddsPreview; readonly 
   const retained: T[] = [];
   let bytes = 0;
   for (const item of candidates) {
-    bytes += item.result.rgba.byteLength + (item.source?.rgba.byteLength ?? 0);
+    bytes += item.result.rgba.byteLength + (item.source?.rgba.byteLength ?? 0)
+      + (item.result.faces?.reduce((sum, face) => sum + face.byteLength, 0) ?? 0)
+      + (item.source?.faces?.reduce((sum, face) => sum + face.byteLength, 0) ?? 0);
     if (bytes > PREVIEW_CACHE_BYTES) break;
     retained.push(item);
   }

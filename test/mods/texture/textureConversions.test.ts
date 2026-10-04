@@ -30,18 +30,18 @@ test('the conversion contract names every Workbench value exactly once', () => {
   }
 });
 
-test('HDRCompression stays recognized and unsupported rather than mapped to the nearest format', () => {
+test('HDRCompression produces unsigned BC6H through the HDR source capability', () => {
   const hdr = textureConversionCapabilityOf('HDRCompression');
-  assert.equal(hdr?.supported, false);
-  assert.deepEqual(hdr?.formats, []);
-  assert.equal(isSupportedTextureConversion('HDRCompression'), false);
-  assert.equal(SUPPORTED_TEXTURE_CONVERSIONS.length, 7);
+  assert.equal(hdr?.supported, true);
+  assert.deepEqual(hdr?.formats, ['BC6H']);
+  assert.equal(isSupportedTextureConversion('HDRCompression'), true);
+  assert.equal(SUPPORTED_TEXTURE_CONVERSIONS.length, 8);
 });
 
 test('each conversion carries the runtime formats DayZ writes for it', () => {
   const formats = (name: Parameters<typeof textureConversionCapabilityOf>[0]) =>
     textureConversionCapabilityOf(name)?.formats;
-  assert.deepEqual(formats('None'), ['BGRX8', 'BGRA8']);
+  assert.deepEqual(formats('None'), ['BGRX8', 'BGRA8', 'RGBA32F']);
   assert.deepEqual(formats('DXTCompression'), ['DXT1', 'DXT5']);
   assert.deepEqual(formats('Red'), ['R8']);
   assert.deepEqual(formats('RedHQCompression'), ['BC4']);

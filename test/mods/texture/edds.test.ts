@@ -60,6 +60,7 @@ test('inspect accepts only the structured supported metadata recipe', () => {
           ConversionQuality: 1,
           Swizzling: 'None',
           ContainsMips: true,
+          GenerateCubemap: false,
           GenerateMips: false,
           Normalize: true,
           MipMapFunction: 'Filter',
@@ -84,6 +85,7 @@ test('inspect accepts only the structured supported metadata recipe', () => {
       ConversionQuality: 1,
       Swizzling: 'None',
       ContainsMips: true,
+      GenerateCubemap: false,
       GenerateMips: false,
       Normalize: true,
       MipMapFunction: 'Filter',
@@ -122,6 +124,7 @@ test('metadata refuses mip settings that their controlling stage cannot use', ()
     ConversionQuality: 1,
     Swizzling: 'None',
     ContainsMips: false,
+    GenerateCubemap: false,
     GenerateMips: true,
     Normalize: false,
     MipMapFunction: 'Filter',
@@ -178,6 +181,7 @@ test('every source format in the contract crosses the process boundary, and no a
             ConversionQuality: 1,
             Swizzling: 'None',
             ContainsMips: false,
+            GenerateCubemap: false,
             GenerateMips: true,
             Normalize: false,
             MipMapFunction: 'Filter',
@@ -304,6 +308,7 @@ test('a GPU recipe round-trips through the machine boundary with its exact quali
           ConversionQuality,
           Swizzling: 'None',
           ContainsMips: false,
+          GenerateCubemap: false,
           GenerateMips: true,
           Normalize: false,
           MipMapFunction: 'Filter',
@@ -319,7 +324,7 @@ test('a GPU recipe round-trips through the machine boundary with its exact quali
 
   assert.throws(
     () => inspectionOf(recipeOf('HDRCompression', 1)),
-    /Conversion is not supported: HDRCompression/i,
+    /require a Radiance HDR source/i,
   );
   assert.throws(
     () => inspectionOf(recipeOf('DXTCompression', 1.5)),

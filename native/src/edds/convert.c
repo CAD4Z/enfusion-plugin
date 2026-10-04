@@ -6,6 +6,7 @@
 #include "memory.h"
 #include "image.h"
 #include "gpu.h"
+#include "bc6.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -1147,6 +1148,7 @@ static void free_source(edds_decoded_source *source) {
         }
     } else {
         edds_free(source->rgba);
+        edds_free(source->float_rgba);
     }
 
     memset(source, 0, sizeof *source);
@@ -1154,6 +1156,9 @@ static void free_source(edds_decoded_source *source) {
 
 /** The DXGI format a DX10 header names, or 0 for a format that has a legacy descriptor. */
 static uint32_t dxgi_format_of(edds_pixel_format format) {
+    if (format == EDDS_PIXEL_BC6H) {
+        return 95;
+    }
     switch (format) {
         case EDDS_PIXEL_R8:  return DXGI_FORMAT_R8_UNORM;
         case EDDS_PIXEL_RG8: return DXGI_FORMAT_R8G8_UNORM;
@@ -1216,6 +1221,15 @@ static uint32_t dds_header(
     /* Every other format is named by a four-character code: DXT1, DXT5, or DX10. */
     edds_put_u32le(header + 80, DDPF_FOURCC);
 
+    if (format == EDDS_PIXEL_RGBA32F) {
+        /* Workbench's legacy float header does not declare a byte pitch. */
+        edds_put_u32le(header + 8, flags & ~DDSD_PITCH);
+        edds_put_u32le(header + 20, 0);
+        edds_put_u32le(header + 84, 116);
+
+        return DDS_HEADER_BYTES;
+    }
+
     if (dxgi == 0) {
         memcpy(header + 84, format == EDDS_PIXEL_DXT1 ? "DXT1" : "DXT5", 4);
         return DDS_HEADER_BYTES;
@@ -1242,11 +1256,22 @@ static edds_status write_edds(
     edds_pixel_format    format,
     const generated_mip *mips,
     uint32_t             count,
+    uint32_t             faces,
     edds_error          *error) {
     uint8_t        header[DDS_HEADER_BYTES + DDS_DX10_HEADER_BYTES];
     uint8_t        descriptor[8];
-    const uint32_t header_bytes = dds_header(header, format, mips[0].width, mips[0].height, count, mips[0].payload_bytes);
+    const uint32_t header_bytes = dds_header(header, format, mips[0].width, mips[0].height, count, mips[0].payload_bytes / faces);
 
+    if (faces == 6) {
+        edds_put_u32le(header + 108, DDSCAPS_TEXTURE | DDSCAPS_COMPLEX | (count > 1 ? DDSCAPS_MIPMAP : 0));
+        edds_put_u32le(header + 112, 0xfe00);
+
+        if (header_bytes == 148) {
+            edds_put_u32le(header + 136, 4);
+            /* DayZ's EDDS writer counts faces here, as captured by capture_hdr.py. */
+            edds_put_u32le(header + 140, 6);
+        }
+    }
     if (fwrite(header, 1, header_bytes, output) != header_bytes) {
         goto failure;
     }
@@ -1299,6 +1324,7 @@ void edds_default_profile(edds_profile *profile) {
         profile->mipmap_function    = EDDS_MIPMAP_FILTER;
         profile->mipmap_filter      = EDDS_FILTER_BOX;
         profile->tiled_texture      = 1;
+        profile->generate_cubemap   = 0;
     }
 }
 
@@ -1337,6 +1363,7 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
         profile->remove_mips > 14u ||
         (profile->contains_mips != 0 && profile->contains_mips != 1) ||
         (profile->generate_mips != 0 && profile->generate_mips != 1) ||
+        (profile->generate_cubemap != 0 && profile->generate_cubemap != 1) ||
         (profile->normalize != 0 && profile->normalize != 1) ||
         (profile->tiled_texture != 0 && profile->tiled_texture != 1)) {
         edds_fail(error, "unsupported-setting", "The conversion profile is outside the supported Workbench slice.");
@@ -1399,6 +1426,34 @@ edds_status edds_profile_check(const edds_profile *profile, edds_error *error) {
         edds_fail(error, "unsupported-setting",
             "Workbench setting ConversionQuality has no confirmed effect on Conversion=%s.",
             conversion->workbench_name);
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+
+    return EDDS_OK;
+}
+
+/** Source-dependent semantics shared by metadata, CLI and batch conversion. */
+edds_status edds_profile_source_check(const edds_profile *profile, edds_source_format source, edds_error *error) {
+    edds_status status = edds_profile_check(profile, error);
+
+    if (status != EDDS_OK) {
+        return status;
+    }
+
+    if (source != EDDS_SOURCE_HDR && (profile->generate_cubemap || profile->conversion == EDDS_CONVERSION_HDR)) {
+        edds_fail(error, "unsupported-hdr-combination", "HDRCompression and GenerateCubemap require a Radiance HDR source.");
+
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+
+    if (source == EDDS_SOURCE_HDR &&
+        ((profile->conversion != EDDS_CONVERSION_NONE &&
+             profile->conversion != EDDS_CONVERSION_HDR) ||
+            profile->swizzling != EDDS_SWIZZLE_NONE ||
+            profile->normalize ||
+            profile->mipmap_function != EDDS_MIPMAP_FILTER)) {
+        edds_fail(error, "unsupported-hdr-combination", "HDR requires None or HDRCompression, without swizzling or normalization.");
+
         return EDDS_UNSUPPORTED_FORMAT;
     }
 
@@ -1486,6 +1541,218 @@ static edds_source_alpha source_alpha_of(const edds_decoded_source *source) {
     return EDDS_ALPHA_OPAQUE;
 }
 
+/** Fill six RGBA32F cube faces with the captured Workbench corner-sampled panorama projection. */
+static void hdr_panorama(const edds_decoded_source *image, float *output, uint32_t size) {
+    const double pi = 3.14159265358979323846;
+
+    for (uint32_t face = 0; face < 6; ++face) {
+        for (uint32_t y = 0; y < size; ++y) {
+            for (uint32_t x = 0; x < size; ++x) {
+                const float u = (float)(2.0 * x / size), v = (float)(2.0 * y / size);
+
+                const float directions[6][3] = {
+                    { 1, 1 - v, 1 - u }, { -1, 1 - v, u - 1 }, { u - 1, 1, v - 1 },
+                    { u - 1, -1, 1 - v }, { u - 1, 1 - v, 1 }, { 1 - u, 1 - v, -1 }
+                };
+                const float   *d      = directions[face];
+                const float    sx     = (float)((image->width * 0.5) * (atan2f(d[0], d[2]) + pi) / pi);
+                const float    sy     = (float)((image->width * 0.5) * (pi * 0.5 - atan2f(d[1], hypotf(d[2], d[0]))) / pi);
+                const uint32_t left   = (uint32_t)floorf(sx) % image->width;
+                const uint32_t right  = (left + 1) % image->width;
+                const uint32_t top    = (uint32_t)fmaxf(0, fminf(floorf(sy), (float)(image->height - 1)));
+                const uint32_t bottom = (uint32_t)fmaxf(0, fminf(floorf(sy) + 1, (float)(image->height - 1)));
+                const float    fx = sx - floorf(sx), fy = sy - floorf(sy);
+
+                for (uint32_t c = 0; c < 4; ++c) {
+                    const float a = image->float_rgba[((size_t)top * image->width + left) * 4 + c];
+                    const float b = image->float_rgba[((size_t)top * image->width + right) * 4 + c];
+                    const float e = image->float_rgba[((size_t)bottom * image->width + left) * 4 + c];
+                    const float f = image->float_rgba[((size_t)bottom * image->width + right) * 4 + c];
+
+                    output[(((size_t)face * size + y) * size + x) * 4 + c] =
+                        (a * (1 - fx) + b * fx) * (1 - fy) + (e * (1 - fx) + f * fx) * fy;
+                }
+            }
+        }
+    }
+}
+
+/** Filter the float face/mip chain, encode its runtime payloads, and serialize one EDDS. */
+static edds_status encode_hdr(
+    const edds_decoded_source *image, FILE *output, const edds_profile *profile,
+    edds_cancelled_fn cancel, void *context, edds_progress_fn progress, void *progress_context,
+    edds_error *error) {
+    generated_mip  mips[EDDS_MAX_MIPS] = { 0 };
+    const uint32_t width               = profile->generate_cubemap ? image->width / 4 : image->width;
+    const uint32_t height              = profile->generate_cubemap ? width : image->height;
+    const uint32_t faces               = profile->generate_cubemap ? 6 : 1;
+    const uint32_t count               = mip_count(width, height, profile->generate_mips);
+    edds_status    status              = EDDS_OK;
+
+    if (profile->conversion == EDDS_CONVERSION_HDR) {
+        if (width < 4 || height < 4 || (width & (width - 1)) || (height & (height - 1))) {
+            edds_fail(error, "unsupported-hdr-dimensions", "HDRCompression requires power-of-two dimensions of at least 4.");
+
+            return EDDS_UNSUPPORTED_FORMAT;
+        }
+
+        for (size_t i = 0; i < (size_t)image->width * image->height * 4; ++i) {
+            if (!isfinite(image->float_rgba[i]) || image->float_rgba[i] < 0 || image->float_rgba[i] > 65504) {
+                edds_fail(error, "hdr-range", "Unsigned BC6H requires finite RGB values between 0 and 65504.");
+
+                return EDDS_UNSUPPORTED_FORMAT;
+            }
+        }
+    }
+
+    if (profile->generate_cubemap && (image->width != image->height * 2 || image->width < 16 || (image->width & (image->width - 1)) != 0)) {
+        edds_fail(error, "unsupported-cubemap-topology",
+            "GenerateCubemap requires a -Y/+X 2:1 equirectangular HDR panorama, power-of-two width at least 16.");
+
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
+
+    if (profile->remove_mips >= count) {
+        edds_fail(error, "remove-mips-out-of-range", "RemoveMips would remove the complete HDR chain.");
+
+        return EDDS_INVALID_INPUT;
+    }
+
+    for (uint32_t level = 0; level < count; ++level) {
+        generated_mip *mip = &mips[level];
+
+        if (cancel != NULL && cancel(context)) {
+            edds_fail(error, "cancelled", "The HDR conversion was cancelled.");
+            status = EDDS_CANCELLED;
+            goto done;
+        }
+
+        mip->width         = level == 0 ? width : (mips[level - 1].width > 1 ? mips[level - 1].width / 2 : 1);
+        mip->height        = level == 0 ? height : (mips[level - 1].height > 1 ? mips[level - 1].height / 2 : 1);
+        mip->bytes         = mip->width * mip->height * 4;
+        mip->payload_bytes = mip->bytes * (uint32_t)sizeof(float) * faces;
+        mip->payload       = edds_alloc(mip->payload_bytes);
+
+        if (mip->payload == NULL) {
+            edds_fail(error, "allocation-failed", "Memory for the HDR mip could not be allocated.");
+            status = EDDS_INTERNAL_FAILURE;
+            goto done;
+        }
+
+        mip->filter_pixels = (float *)mip->payload;
+
+        if (level == 0) {
+            if (faces == 1) {
+                memcpy(mip->payload, image->float_rgba, mip->payload_bytes);
+            } else {
+                hdr_panorama(image, mip->filter_pixels, width);
+            }
+
+        } else {
+            for (uint32_t face = 0; face < faces; ++face) {
+                generated_mip previous = mips[level - 1];
+
+                previous.filter_pixels += (size_t)face * previous.bytes;
+                mip->filter_pixels      = (float *)mip->payload + (size_t)face * mip->bytes;
+
+                if (profile->mipmap_filter == EDDS_FILTER_KAISER) {
+                    if (!kaiser_mip(&previous, mip, profile->tiled_texture)) {
+                        edds_fail(error, "allocation-failed", "Memory for HDR Kaiser filtering could not be allocated.");
+                        status = EDDS_INTERNAL_FAILURE;
+                        goto done;
+                    }
+
+                } else {
+                    box_float_mip(&previous, mip);
+                }
+            }
+
+            mip->filter_pixels = (float *)mip->payload;
+        }
+    }
+
+    for (uint32_t level = 0; level < count; ++level) {
+        for (size_t at = 0; at < (size_t)mips[level].bytes * faces; ++at) {
+            if (!isfinite(mips[level].filter_pixels[at])) {
+                edds_fail(error, "hdr-filter-range", "HDR filtering overflowed the finite float range.");
+                status = EDDS_UNSUPPORTED_FORMAT;
+                goto done;
+            }
+        }
+    }
+
+    /* Filtering finishes in float before any lossy block encoding. */
+    if (profile->conversion == EDDS_CONVERSION_HDR) {
+        for (uint32_t level = 0; level < count; ++level) {
+            generated_mip *mip      = &mips[level];
+            const uint32_t per_face = edds_gpu_mip_bytes(EDDS_PIXEL_BC6H, mip->width, mip->height);
+            uint8_t       *encoded  = edds_alloc((size_t)per_face * faces);
+
+            if (encoded == NULL) {
+                edds_fail(error, "allocation-failed", "Memory for BC6H encoding could not be allocated.");
+                status = EDDS_INTERNAL_FAILURE;
+                goto done;
+            }
+
+            for (uint32_t face = 0; face < faces; ++face) {
+                uint8_t *dst = encoded + (size_t)face * per_face;
+
+                for (uint32_t y = 0; y < mip->height; y += 4) {
+                    if (cancel != NULL && cancel(context)) {
+                        edds_free(encoded);
+                        edds_fail(error, "cancelled", "BC6H encoding was cancelled.");
+                        status = EDDS_CANCELLED;
+                        goto done;
+                    }
+
+                    for (uint32_t x = 0; x < mip->width; x += 4) {
+                        float block[64];
+
+                        for (uint32_t by = 0; by < 4; ++by) {
+                            for (uint32_t bx = 0; bx < 4; ++bx) {
+                                uint32_t sx = x + bx < mip->width ? x + bx : mip->width - 1;
+                                uint32_t sy = y + by < mip->height ? y + by : mip->height - 1;
+
+                                for (uint32_t c = 0; c < 4; ++c) {
+                                    /* Kaiser ringing has no unsigned BC6H representation. */
+                                    const size_t sample_index = ((size_t)face * mip->height * mip->width + sy * mip->width + sx) * 4 + c;
+
+                                    block[(by * 4 + bx) * 4 + c] = fmaxf(0, fminf(65504, mip->filter_pixels[sample_index]));
+                                }
+                            }
+                        }
+
+                        edds_bc6_encode(block, profile->conversion_quality, dst);
+                        dst += 16;
+                    }
+                }
+            }
+
+            edds_free(mip->payload);
+            mip->payload       = encoded;
+            mip->filter_pixels = NULL;
+            mip->payload_bytes = per_face * faces;
+        }
+    }
+
+    status = prepare_storage(mips + profile->remove_mips, count - profile->remove_mips, profile, progress, progress_context, error);
+
+    if (status == EDDS_OK) {
+        status = write_edds(output, profile->conversion == EDDS_CONVERSION_HDR ? EDDS_PIXEL_BC6H : EDDS_PIXEL_RGBA32F,
+            mips + profile->remove_mips, count - profile->remove_mips, faces, error);
+    }
+
+done:
+
+    for (uint32_t level = 0; level < count; ++level) {
+        mips[level].filter_pixels = NULL;
+    }
+
+    free_mips(mips, count);
+
+    return status;
+}
+
 /**
  * Everything after decoding: one source image, whatever produced it, becomes one EDDS.
  * The steps: the mip chain, the swizzle, the runtime format, the container, the file; progress is
@@ -1500,6 +1767,9 @@ static edds_status encode_image(
     edds_progress_fn           progress,
     void                      *progress_context,
     edds_error                *error) {
+    if (image->float_rgba != NULL) {
+        return encode_hdr(image, output, profile, cancelled, cancel_context, progress, progress_context, error);
+    }
     /* The mip chain and how many levels it has; the runtime format, by the alpha really used. */
     generated_mip           mips[EDDS_MAX_MIPS];
     const edds_pixel_format format = edds_profile_pixel_format(profile, source_alpha_of(image));
@@ -1576,7 +1846,7 @@ static edds_status encode_image(
 
     if (status == EDDS_OK) {
         report(progress, progress_context, 0.90);
-        status = write_edds(output, format, mips, count, error);
+        status = write_edds(output, format, mips, count, 1, error);
     }
 
     free_mips(mips, count);
@@ -1606,7 +1876,7 @@ edds_status edds_encode_rgba(
         return EDDS_INTERNAL_FAILURE;
     }
 
-    status = edds_profile_check(profile, error);
+    status = edds_profile_source_check(profile, EDDS_SOURCE_PNG, error);
 
     if (status != EDDS_OK) {
         return status;
@@ -1663,7 +1933,7 @@ edds_status edds_convert(
         return EDDS_INTERNAL_FAILURE;
     }
 
-    status = edds_profile_check(profile, error);
+    status = edds_profile_source_check(profile, source_format, error);
 
     if (status != EDDS_OK) {
         return status;
@@ -1692,6 +1962,7 @@ edds_status edds_convert(
         case EDDS_SOURCE_JPG:  status = edds_decode_jpeg(source, &image, error); break;
         case EDDS_SOURCE_TIFF: status = edds_decode_tiff(source, &image, error); break;
         case EDDS_SOURCE_DDS:  status = edds_decode_dds(source, &image, error); break;
+        case EDDS_SOURCE_HDR:  status = edds_decode_hdr(source, &image, error); break;
     }
 
     if (status != EDDS_OK) {

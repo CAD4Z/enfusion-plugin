@@ -53,6 +53,8 @@ typedef enum edds_pixel_format {
     EDDS_PIXEL_BC4,
     EDDS_PIXEL_BC5,
     EDDS_PIXEL_BC7,
+    EDDS_PIXEL_RGBA32F,
+    EDDS_PIXEL_BC6H,
     EDDS_PIXEL_DXGI,
     EDDS_PIXEL_UNKNOWN
 } edds_pixel_format;
@@ -67,7 +69,8 @@ typedef enum edds_source_format {
     EDDS_SOURCE_TGA,
     EDDS_SOURCE_JPG,
     EDDS_SOURCE_TIFF,
-    EDDS_SOURCE_DDS
+    EDDS_SOURCE_DDS,
+    EDDS_SOURCE_HDR
 } edds_source_format;
 
 /**
@@ -215,6 +218,7 @@ typedef struct edds_profile {
     edds_mipmap_function mipmap_function;
     edds_mipmap_filter   mipmap_filter;
     int                  tiled_texture;
+    int                  generate_cubemap;
 } edds_profile;
 
 /** The room for a GUID's sixteen digits with their NUL, and for one resource path with its NUL. */
@@ -272,6 +276,8 @@ typedef struct edds_info {
     uint32_t depth;
     uint32_t pixel_format_flags;
     char     four_cc[5];
+    uint32_t four_cc_value;
+    uint32_t face_count;
     uint32_t rgb_bit_count;
     uint32_t r_mask;
     uint32_t g_mask;
@@ -315,9 +321,15 @@ edds_status edds_inspect(
     void             *cancel_context,
     edds_error       *error);
 
+/** Select one face (+X,-X,+Y,-Y,+Z,-Z) and optional linear RGBA32F output for HDR formats.
+ * The default byte display maps RGB by pow(max(0,v)/(1+max(0,v)), 1/2.2); alpha is clamped.
+ * Both outputs decode the stored GPU payload; linear samples have no display mapping. */
+edds_status edds_preview_surface(uint32_t face, int linear, FILE *input, const edds_info *info,
+    uint32_t level, edds_cancelled_fn cancel, void *context, uint8_t **rgba, size_t *size, edds_error *error);
+
 /**
- * Decodes one mip of an inspected EDDS into RGBA8, top row first. On success `*rgba` holds
- * `*rgba_size` bytes, which the caller releases with `edds_free`.
+ * Decodes face zero of one mip into display-mapped RGBA8, top row first. On success `*rgba`
+ * holds `*rgba_size` bytes, which the caller releases with `edds_free`.
  */
 edds_status edds_preview(
     FILE             *input,
@@ -331,6 +343,9 @@ edds_status edds_preview(
 
 /** Fills `profile` with the default settings. */
 void edds_default_profile(edds_profile *profile);
+
+/** Validate both generic settings and source-dependent combinations, or fill the refusal. */
+edds_status edds_profile_source_check(const edds_profile *profile, edds_source_format source, edds_error *error);
 
 /** Whether a profile is inside this converter's slice, with the refusal when it is not. */
 edds_status edds_profile_check(const edds_profile *profile, edds_error *error);

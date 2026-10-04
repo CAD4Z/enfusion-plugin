@@ -1,3 +1,4 @@
+import { textureSurfaceControls } from './textureSurface';
 /** Compact batch authoring UI: one item list, one common profile, one active viewport. */
 
 import { profileFormControls } from './profileForm';
@@ -6,7 +7,7 @@ import {
   textureBatchRetryCount,
   type TextureBatchAuthoringState,
 } from '../../mods/texture/textureBatchAuthoring';
-import type { TextureProfile } from '../../mods/texture/textureConversion';
+import type { TextureProfile, TextureSourceFormat } from '../../mods/texture/textureConversion';
 import type { TextureBatchRequest, TextureBatchStateMessage } from './textureBatchProtocol';
 import './textureBatch.css';
 
@@ -98,17 +99,19 @@ function render(state: TextureBatchAuthoringState): void {
   } else {
     const viewport = element('div', 'viewport');
     viewport.append(canvas);
+    workspace.append(textureSurfaceControls(rendered.result, (surface) => {
+      const selected = canvasOf(surface);
+      if (selected !== undefined) { canvas = selected; viewport.replaceChildren(selected); }
+    }));
     workspace.append(viewport);
   }
 
   const sidebar = element('aside', 'batch-sidebar');
   const heading = document.createElement('h2');
   heading.textContent = 'Common texture profile';
-  const allDds = state.plan.jobs.length > 0 &&
-    state.plan.jobs.every((job) => job.sourceFormat === 'DDS');
   sidebar.append(
     heading,
-    profileForm(state.draft, allDds ? 'DDS' : 'PNG', state.kind !== 'authoring'),
+    profileForm(state.draft, state.plan.jobs.map((job) => job.sourceFormat), state.kind !== 'authoring'),
   );
   if (state.kind === 'running' || state.kind === 'result') {
     const overall = document.createElement('progress');
@@ -143,7 +146,7 @@ function render(state: TextureBatchAuthoringState): void {
 
 function profileForm(
   profile: TextureProfile,
-  sourceFormat: 'PNG' | 'DDS',
+  sourceFormat: readonly TextureSourceFormat[],
   locked: boolean,
 ): HTMLElement {
   const form = element('div', 'profile-form');
@@ -153,6 +156,7 @@ function profileForm(
     removeMips: (value) => host.postMessage({ type: 'change-remove-mips', value }),
     containsMips: (value) => host.postMessage({ type: 'change-contains-mips', value }),
     mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    cubemap: (value) => host.postMessage({ type: 'change-cubemap', value }),
     tiled: (value) => host.postMessage({ type: 'change-tiled-texture', value }),
     normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
     mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),

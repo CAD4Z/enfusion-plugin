@@ -1,3 +1,4 @@
+import { textureHdrRefusalOf } from './textureHdr';
 import { textureSwizzleRefusalOf, type TextureSwizzleSource } from './textureSwizzles';
 import type { EddsConversion, EddsInspection, EddsPreview } from './edds';
 import { cachePreview } from './textureAnalysis';
@@ -38,14 +39,18 @@ export interface TextureProfileField {
  */
 export function textureProfileFieldsOf(
   profile: TextureProfile,
-  sourceFormat: TextureSourceFormat = 'PNG',
+  sourceFormat: TextureSourceFormat | readonly TextureSourceFormat[] = 'PNG',
   source?: TextureSwizzleSource,
 ): readonly TextureProfileField[] {
   const conversion = textureConversionCapabilityOf(profile.Conversion);
   const suppliedRefusal = textureSwizzleRefusalOf({ ...profile, ContainsMips: true, GenerateMips: false });
   const generatedRefusal = textureSwizzleRefusalOf({ ...profile, GenerateMips: false });
   const removalRefusal = textureSwizzleRefusalOf({ ...profile, RemoveMips: 1 }, source);
+  const formats = typeof sourceFormat === 'string' ? [sourceFormat] : sourceFormat;
+  const hdr = formats.includes('HDR');
+  const cubeRefusal = textureHdrRefusalOf({ ...profile, GenerateCubemap: true }, sourceFormat, source);
   return [
+    { key: 'GenerateCubemap', editable: cubeRefusal === undefined, reason: cubeRefusal },
     {
       key: 'TargetFormat',
       editable: false,
@@ -64,10 +69,11 @@ export function textureProfileFieldsOf(
           editable: false,
           reason: `Conversion=${profile.Conversion} stores its channels as they are, so quality has nothing to trade.`,
         },
-    { key: 'Swizzling', editable: true },
+    hdr ? { key: 'Swizzling', editable: false, reason: 'HDR supports no swizzling.' }
+      : { key: 'Swizzling', editable: true },
     suppliedRefusal !== undefined
       ? { key: 'ContainsMips', editable: false, reason: suppliedRefusal }
-      : sourceFormat === 'DDS'
+      : formats.every((format) => format === 'DDS')
       ? { key: 'ContainsMips', editable: true }
       : {
           key: 'ContainsMips',
@@ -83,8 +89,9 @@ export function textureProfileFieldsOf(
           reason: 'GenerateMips is disabled while ContainsMips supplies the chain.',
         }
       : { key: 'GenerateMips', editable: true },
-    { key: 'Normalize', editable: true },
-    profile.GenerateMips
+    hdr ? { key: 'Normalize', editable: false, reason: 'HDR preserves radiance without normalization.' }
+      : { key: 'Normalize', editable: true },
+    hdr ? { key: 'MipMapFunction', editable: false, reason: 'HDR supports float Filter only.' } : profile.GenerateMips
       ? { key: 'MipMapFunction', editable: true }
       : {
           key: 'MipMapFunction',
@@ -146,6 +153,7 @@ type EditableProfileKey =
   | 'RemoveMips'
   | 'ContainsMips'
   | 'GenerateMips'
+  | 'GenerateCubemap'
   | 'Normalize'
   | 'TiledTexture'
   | 'MipMapFunction'
@@ -308,7 +316,7 @@ function changedProfile(
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
   });
-  if (textureSwizzleRefusalOf(draft, state.sourceFacts) !== undefined) return unchanged(state);
+  if ((textureHdrRefusalOf(draft, state.plan.sourceFormat, state.sourceFacts) ?? textureSwizzleRefusalOf(draft, state.sourceFacts)) !== undefined) return unchanged(state);
   const revision = state.revision + 1;
   const plan: ReadyPlan = { ...state.plan, profile: draft };
   return {

@@ -25,8 +25,8 @@ static const edds_conversion_capability capabilities[] = {
     { EDDS_CONVERSION_RED_GREEN, "RedGreen", "red-green", 1, 0 },
     { EDDS_CONVERSION_RED_GREEN_HQ, "RedGreenHQCompression", "red-green-hq-compression", 1, 1 },
     { EDDS_CONVERSION_COLOR_HQ, "ColorHQCompression", "color-hq-compression", 1, 1 },
-    /* BC6H and the HDR source pipeline behind it are their own slice; recognized, never guessed. */
-    { EDDS_CONVERSION_HDR, "HDRCompression", "hdr-compression", 0, 1 }
+    /* Captured float-source conversion: unsigned BC6H (DXGI 95). */
+    { EDDS_CONVERSION_HDR, "HDRCompression", "hdr-compression", 1, 1 }
 };
 
 /** The number of rows in the table. */

@@ -69,6 +69,24 @@ try {
     throw 'the VSIX executable is not the staged and tested executable'
   }
 
+  # Exercise the executable from the archive, including float/cube headers and independent BC6H decoding.
+  $hdrSmoke = Join-Path ([System.IO.Path]::GetTempPath()) ('enfusion-hdr-package-' + [guid]::NewGuid())
+  [System.IO.Directory]::CreateDirectory($hdrSmoke) | Out-Null
+  try {
+    $packagedExe = Join-Path $hdrSmoke 'enfusion.exe'
+    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $packagedExe)
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+      & py -3 native/tests/edds/hdr_test.py $packagedExe
+    } else {
+      & python native/tests/edds/hdr_test.py $packagedExe
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'the packaged executable failed HDR/cubemap smoke' }
+  } finally {
+    # This directory was created above and contains only the extracted executable.
+    Remove-Item -LiteralPath $packagedExe -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $hdrSmoke -Force
+  }
+
   $swizzles = @('TerrainLayerTexture', 'TerrainSuperTexture', 'TerrainNormalSpecular_SYxX',
     'AlphaToRGB', 'SMDIToGS', 'NormalMap_NOHQ', 'NormalMapGA', 'NormalSpecularMapXYZS',
     'AmbientSpecularMapGA')
@@ -79,6 +97,9 @@ try {
     try { $script = $reader.ReadToEnd() } finally { $reader.Dispose() }
     foreach ($swizzle in $swizzles) {
       if (-not $script.Contains($swizzle)) { throw "$bundle is missing Swizzling=$swizzle" }
+    }
+    foreach ($hdrSetting in @('HDRCompression', 'GenerateCubemap')) {
+      if (-not $script.Contains($hdrSetting)) { throw "$bundle is missing $hdrSetting" }
     }
   }
 } finally {

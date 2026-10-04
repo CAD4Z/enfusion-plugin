@@ -23,7 +23,7 @@ include/edds/     the texture library's API: EDDS, batches, the worker pool, the
 include/font/     the font library's API
 src/cli/          the executable: the area dispatch, the edds and font commands, the publish transaction
 src/edds/         edds_core: the EDDS container, the mip pipeline, GPU encoders, metadata, the pool
-src/edds/decode/  the source decoders, one per resource class: png, tga, jpeg, tiff, dds
+src/edds/decode/  the source decoders, one per resource class: png, tga, jpeg, tiff, dds, hdr
 src/font/         font_core: TrueType reading, kerning, outlines, the MSDF field, FNT5
 tests/edds/       EDDS fixtures, the independent reference reader, core and black-box CLI tests
 tests/font/       font fixtures, the independent reference, core and black-box CLI tests
@@ -302,3 +302,36 @@ resolution and compares it with its own rasterization of the planted outline, me
 range from the commonest step of the median, and checks `KERN` against the planted pairs and the
 pairs fontTools read from the same font (`tests/workbench/font-kerning-golden.json`).
 `tests/workbench/font_check.py` repeats both comparisons against fontTools for any real font.
+
+
+## HDR and cubemap authoring
+
+Radiance `.hdr` accepts `#?RADIANCE` or `#?RGBE`, one `FORMAT=32-bit_rle_rgbe`,
+and `-Y height +X width`, using flat RGBE or planar scanline RLE. Unsupported header
+transforms, XYZE, other orientations, truncated streams and oversized float allocations
+are refused. The decoded RGBA32F source is bounded to 64 MiB.
+
+`Conversion=None` preserves float radiance in RGBA32F (legacy FOURCC 116).
+`--conversion hdr-compression` writes unsigned BC6H (DXGI 95); source dimensions must
+be powers of two of at least four, and RGB must lie within the finite half-float range
+0–65504. ConversionQuality controls the deterministic endpoint search. Box and Kaiser
+mips are filtered in float first; unsigned BC6H clamps filter ringing to its representable
+range. A nonfinite filtering result is refused. Swizzling, normalization and other HDR
+conversion combinations are unavailable with an explicit reason in both editors.
+
+`--generate-cubemap true` requires the captured 2:1 equirectangular HDR panorama with
+power-of-two width at least 16. It writes six square faces of side width/4. The canonical
+recipe key is `GenerateCubemap`. Native and editor Convert, Reconvert, Replace and batch
+continue to use the existing revision-checked EDDS/meta transaction.
+
+`edds preview ... --face N` selects +X,-X,+Y,-Y,+Z,-Z as 0–5. `--float` returns linear
+RGBA32F samples as little-endian floats in `pixelsBase64`. The default RGBA8 display uses
+Reinhard mapping followed by gamma 2.2 and labels this mapping; it does not alter the
+stored result. `--all-faces` returns six RGBA8 `facesBase64` images within a 64 MiB total
+limit and is mutually exclusive with `--face` and `--float`. The editor exposes their
+face selector and mip controls. Byte histogram/error analysis is unavailable for mapped
+HDR displays rather than presenting clipped samples as radiance.
+
+Independent verification and the outstanding visual release checks are recorded in
+[HDR evidence](tests/workbench/hdr-evidence.md). The Python 3 standard library is needed
+only for development tests and fixture generation, never by the packaged converter.

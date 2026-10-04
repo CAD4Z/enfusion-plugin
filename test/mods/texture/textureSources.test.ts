@@ -28,6 +28,7 @@ test('the contract includes DDS only under the resource class Workbench register
     { format: 'JPG', extension: 'jpg', wire: 'jpg' },
     { format: 'TIFF', extension: 'tiff', wire: 'tiff' },
     { format: 'DDS', extension: 'dds', wire: 'dds' },
+    { format: 'HDR', extension: 'hdr', wire: 'hdr' },
   ]);
 });
 
@@ -57,10 +58,10 @@ test('the native wire name maps back to the format a plan is written in', () => 
 });
 
 test('refusals name the whole contract rather than a remembered pair', () => {
-  assert.equal(TEXTURE_SOURCE_EXTENSIONS, '.png, .tga, .jpg, .tiff and .dds');
-  assert.equal(TEXTURE_SOURCE_EXTENSIONS_EITHER, '.png, .tga, .jpg, .tiff or .dds');
-  assert.equal(TEXTURE_SOURCE_REFUSAL, 'Only .png, .tga, .jpg, .tiff and .dds source images are supported.');
-  assert.equal(TEXTURE_PRIMARY_REFUSAL, 'The primary source must be a PNG, TGA, JPG, TIFF or DDS image.');
+  assert.equal(TEXTURE_SOURCE_EXTENSIONS, '.png, .tga, .jpg, .tiff, .dds and .hdr');
+  assert.equal(TEXTURE_SOURCE_EXTENSIONS_EITHER, '.png, .tga, .jpg, .tiff, .dds or .hdr');
+  assert.equal(TEXTURE_SOURCE_REFUSAL, 'Only .png, .tga, .jpg, .tiff, .dds and .hdr source images are supported.');
+  assert.equal(TEXTURE_PRIMARY_REFUSAL, 'The primary source must be a PNG, TGA, JPG, TIFF, DDS or HDR image.');
 });
 
 /**

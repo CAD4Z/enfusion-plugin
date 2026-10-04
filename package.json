@@ -184,7 +184,7 @@
         },
         {
           "command": "enfusion.texture.convert",
-          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff|dds)$/i",
+          "when": "isWindows && enfusion.hasTextureRoot && resourceScheme == file && resourceExtname =~ /\\.(png|tga|jpg|tiff|dds|hdr)$/i",
           "group": "navigation@20"
         },
         {
@@ -250,6 +250,9 @@
           },
           {
             "filenamePattern": "*.[dD][dD][sS]"
+          },
+          {
+            "filenamePattern": "*.[hH][dD][rR]"
           }
         ],
         "priority": "option"

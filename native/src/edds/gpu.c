@@ -20,6 +20,7 @@ uint32_t edds_gpu_block_bytes(edds_pixel_format format) {
         case EDDS_PIXEL_BC4:  return 8;
         case EDDS_PIXEL_DXT5: return 16;
         case EDDS_PIXEL_BC5:  return 16;
+        case EDDS_PIXEL_BC6H:
         case EDDS_PIXEL_BC7:  return 16;
 
         default: return 0;
@@ -29,10 +30,11 @@ uint32_t edds_gpu_block_bytes(edds_pixel_format format) {
 /** Bytes one pixel occupies, or 0 when the format stores 4x4 blocks. */
 uint32_t edds_gpu_pixel_bytes(edds_pixel_format format) {
     switch (format) {
-        case EDDS_PIXEL_BGRA8: return 4;
-        case EDDS_PIXEL_BGRX8: return 4;
-        case EDDS_PIXEL_R8:    return 1;
-        case EDDS_PIXEL_RG8:   return 2;
+        case EDDS_PIXEL_RGBA32F: return 16;
+        case EDDS_PIXEL_BGRA8:   return 4;
+        case EDDS_PIXEL_BGRX8:   return 4;
+        case EDDS_PIXEL_R8:      return 1;
+        case EDDS_PIXEL_RG8:     return 2;
 
         default: return 0;
     }
@@ -66,15 +68,17 @@ uint32_t edds_gpu_mip_bytes(edds_pixel_format format, uint32_t width, uint32_t h
 /** The format's name as text, such as "BGRA8" or "BC7". */
 const char *edds_pixel_format_name(edds_pixel_format format) {
     switch (format) {
-        case EDDS_PIXEL_BGRA8: return "BGRA8";
-        case EDDS_PIXEL_BGRX8: return "BGRX8";
-        case EDDS_PIXEL_R8:    return "R8";
-        case EDDS_PIXEL_RG8:   return "RG8";
-        case EDDS_PIXEL_DXT1:  return "DXT1";
-        case EDDS_PIXEL_DXT5:  return "DXT5";
-        case EDDS_PIXEL_BC4:   return "BC4";
-        case EDDS_PIXEL_BC5:   return "BC5";
-        case EDDS_PIXEL_BC7:   return "BC7";
+        case EDDS_PIXEL_BC6H:    return "BC6H";
+        case EDDS_PIXEL_RGBA32F: return "RGBA32F";
+        case EDDS_PIXEL_BGRA8:   return "BGRA8";
+        case EDDS_PIXEL_BGRX8:   return "BGRX8";
+        case EDDS_PIXEL_R8:      return "R8";
+        case EDDS_PIXEL_RG8:     return "RG8";
+        case EDDS_PIXEL_DXT1:    return "DXT1";
+        case EDDS_PIXEL_DXT5:    return "DXT5";
+        case EDDS_PIXEL_BC4:     return "BC4";
+        case EDDS_PIXEL_BC5:     return "BC5";
+        case EDDS_PIXEL_BC7:     return "BC7";
 
         default: return "UNKNOWN";
     }
@@ -86,15 +90,17 @@ const char *edds_pixel_format_name(edds_pixel_format format) {
  */
 const char *edds_pixel_format_channels(edds_pixel_format format) {
     switch (format) {
-        case EDDS_PIXEL_BGRA8: return "RGBA";
-        case EDDS_PIXEL_BGRX8: return "RGB";
-        case EDDS_PIXEL_R8:    return "R";
-        case EDDS_PIXEL_RG8:   return "RG";
-        case EDDS_PIXEL_DXT1:  return "RGB";
-        case EDDS_PIXEL_DXT5:  return "RGBA";
-        case EDDS_PIXEL_BC4:   return "R";
-        case EDDS_PIXEL_BC5:   return "RG";
-        case EDDS_PIXEL_BC7:   return "RGBA";
+        case EDDS_PIXEL_BC6H:    return "RGB";
+        case EDDS_PIXEL_RGBA32F: return "RGBA";
+        case EDDS_PIXEL_BGRA8:   return "RGBA";
+        case EDDS_PIXEL_BGRX8:   return "RGB";
+        case EDDS_PIXEL_R8:      return "R";
+        case EDDS_PIXEL_RG8:     return "RG";
+        case EDDS_PIXEL_DXT1:    return "RGB";
+        case EDDS_PIXEL_DXT5:    return "RGBA";
+        case EDDS_PIXEL_BC4:     return "R";
+        case EDDS_PIXEL_BC5:     return "RG";
+        case EDDS_PIXEL_BC7:     return "RGBA";
 
         default: return "UNKNOWN";
     }

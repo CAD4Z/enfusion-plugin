@@ -12,7 +12,8 @@ static const edds_source_capability capabilities[] = {
     { EDDS_SOURCE_TGA, ".tga", "tga", "TGAResourceClass" },
     { EDDS_SOURCE_JPG, ".jpg", "jpg", "JPGResourceClass" },
     { EDDS_SOURCE_TIFF, ".tiff", "tiff", "TIFFResourceClass" },
-    { EDDS_SOURCE_DDS, ".dds", "dds", "DDSResourceClass" }
+    { EDDS_SOURCE_DDS, ".dds", "dds", "DDSResourceClass" },
+    { EDDS_SOURCE_HDR, ".hdr", "hdr", "HDRResourceClass" }
 };
 
 /** The whole table, with its number of rows in `count` when that is not NULL. */

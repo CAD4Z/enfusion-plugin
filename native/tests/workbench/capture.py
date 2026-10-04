@@ -166,10 +166,10 @@ class Oracle:
     def property_index(self):
         return self.arg(1) if self.arg(0) == self.meta and self.arg(1) in self.present else -1
 
-    def convert(self, width,height,pixels,mip_function=0,tiled=True,mip_filter=0,normalize=False,remove=0,generate=True,fmt=87,swizzling=0,conversion=0):
+    def convert(self, width,height,pixels,mip_function=0,tiled=True,mip_filter=0,normalize=False,remove=0,generate=True,fmt=87,swizzling=0,conversion=0,quality=1.0,cubemap=False):
         # Verified property-name registration IDs are replaced with stable local IDs.
         values = {0x2321af0:remove,0x2321af4:conversion,0x2321afc:swizzling,0x2321b00:0,0x2321b04:int(generate),
-                  0x2321b08:int(normalize),0x2321b0c:mip_function,0x2321b10:int(tiled),0x2321b14:mip_filter,0x2321b1c:0}
+                  0x2321b08:int(normalize),0x2321b0c:mip_function,0x2321b10:int(tiled),0x2321b14:mip_filter,0x2321b1c:int(cubemap),0x2321af8:struct.unpack("<I",struct.pack("<f",quality))[0]}
         self.meta = self.alloc(0x80)
         entries = self.alloc(len(values)*16)
         self.w64(self.meta+0x40,entries)

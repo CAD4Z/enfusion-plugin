@@ -24,6 +24,7 @@ export type TextureBatchRequest =
   | { readonly type: 'change-threshold'; readonly value: number }
   | { readonly type: 'change-remove-mips'; readonly value: number }
   | { readonly type: 'change-contains-mips'; readonly value: boolean }
+  | { readonly type: 'change-cubemap'; readonly value: boolean }
   | { readonly type: 'change-mips'; readonly value: boolean }
   | { readonly type: 'change-tiled-texture'; readonly value: boolean }
   | { readonly type: 'change-normalize'; readonly value: boolean }

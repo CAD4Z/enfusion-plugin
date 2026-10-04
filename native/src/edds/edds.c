@@ -7,6 +7,8 @@
 #include <edds/edds.h>
 
 #include "gpu.h"
+#include "bc6.h"
+#include <math.h>
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -133,6 +135,9 @@ static int expected_rgba_bytes(uint32_t width, uint32_t height, uint32_t *bytes)
  * number of its header; without one, 32-bit pixels with the masks of BGRA or BGRX.
  */
 static edds_pixel_format classify(const edds_info *info) {
+    if ((info->pixel_format_flags & DDPF_FOURCC) && info->four_cc_value == 116) {
+        return EDDS_PIXEL_RGBA32F;
+    }
     if ((info->pixel_format_flags & DDPF_FOURCC) != 0) {
         if (strcmp(info->four_cc, "DXT1") == 0) {
             return EDDS_PIXEL_DXT1;
@@ -153,6 +158,8 @@ static edds_pixel_format classify(const edds_info *info) {
                 case 49: return EDDS_PIXEL_RG8;
                 case 80: return EDDS_PIXEL_BC4;
                 case 83: return EDDS_PIXEL_BC5;
+                case 2:  return EDDS_PIXEL_RGBA32F;
+                case 95: return EDDS_PIXEL_BC6H;
                 case 98: return EDDS_PIXEL_BC7;
                 default: return EDDS_PIXEL_DXGI;
             }
@@ -180,18 +187,19 @@ static edds_pixel_format classify(const edds_info *info) {
 }
 
 /**
- * Whether the texture is one flat image: no cube map, no volume, a depth of at most 1, and, when
- * it has a DX10 header, a 2D texture in an array of one that is not a cube.
+ * One 2D image or a complete square cubemap. DayZ's DX10 EDDS array size counts its six faces.
  */
 static int topology_is_previewable(const edds_info *info) {
-    if ((info->caps2 & (DDSCAPS2_CUBEMAP | DDSCAPS2_VOLUME)) != 0 || info->depth > 1) {
+    if ((info->caps2 & DDSCAPS2_VOLUME) != 0 || info->depth > 1 ||
+        ((info->caps2 & 0xfe00u) != 0 && (info->caps2 & 0xfe00u) != 0xfe00u) ||
+        ((info->caps2 & DDSCAPS2_CUBEMAP) && info->width != info->height)) {
         return 0;
     }
 
     if ((info->pixel_format_flags & DDPF_FOURCC) != 0 && strcmp(info->four_cc, "DX10") == 0) {
         return info->resource_dimension == DDS_RESOURCE_DIMENSION_TEXTURE2D &&
-            info->array_size == 1 &&
-            (info->misc_flag & DDS_RESOURCE_MISC_TEXTURECUBE) == 0;
+            info->array_size == ((info->caps2 & DDSCAPS2_CUBEMAP) ? 6u : 1u) &&
+            ((info->misc_flag & DDS_RESOURCE_MISC_TEXTURECUBE) != 0) == ((info->caps2 & DDSCAPS2_CUBEMAP) != 0);
     }
 
     return 1;
@@ -350,6 +358,7 @@ edds_status edds_inspect(
     info->pixel_format_flags   = u32le(header + 80);
 
     /* The FourCC as text: `NONE` for four zero bytes, a question mark for an unprintable one. */
+    info->four_cc_value = u32le(header + 84);
     memcpy(info->four_cc, header + 84, 4);
     info->four_cc[4] = '\0';
 
@@ -408,6 +417,8 @@ edds_status edds_inspect(
     info->mip_count    = mip_count;
     info->header_bytes = header_bytes;
     info->pixel_format = classify(info);
+
+    info->face_count = (info->caps2 & DDSCAPS2_CUBEMAP) ? 6 : 1;
 
     /* A preview needs a format it can decode, an RGBA size within the limit, and one flat image. */
     {
@@ -490,7 +501,9 @@ edds_status edds_inspect(
 
         /* When the format can be previewed, a mip's size fixes the bytes it must decode to. */
         if (info->preview_supported) {
-            expected = edds_gpu_mip_bytes(info->pixel_format, mip_dimension(info->width, level), mip_dimension(info->height, level));
+            expected = edds_gpu_mip_bytes(info->pixel_format,
+                           mip_dimension(info->width, level), mip_dimension(info->height, level)) *
+                info->face_count;
 
             if (expected == 0 || stored[stored_index].decoded_bytes != expected) {
                 fail(error, "unexpected-mip-size",
@@ -716,7 +729,8 @@ static edds_status decode_lz4(
  * Decodes mip `level` of an inspected EDDS into RGBA8, top row first. On success `*rgba` holds
  * `*rgba_size` bytes, which the caller releases with `edds_free`; otherwise they are NULL and 0.
  */
-edds_status edds_preview(
+edds_status edds_preview_surface(
+    uint32_t face, int linear,
     FILE             *input,
     const edds_info  *info,
     uint32_t          level,
@@ -744,6 +758,17 @@ edds_status edds_preview(
         return EDDS_INTERNAL_FAILURE;
     }
 
+    if (face >= info->face_count) {
+        fail(error, "invalid-face", "The requested cube face does not exist.");
+
+        return EDDS_INVALID_INPUT;
+    }
+
+    if (linear && info->pixel_format != EDDS_PIXEL_BC6H && info->pixel_format != EDDS_PIXEL_RGBA32F) {
+        fail(error, "unsupported-float-preview", "Float preview requires an HDR runtime format.");
+
+        return EDDS_UNSUPPORTED_FORMAT;
+    }
     if (level >= info->mip_count) {
         fail(error, "invalid-mip", "Mip level %u does not exist.", level);
         return EDDS_INVALID_INPUT;
@@ -765,6 +790,15 @@ edds_status edds_preview(
         return EDDS_INVALID_INPUT;
     }
 
+    if (linear) {
+        if (decoded_bytes > EDDS_MAX_PREVIEW_BYTES / 4) {
+            fail(error, "decoded-size-limit", "The float preview exceeds the pixel limit.");
+
+            return EDDS_INVALID_INPUT;
+        }
+
+        decoded_bytes *= 4;
+    }
     /* Two buffers: the mip's bytes in its runtime format, and the RGBA they decode to. */
     raw    = edds_alloc(mip->decoded_bytes);
     pixels = edds_alloc(decoded_bytes);
@@ -788,7 +822,67 @@ edds_status edds_preview(
 
     /* Then the runtime format decoded into RGBA, which goes to the caller. */
     if (status == EDDS_OK) {
-        if (!edds_gpu_decode(info->pixel_format, raw, mip->decoded_bytes, mip->width, mip->height, pixels)) {
+        const uint32_t bytes   = mip->decoded_bytes / info->face_count;
+        const uint8_t *surface = raw + (size_t)face * bytes;
+        int            decoded = 1;
+
+        if (info->pixel_format == EDDS_PIXEL_BC6H || info->pixel_format == EDDS_PIXEL_RGBA32F) {
+            for (uint32_t y = 0; y < mip->height; y += 4) {
+                if (cancelled(cancel, cancel_context, error)) {
+                    status = EDDS_CANCELLED;
+                    break;
+                }
+
+                for (uint32_t x = 0; x < mip->width; x += 4) {
+                    float block[64];
+
+                    if (info->pixel_format == EDDS_PIXEL_BC6H) {
+                        edds_bc6_decode(surface + ((size_t)(y / 4) * ((mip->width + 3) / 4) + x / 4) * 16, block);
+                    }
+
+                    for (uint32_t by = 0; by < 4 && y + by < mip->height; ++by) {
+                        for (uint32_t bx = 0; bx < 4 && x + bx < mip->width; ++bx) {
+                            size_t index = ((size_t)(y + by) * mip->width + x + bx) * 4;
+                            float  values[4];
+
+                            if (info->pixel_format == EDDS_PIXEL_RGBA32F) {
+                                memcpy(values, surface + index * 4, 16);
+                            } else {
+                                memcpy(values, block + (by * 4 + bx) * 4, 16);
+                            }
+
+                            for (uint32_t c = 0; c < 4; ++c) {
+                                if (!isfinite(values[c])) {
+                                    decoded   = 0;
+                                    values[c] = 0;
+                                }
+
+                                if (linear) {
+                                    memcpy(pixels + (index + c) * 4, &values[c], 4);
+                                } else {
+                                    float v = fmaxf(0, values[c]);
+
+                                    v                 = c == 3 ? fminf(1, v) : powf(v / (1 + v), 1.0f / 2.2f);
+                                    pixels[index + c] = (uint8_t)(v * 255 + 0.5f);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        } else {
+            decoded = edds_gpu_decode(info->pixel_format, surface, bytes, mip->width, mip->height, pixels);
+        }
+
+        if (status != EDDS_OK) {
+            edds_free(raw);
+            edds_free(pixels);
+
+            return status;
+        }
+
+        if (!decoded) {
             fail(error, "invalid-gpu-payload",
                 "Mip %u does not hold whole %s blocks for its dimensions.",
                 level, edds_pixel_format_name(info->pixel_format));
@@ -824,4 +918,10 @@ const char *edds_status_category(edds_status status) {
 
         default: return "internal-failure";
     }
+}
+
+/** Compatibility entry point: display-mapped bytes of face zero. */
+edds_status edds_preview(FILE *input, const edds_info *info, uint32_t level,
+    edds_cancelled_fn cancel, void *context, uint8_t **rgba, size_t *size, edds_error *error) {
+    return edds_preview_surface(0, 0, input, info, level, cancel, context, rgba, size, error);
 }

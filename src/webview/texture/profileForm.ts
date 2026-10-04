@@ -4,6 +4,7 @@
  * it is not, rather than left live and quietly ignored.
  */
 
+import { textureHdrRefusalOf } from '../../mods/texture/textureHdr';
 import { TEXTURE_SWIZZLES, isTextureSwizzling, textureSwizzleRefusalOf, type TextureSwizzleSource } from '../../mods/texture/textureSwizzles';
 import { textureProfileFieldsOf } from '../../mods/texture/textureAuthoring';
 import type {
@@ -25,6 +26,7 @@ export interface ProfileFormRequests {
   readonly removeMips: (value: number) => void;
   readonly containsMips: (value: boolean) => void;
   readonly mips: (value: boolean) => void;
+  readonly cubemap: (value: boolean) => void;
   readonly tiled: (value: boolean) => void;
   readonly normalize: (value: boolean) => void;
   readonly mipFunction: (value: TextureMipFunction) => void;
@@ -40,13 +42,13 @@ const MIP_FILTERS: readonly TextureMipFilter[] = ['Box', 'Kaiser'];
 
 export function profileFormControls(
   profile: TextureProfile,
-  sourceFormat: TextureSourceFormat,
+  sourceFormat: TextureSourceFormat | readonly TextureSourceFormat[],
   locked: boolean,
   requests: ProfileFormRequests,
   source?: TextureSwizzleSource,
 ): readonly HTMLLabelElement[] {
   return textureProfileFieldsOf(profile, sourceFormat, source).map((field) => {
-    const control = controlOf(profile, field.key, requests, source);
+    const control = controlOf(profile, field.key, requests, sourceFormat, source);
     control.disabled = locked || !field.editable;
     control.title = locked
       ? `${field.key}: properties are locked while or after this immutable run.`
@@ -64,6 +66,7 @@ function controlOf(
   profile: TextureProfile,
   key: keyof TextureProfile,
   requests: ProfileFormRequests,
+  sourceFormat: TextureSourceFormat | readonly TextureSourceFormat[],
   source?: TextureSwizzleSource,
 ): HTMLInputElement | HTMLSelectElement {
   if (key === 'FormatCompress') {
@@ -88,7 +91,7 @@ function controlOf(
         }
       },
       SUPPORTED_TEXTURE_CONVERSIONS.map((conversion) => conversion.label),
-      SUPPORTED_TEXTURE_CONVERSIONS.map(({ name }) => textureSwizzleRefusalOf({ ...profile, Conversion: name }, source)),
+      SUPPORTED_TEXTURE_CONVERSIONS.map(({ name }) => textureHdrRefusalOf({ ...profile, Conversion: name }, sourceFormat, source) ?? textureSwizzleRefusalOf({ ...profile, Conversion: name }, source)),
     );
   }
   if (key === 'MipMapFunction') {
@@ -107,12 +110,13 @@ function controlOf(
   }
   const input = document.createElement('input');
   if (
-    key === 'ContainsMips' || key === 'GenerateMips' || key === 'Normalize' ||
+    key === 'GenerateCubemap' || key === 'ContainsMips' || key === 'GenerateMips' || key === 'Normalize' ||
     key === 'TiledTexture'
   ) {
     input.type = 'checkbox';
     input.checked = Boolean(profile[key]);
     if (key === 'ContainsMips') input.addEventListener('change', () => requests.containsMips(input.checked));
+    if (key === 'GenerateCubemap') input.addEventListener('change', () => requests.cubemap(input.checked));
     if (key === 'GenerateMips') input.addEventListener('change', () => requests.mips(input.checked));
     if (key === 'TiledTexture') input.addEventListener('change', () => requests.tiled(input.checked));
     if (key === 'Normalize') input.addEventListener('change', () => requests.normalize(input.checked));

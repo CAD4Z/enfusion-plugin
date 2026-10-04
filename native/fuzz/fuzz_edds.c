@@ -57,6 +57,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             rgba_size = 0;
             (void)edds_preview(file, &info, level, NULL, NULL, &rgba, &rgba_size, &error);
             edds_free(rgba);
+            if (info.pixel_format == EDDS_PIXEL_RGBA32F || info.pixel_format == EDDS_PIXEL_BC6H) {
+                for (uint32_t face = 0; face < info.face_count; ++face) {
+                    rgba = NULL;
+                    (void)edds_preview_surface(face, 1, file, &info, level, NULL, NULL, &rgba, &rgba_size, &error);
+                    edds_free(rgba);
+                }
+            }
         }
     }
 
@@ -117,6 +124,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
             rewind(output);
             (void)edds_convert(file, capabilities[at].format, output, &profile, NULL, NULL, NULL, NULL, &error);
         }
+        /* Reach the HDR parser/encoder independently of RGBE magic bytes selecting an LDR profile. */
+        edds_default_profile(&profile);
+        profile.conversion         = size > 0 && (data[size - 1] & 1) ? EDDS_CONVERSION_HDR : EDDS_CONVERSION_NONE;
+        profile.generate_cubemap   = size > 1 && (data[size - 2] & 1);
+        profile.conversion_quality = profile.conversion == EDDS_CONVERSION_HDR ? 0 : EDDS_QUALITY_SCALE;
+        rewind(file);
+        rewind(output);
+        (void)edds_convert(file, EDDS_SOURCE_HDR, output, &profile, NULL, NULL, NULL, NULL, &error);
     }
 
     /* The same bytes as a metadata file, and as one line of the batch protocol. */

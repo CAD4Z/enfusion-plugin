@@ -1,3 +1,4 @@
+import { textureSurfaceControls } from './textureSurface';
 /** Browser-only rendering for source-image authoring. Every write remains an explicit host request. */
 
 import type { EddsPreview } from '../../mods/texture/edds';
@@ -160,7 +161,7 @@ function toolbar(
 
 function profileForm(
   profile: TextureProfile,
-  sourceFormat: 'PNG' | 'TGA' | 'JPG' | 'TIFF' | 'DDS',
+  sourceFormat: 'PNG' | 'TGA' | 'JPG' | 'TIFF' | 'DDS' | 'HDR',
   locked: boolean,
   source?: TextureSwizzleSource,
 ): HTMLElement {
@@ -171,6 +172,7 @@ function profileForm(
     removeMips: (value) => host.postMessage({ type: 'change-remove-mips', value }),
     containsMips: (value) => host.postMessage({ type: 'change-contains-mips', value }),
     mips: (value) => host.postMessage({ type: 'change-mips', value }),
+    cubemap: (value) => host.postMessage({ type: 'change-cubemap', value }),
     tiled: (value) => host.postMessage({ type: 'change-tiled-texture', value }),
     normalize: (value) => host.postMessage({ type: 'change-normalize', value }),
     mipFunction: (value) => host.postMessage({ type: 'change-mipmap-function', value }),
@@ -198,8 +200,9 @@ function previewPane(title: string, preview: EddsPreview, channels: TextureChann
   canvas.style.width = `${preview.width * zoom}px`;
   canvas.style.height = `${preview.height * zoom}px`;
   draw(canvas, preview);
+  pane.append(textureSurfaceControls(preview, (surface) => draw(canvas, surface)));
   viewport.append(canvas);
-  analysis?.bind(viewport, canvas, { ...preview, channels }, title.startsWith('Source') ? 'Source' : 'Result');
+  if (preview.displayMapping === undefined && preview.faces === undefined) analysis?.bind(viewport, canvas, { ...preview, channels }, title.startsWith('Source') ? 'Source' : 'Result');
   pane.append(viewport);
   return pane;
 }
