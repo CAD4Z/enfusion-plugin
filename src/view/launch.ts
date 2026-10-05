@@ -605,7 +605,7 @@ class Launcher {
         readLinkFacts(filePatchingRootOf(runRoot)),
         // What the plan wants a yes or a no about — the pbo, the `server.cfg`, the mission — asked
         // for by the plan itself, so that the two can never go looking at different paths.
-        readFound(launchPathsOf(target, mods)),
+        readFound(launchPathsOf(target, mods, settings)),
       ]);
       signal.throwIfAborted();
 
@@ -732,7 +732,7 @@ class Launcher {
         readWorkDrive(settings),
         readGameRoot(settings, build, target.experimental),
         readLinkFacts(filePatchingRootOf(runRoot)),
-        readFound(launchPathsOf(target, mods)),
+        readFound(launchPathsOf(target, mods, settings)),
       ]);
       signal.throwIfAborted();
 

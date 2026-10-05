@@ -8,6 +8,13 @@
 
 @import '../shared.css';
 
+/* At least as tall as the panel, so that what an empty one offers can stand in the middle of it. */
+.mods {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 /*
  * The buttons that act on the whole workspace. They stay put while the mods scroll: the one thing
  * this panel is opened to press should not be somewhere off the top of it.
@@ -153,11 +160,51 @@
   margin: 0 0 12px;
 }
 
-/* An empty workspace has one thing to do and one thing to try, so both sit under the sentence. */
 .empty .buttons {
   display: flex;
   gap: 6px;
   padding: 0;
+}
+
+/*
+ * A panel with no mod in it: a sentence and the ways out, in the middle of whatever is left under
+ * the workspace file, the way the editor's own views say they are empty. The buttons are as wide as
+ * each other and as the column they stand in, up to a width a side panel is usually given.
+ */
+.welcome {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 20px 16px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.welcome p {
+  max-width: 280px;
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.welcome p:first-child {
+  color: var(--vscode-foreground);
+}
+
+.welcome .buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  margin-top: 6px;
+}
+
+.welcome vscode-button {
+  width: 100%;
 }
 
 .workspace,
@@ -281,16 +328,47 @@
   cursor: pointer;
 }
 
-.row:hover .action,
+.row:hover .action:not(:disabled),
 .row .action:focus-visible {
   border-color: var(--vscode-button-border, var(--vscode-contrastBorder, transparent));
   background-color: var(--vscode-button-secondaryBackground);
   color: var(--vscode-button-secondaryForeground);
 }
 
-.row .action:hover {
+.row .action:hover:not(:disabled) {
   background-color: var(--vscode-button-secondaryHoverBackground);
   color: var(--vscode-button-secondaryForeground);
+}
+
+.row .action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Holds an addon's Build so that a disabled one still says why; it takes no room of its own. */
+.row.addon .holds {
+  display: flex;
+  flex: none;
+}
+
+/*
+ * Why the buttons under it are grey in a folder the editor does not trust. Coloured the way the
+ * editor colours a warning, so it reads as the state of the folder rather than as one more row.
+ */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+  border-radius: 4px;
+  background-color: var(--vscode-inputValidation-warningBackground, transparent);
+  line-height: 1.4;
+}
+
+.notice .text {
+  flex: 1 1 180px;
 }
 
 .row .open:focus-visible,

@@ -27,7 +27,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "Mods are discovered by reading mod.enf, workspace.enf, config.cpp, and .gproj files; none of them is executed. EDDS preview and source-image preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed, and puts the previous pair back if the converter stops before it has published the new one; draft previews write only under extension storage. Finding the DayZ installation runs reg; mounting the work drive runs DayZ Tools' fixed WorkDrive executable when available and subst otherwise. None of them takes an argument from the workspace. Linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive. Building, launching, and opening Workbench put workspace paths on external command lines, so they wait for the workspace to be trusted."
+      "description": "Mods are discovered by reading mod.enf, workspace.enf, config.cpp, and .gproj files; none of them is executed. EDDS preview and source-image preview pass only explicit local paths to the fixed converter executable bundled with this extension, without a shell. A texture conversion writes the explicitly shown sibling .edds and, inside a discovered prefix root, its sibling .edds.meta only after the Convert/Reconvert/Replace button is pressed, and puts the previous pair back if the converter stops before it has published the new one; draft previews write only under extension storage. Finding the DayZ installation runs reg; mounting the work drive runs DayZ Tools' fixed WorkDrive executable when available and subst otherwise. None of them takes an argument from the workspace. Linking the mods writes junctions onto the work drive, and only when it is asked for. Making a mod writes its own files into the folder it was asked to make one in, and links it onto the work drive; made in a workspace, it also names itself in that workspace.enf and in the workspace's Workbench project. Making a workspace writes its workspace.enf, .gitignore and Workbench project into the folder it was asked to make one in. Building, launching, and opening Workbench put workspace paths on external command lines, so they wait for the workspace to be trusted; opening Workbench for a mod with no project writes one first, once the developer agrees to it."
     }
   },
   "contributes": {
@@ -62,6 +62,12 @@
         "title": "Create Mod",
         "category": "Enfusion",
         "icon": "$(new-folder)"
+      },
+      {
+        "command": "enfusion.workspace.init",
+        "title": "Create Workspace",
+        "category": "Enfusion",
+        "icon": "$(folder-library)"
       },
       {
         "command": "enfusion.adopt",
@@ -169,6 +175,11 @@
           "command": "enfusion.refresh",
           "when": "view == enfusion.mods",
           "group": "navigation@2"
+        },
+        {
+          "command": "enfusion.workspace.init",
+          "when": "view == enfusion.mods",
+          "group": "1_create@1"
         }
       ],
       "explorer/context": [
@@ -176,6 +187,11 @@
           "command": "enfusion.init",
           "when": "explorerResourceIsFolder",
           "group": "2_workspace@100"
+        },
+        {
+          "command": "enfusion.workspace.init",
+          "when": "explorerResourceIsFolder",
+          "group": "2_workspace@101"
         },
         {
           "command": "enfusion.edds.openPreview",

@@ -45,6 +45,8 @@ the order they build, worked out from `requiredAddons`. At its top, two lists pi
 **target** and the **Debug** or **Release** build; under them, one group of buttons holds **Start**,
 **Add client** and **Build**, and another the work drive tools — **Mount** / **Unmount**, **Link
 mods** and **Workbench**. A button that would only fail is disabled and says why in its tooltip.
+A folder with no mod in it gets **Create Mod** and **Create Workspace** in the middle of the panel
+instead.
 
 ### Build
 
@@ -80,7 +82,12 @@ signed in for you, once.
 - Both open as a **form** over the same document: undo, `Ctrl+S`, the diff and the comments in the
   file stay as they are.
 - **Create Mod** scaffolds a mod that builds and loads on the spot: `config.cpp`, the four script
-  modules, `mod.cpp`, `Inputs.xml`, `stringtable.csv` and a manifest with a ready target.
+  modules, `mod.cpp`, `Inputs.xml`, `stringtable.csv`, a manifest with a ready target, a dev
+  `server.cfg` and a Workbench project. A server target of a mod with no mission of its own runs
+  DayZ's `dayzOffline.<map>`. It refuses a folder inside a mod or holding mods, so it breaks
+  nothing there.
+- **Create Workspace** makes a folder of several mods: a `workspace.enf` that launches them all
+  and one Workbench project; **Create Mod** on it gives each mod a folder of its own.
 - **Create mod.enf** adopts somebody else's mod from its `CfgMods`, and **Add Addon** adds an addon
   and writes it into `requiredAddons`.
 
@@ -145,8 +152,8 @@ code --install-extension enfusion-plugin-win32-x64.vsix
 
 1. Open the folder that holds your mods. The **Enfusion** panel lists the mods it finds: those with
    a `mod.enf`, and those without one by the `CfgMods` in their `config.cpp`.
-2. No mod yet? Run **Enfusion: Create Mod**. A mod without a manifest? Press **+ Create mod.enf** on
-   its card.
+2. No mod yet? Press **Create Mod** in the panel, or **Create Workspace** for a folder of several
+   mods. A mod without a manifest? Press **+ Create mod.enf** on its card.
 3. Press **Mount** to put the work drive up (set `enfusion.workDrive.source` first if `P:` has never
    been mounted on this machine), then **Link mods**.
 4. Press **Build**.
@@ -214,14 +221,15 @@ carries it. All of them can stay empty in the usual case.
 
 | Command | Where |
 | --- | --- |
-| Enfusion: Create Mod | Panel header, folder context menu in the Explorer |
+| Enfusion: Create Mod | Panel header, an empty panel, folder context menu in the Explorer |
+| Enfusion: Create Workspace | Panel header menu, an empty panel, folder context menu in the Explorer |
 | Enfusion: Create mod.enf for an Existing Mod | An unconfigured mod's card |
 | Enfusion: Add Addon | Under a mod's addons |
 | Enfusion: Build Addon / Build All Addons | An addon's row / the panel's **Build** |
 | Enfusion: Start the Game / Add a Second Client | The panel's **Start** / **Add client** |
 | Enfusion: Select Launch Target / Select Launch Build | The panel's two lists, the status bar |
 | Enfusion: Mount Work Drive / Unmount Work Drive / Link Mods onto the Work Drive | The panel's work drive tools |
-| Enfusion: Open Workbench | The panel's **Workbench** |
+| Enfusion: Open Workbench | The panel's **Workbench**; writes the project first if the mod has none |
 | Enfusion: Open EDDS Preview | Context menu of a `.edds` |
 | Enfusion: Convert Texture to EDDS | Context menu of a source image, in a window with a mod |
 | Enfusion: Refresh Mods | Panel header |

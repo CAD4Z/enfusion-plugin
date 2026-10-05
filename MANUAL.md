@@ -183,6 +183,18 @@ untrusted workspace and no launch to join included — so the reason is there be
 rather than after it. Below the row is
 `workspace.enf` and the mods under it, each mod with its addons in the order they will be built.
 
+In a folder the editor does not trust — Restricted Mode — **Start**, **Build** and **Workbench**,
+an addon's own **Build** with them, are off, because each runs a program with paths out of the
+`.enf` files. The panel says so over the buttons, with a **Trust Folder** button that opens the
+editor's own question, rather than leaving it to the tooltips of buttons that are simply grey.
+
+A panel with no mod in it shows none of those buttons — every one of them acts on a mod — and
+says so in the middle of the panel instead, with the way out under it: **Create Mod** and **Create
+Workspace** for a folder that is neither yet, **Create Mod** alone for a workspace with no mod in it,
+and **Open Folder** for a window with no folder at all. Until the first search for mods has come
+back, which over a large folder can take a while, the panel says that it is looking rather than
+staying blank.
+
 A mod's row is its manifest: clicking it opens `mod.enf`, the way a file in the explorer does, and
 the only thing written on it is the mod's name. No paths are written there because there is nothing
 to write: the mod's name is `P:\<Mod>` and `@<Mod>`.
@@ -287,10 +299,39 @@ carry an empty folder into a pbo — `mod.cpp` for the launcher, `Inputs.xml` wi
 config that points at it, a `stringtable.csv` with the mod's name as its one string in the main
 addon's root (the engine reads it from the root of the pbo; there is nowhere to declare it and no
 need), empty `Missions\Global`,
-`Profiles\Global`, `Profiles\Dev` and `Addons`, and a `.gitignore` that closes off the pbo, the logs
-and the private key. The mod is linked onto the work drive as soon as it is made, so it can be built
-on the spot. The script module paths in `CfgMods` are the same in both layouts, so a mod moves from
-one layout to the other by moving files rather than by rewriting its config.
+`Profiles\Global`, `Profiles\Dev` and `Addons`, a `server.cfg` for the dev server a target with a
+server is put up with (file patching let in, no signatures checked, noon), a
+`Workbench\dayz.gproj` beside the prefix root
+(see [the work drive and Workbench](#the-work-drive-and-workbench)), and a `.gitignore` that
+closes off the pbo, the logs and the private key — or, where the folder has a `.gitignore` already,
+the lines it lacks added at its end under a heading of their own. The mod is linked onto the work
+drive as soon as it is made, so it can be built on the spot. The script module paths in `CfgMods`
+are the same in both layouts, so a mod moves from one layout to the other by moving files rather
+than by rewriting its config.
+
+Where a mod may be made is asked before the name is, and a folder that would come out broken is
+refused with nothing written: a folder inside a mod, whose files the new one would sit among and be
+packed with; a folder that holds mods already, which one manifest would make into one mod; a folder
+holding a mod with no `mod.enf`, which is offered **+ Create mod.enf** instead; and a folder a
+`workspace.enf` ignores, where the mod would never be listed from this window. The root of a drive
+holding a repository somewhere below is a folder holding mods like any other.
+
+### Creating a workspace
+
+**Enfusion: Create Workspace** — from an empty panel, the panel header's menu or the context menu of
+a folder — makes the folder a workspace of several mods: a `workspace.enf` whose launch block builds
+them all into one `Addons` and launches them all, with an empty `mods` list and one client target;
+an `Addons` folder; a `server.cfg` every target of it puts its server up with; a Workbench project
+for all of them; and a `.gitignore`. A `server.cfg` or a project already there is kept as it is. It is not made inside a
+mod, over mods that launch by a `launch` block of their own `mod.enf` — the workspace would take
+their launch over and theirs would be ignored — or over mods another workspace launches.
+
+**Create Mod** on a workspace's own folder makes the mod in a folder of its own, named after it, and
+makes it part of the workspace: its `mod.enf` has no launch block, it gets no `Addons` or project of
+its own, its name goes into the workspace's `mods` (written the way the form writes a row) and its
+script folders into the workspace's Workbench project. Whatever of that could not be written — a
+`workspace.enf` with a syntax error, a project that lists no such module — is said, and the mod is
+made all the same.
 
 ### Adopting a mod with no manifest
 
@@ -338,8 +379,18 @@ elsewhere is repointed, and a real folder in its place is left untouched and sho
 that is not linked is marked in the list, so the reason a build would fail is visible beforehand;
 a linked one is marked with nothing, which is how it should be. Unpacking the vanilla data and
 setting the drive up in the first place with DayZ Tools is not part of this. **Workbench** opens
-the `.gproj` inside the selected launch target's mod (preferring `dayz.gproj`) with the Workbench
-installed by DayZ Tools; it stays disabled when the work drive or project is unavailable.
+the `.gproj` inside the selected launch target's mod (preferring `dayz.gproj`), or failing that the
+one of the workspace the mod belongs to, with the Workbench installed by DayZ Tools; it stays
+disabled when the work drive is unavailable. A mod with neither gets offered one: after saying what
+it would be, the button writes `Workbench\dayz.gproj` — beside the mod's prefix root, or in the
+workspace's folder for a mod of a workspace — and opens it. A project written by the extension is
+DayZ Tools' own, with the work drive as its file system and each mod's script folders, read out of
+the `CfgMods` of its config, after the vanilla ones in every module; from then on it is a file of
+the repository, where image sets, defines and the scripts of the mods it depends on are added.
+
+Workbench is started through the shell, the way Explorer starts it, rather than as a child process:
+a Workbench set to run as administrator — the compatibility setting DayZ Tools users often tick —
+cannot be started any other way, and gets the UAC prompt it asks for.
 
 ## Building
 
@@ -603,7 +654,11 @@ The profile and the mission come from the mod the target belongs to rather than 
 in the workspace — otherwise a launch would mean different things on different machines. The profile
 is layered out of the mod's `Profiles`: `Global`, `Dev` and then `Client` or `Server`, and a server
 one takes `Maps\<map>` as well; the mission comes out of `Missions\<Mod>.<map>` with `Global` and
-`Dev` laid over it. Both are assembled in the run folder, but beside `game\` rather than inside it:
+`Dev` laid over it. A mod that keeps no mission of that world — a mod made yesterday, with a
+`Missions\Global` and nothing else — is launched on DayZ's own instead, `dayzOffline.<map>` out of
+DayZ Server's `mpmissions`, with the same layers over it, and the console says so; only where
+DayZ Server is not there either does the server start on the layers alone. Both are assembled in
+the run folder, but beside `game\` rather than inside it:
 beside, because the game root has a `Missions` of its own and Windows does not tell it apart from
 our `missions` — in one folder the mission would ride into the DayZ installation straight through a
 junction. Neither the mod's sources nor the work drive is changed by a launch, still. A layer the

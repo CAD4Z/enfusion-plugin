@@ -1,11 +1,16 @@
 /**
- * Starting a mod, adopting one that is already there, and adding an addon to either.
+ * Starting a mod, starting a workspace, adopting a mod that is already there, and adding an addon.
  *
  * A mod is a folder with `mod.enf`, holding a prefix root of the mod's own name, and inside that
  * the addons. Getting one of those wrong — a `dir` that does not match the folder, a script module
  * path in the wrong case, a `CfgPatches` nobody requires — is the sort of mistake that shows up as
  * a mod which packs cleanly and then does nothing in the game, so none of it is typed by hand
  * here: every name in every file is worked out from the one name the developer gave.
+ *
+ * Where a mod may be started is decided here too, and it is decided before anything is written:
+ * a mod is one mod, so it is never made inside another, nor over the top of mods that are there
+ * already. A folder holding several of them is a workspace, and a mod started in a workspace goes
+ * into a folder of its own in it.
  *
  * A mod somebody else wrote is the same job with the answers already given: it has a `config.cpp`
  * declaring it and no `mod.enf`, and everything that file would be filled in with — the name, who
@@ -19,7 +24,17 @@
  * Paths are `/` separated and counted from the mod root, which is the folder `mod.enf` goes in.
  */
 
-import { type ConfigCpp, type PatchClass, parseConfig, withRequiredAddon } from './config';
+import {
+  type ConfigCpp,
+  type ModDefs,
+  type PatchClass,
+  modDefsOf,
+  parseConfig,
+  sameName,
+  withRequiredAddon,
+} from './config';
+import { WORKSPACE_FILE, readWorkspace } from './enf';
+import { changesOf } from './form';
 import {
   MOD_NAME_PATTERN,
   type ModName,
@@ -27,7 +42,8 @@ import {
   modNameProblemOf,
 } from './modName';
 import { CONFIG_FILE, type Layout, MANIFEST_FILE, type Mod, mainAddonOf } from './model';
-import { isWithin } from './paths';
+import { folderOf, isWithin, samePath } from './paths';
+import { PROJECT_FILE, PROJECT_FOLDER, projectFileOf } from './workbench';
 
 /** Folders to make and files to write, in the order they are made and written. */
 export interface InitPlan {
@@ -40,6 +56,27 @@ export interface PlannedFile {
   /** Under the mod root, `/` separated. */
   readonly path: string;
   readonly content: string;
+  /**
+   * What happens where the file is there already, which for every other file is a refusal. `lines`
+   * writes into it the lines it lacks and keeps the ones it has: a `.gitignore`, which a repository
+   * has before it has a mod — and a mod refused over it is a mod nobody can start in a repository
+   * at all. `keep` leaves it as it is: a Workbench project somebody has already made is theirs, and
+   * the one written here would only have been a start.
+   */
+  readonly merge?: 'lines' | 'keep';
+}
+
+/** What a new mod depends on besides its name and layout: where it is being made. */
+export interface InitPlace {
+  /** The work drive's letter, which a Workbench project counts every file from. */
+  readonly drive: string;
+  /**
+   * Whether a `workspace.enf` above the mod owns its launch. Such a mod has no launch block of its
+   * own — one would be ignored whole — no `Addons` of its own, because the workspace's
+   * `modsDirectory` is where it is built to, and no Workbench project of its own: the
+   * workspace's is the one every mod of it is written into.
+   */
+  readonly inWorkspace: boolean;
 }
 
 /** Everything a new addon of a mod takes: the folder and config of it, and one edit. */
@@ -111,32 +148,45 @@ const NAME = new RegExp(MOD_NAME_PATTERN);
  * The script module paths come out the same either way — `<Name>/Scripts/<module>` — because in a
  * single-addon mod the prefix root is the addon, and in a multi-addon one the addon is `Scripts`
  * inside it. Which is what lets a mod be split up later by moving files rather than editing paths.
+ *
+ * A mod made on its own gets a Workbench project of its own, beside the prefix root rather than in
+ * it, so that the Workbench button opens it on the spot; a mod made in a workspace is written into
+ * the workspace's project instead, which is the caller's to edit (`withProjectMod`).
  */
-export function initPlanOf(name: ModName, layout: Layout): InitPlan {
+export function initPlanOf(name: ModName, layout: Layout, place: InitPlace): InitPlan {
   const main = layout === 'single' ? name : `${name}/${SCRIPTS}`;
   // A mod being started has said nothing about itself yet, so every field but its name is left
   // for the developer to answer — which is what an adopted mod's config answers instead.
   const fields: ModFields = { name, description: undefined, author: undefined, version: undefined };
+  const config = configOf(name, layout);
 
   return {
     folders: [
       name,
       `${name}/${SCRIPTS}`,
       ...MODULES.map((module) => `${name}/${SCRIPTS}/${module.folder}`),
-      // What never reaches a pbo: the layers a launch lays a profile and a mission down from, and
-      // the folder the built mod is written into.
+      // What never reaches a pbo: the layers a launch lays a profile and a mission down from, the
+      // folder the built mod is written into, and the Workbench project.
       MISSIONS,
       `${MISSIONS}/${GLOBAL}`,
       PROFILES,
       `${PROFILES}/${GLOBAL}`,
       `${PROFILES}/${DEV}`,
-      BUILT,
+      ...(place.inWorkspace ? [] : [BUILT, PROJECT_FOLDER]),
     ],
     files: [
-      { path: MANIFEST_FILE, content: manifestOf(name, fields) },
-      { path: GITIGNORE_FILE, content: GITIGNORE },
-      { path: `${main}/${CONFIG_FILE}`, content: configOf(name, layout) },
+      {
+        path: MANIFEST_FILE,
+        content: place.inWorkspace ? workspaceModManifestOf(name) : manifestOf(name, fields),
+      },
+      { path: GITIGNORE_FILE, content: GITIGNORE, merge: 'lines' },
+      { path: `${main}/${CONFIG_FILE}`, content: config },
       { path: `${name}/${MOD_CPP}`, content: modCppOf(name) },
+      // A target that puts up a server is refused without one. A mod of a workspace is launched
+      // by the workspace's, which is where a target that names none looks after the mod's root.
+      ...(place.inWorkspace
+        ? []
+        : [{ path: SERVER_CONFIG, content: serverConfigOf(name), merge: 'keep' as const }]),
       { path: `${main}/${STRINGTABLE_FILE}`, content: stringtableOf(name) },
       { path: `${name}/${SCRIPTS}/${INPUTS}`, content: INPUTS_XML },
       ...MODULES.map((module) => ({
@@ -150,8 +200,291 @@ export function initPlanOf(name: ModName, layout: Layout): InitPlan {
         path: `${folder}/${KEEP_FILE}`,
         content: '',
       })),
+      // Read back out of the config it goes with, so the project lists exactly the folders the
+      // game will compile — the way a project for a mod made anywhere else is written.
+      ...(place.inWorkspace
+        ? []
+        : [
+            {
+              path: `${PROJECT_FOLDER}/${PROJECT_FILE}`,
+              content: projectFileOf(place.drive, name, [modDefsOf(config)]),
+              merge: 'keep' as const,
+            },
+          ]),
     ],
   };
+}
+
+/**
+ * What a mod made in a workspace adds to the workspace's Workbench project: the folders its config
+ * attaches, read out of the plan rather than worked out a second time.
+ */
+export function plannedDefsOf(plan: InitPlan): ModDefs | undefined {
+  const config = plan.files.find((file) => file.path.endsWith(`/${CONFIG_FILE}`));
+
+  return config === undefined ? undefined : modDefsOf(config.content);
+}
+
+/**
+ * The workspace's launch block with a new mod named in its `mods`, which is the one way a mod of a
+ * workspace gets loaded: nothing is added to that list on the way to the game. A mod named there
+ * already — with its `@` or without — leaves the file as it is.
+ *
+ * Written the way the form writes a row, so the comments and the layout around it stay; and
+ * undefined where the form would not write either — a syntax error, a key written twice — because
+ * an edit into a file nobody can aim at is an edit that lands somewhere nobody is looking.
+ */
+export function withWorkspaceMod(source: string, name: ModName): string | undefined {
+  const named = readWorkspace(source).value.launch?.mods ?? [];
+  if (named.some((mod) => sameName(mod.replace(/^@/, ''), name))) {
+    return source;
+  }
+
+  const changes = changesOf('workspace', source, {
+    kind: 'append',
+    path: ['launch', 'mods'],
+    value: `@${name}`,
+  });
+
+  // Nothing to change about a mod not named yet is the form refusing the file.
+  if (changes.length === 0) {
+    return undefined;
+  }
+
+  return [...changes]
+    .sort((a, b) => b.offset - a.offset)
+    .reduce(
+      (text, change) => text.slice(0, change.offset) + change.content + text.slice(change.offset + change.length),
+      source,
+    );
+}
+
+/**
+ * Everything a new workspace is made of: the `workspace.enf` that owns the launch of every mod to
+ * be made under it, the folder they are all built into, a Workbench project they are all written
+ * into, and a `.gitignore` for what the build makes. Nothing about any one mod: those are made
+ * afterwards, each in a folder of its own, and each named in the launch block as it is.
+ */
+export function workspacePlanOf(drive: string, title: string): InitPlan {
+  return {
+    folders: [BUILT, PROJECT_FOLDER],
+    files: [
+      { path: WORKSPACE_FILE, content: WORKSPACE_MANIFEST },
+      { path: SERVER_CONFIG, content: serverConfigOf(title), merge: 'keep' },
+      { path: GITIGNORE_FILE, content: BUILD_IGNORED, merge: 'lines' },
+      { path: `${PROJECT_FOLDER}/${PROJECT_FILE}`, content: projectFileOf(drive, title, []), merge: 'keep' },
+    ],
+  };
+}
+
+/**
+ * A `.gitignore` with the lines it lacks added at its end, the way a developer would add them:
+ * under a heading, after everything that was there. What it had stays word for word, so a rule
+ * somebody wrote on purpose is never undone by one of ours — a line is only added, never changed.
+ */
+export function mergedLinesOf(existing: string, wanted: string): string {
+  const have = new Set(existing.split(/\r?\n/).map((line) => line.trim()));
+  const missing = wanted
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#') && !have.has(line));
+
+  if (missing.length === 0) {
+    return existing;
+  }
+
+  const newline = existing.includes('\r\n') ? '\r\n' : '\n';
+  const ended = existing === '' || existing.endsWith('\n') ? existing : `${existing}${newline}`;
+  const spaced = ended === '' ? '' : `${ended}${newline}`;
+
+  return `${spaced}${[MERGED_HEADING, ...missing].join(newline)}${newline}`;
+}
+
+/** What the lines added to somebody's `.gitignore` are put under, so it is plain who added them. */
+const MERGED_HEADING = '# What an Enfusion mod builds, writes while it runs, and signs with.';
+
+/** A mod of the workspace as far as where another one may go: where it sits, and what it says. */
+export interface Placed {
+  readonly name: string;
+  /** Where its `mod.enf` is; for a mod with none, the prefix root's parent. */
+  readonly root: string;
+  readonly prefixRoot: string | undefined;
+  readonly configured: boolean;
+  /** Whether its own `mod.enf` has a launch block, which a workspace above it would take over. */
+  readonly launches: boolean;
+}
+
+/** What a folder asked to hold a new mod or a new workspace sits among. */
+export interface Surroundings {
+  readonly mods: readonly Placed[];
+  /** Every `workspace.enf` the search found, by path. */
+  readonly workspaces: readonly string[];
+  /** Whether a path is one a `workspace.enf` leaves out of this window. */
+  readonly ignored: (path: string) => boolean;
+}
+
+/**
+ * Why no mod can be made in this folder, whatever it would be called, or undefined where one can.
+ * Asked before the name is, so a developer who picked the wrong folder hears so before typing.
+ *
+ * Each refusal is something that would otherwise be quietly broken. A mod inside another is packed
+ * into the other's pbo and confuses which folder is whose prefix root; a `mod.enf` above mods that
+ * are there already makes one mod of all of them; and a mod in a folder the workspace ignores is a
+ * mod nothing in this window would ever list, build or launch.
+ */
+export function modFolderRefusalOf(folder: string, around: Surroundings): string | undefined {
+  const here = around.mods.find((mod) => mod.configured && same(mod.root, folder));
+  if (here !== undefined) {
+    return (
+      `There is a mod here already: this folder is ${here.name}, with its ${MANIFEST_FILE}. Pick ` +
+      'another folder, or add an addon to the mod that is here.'
+    );
+  }
+
+  const outer = around.mods.find((mod) => within(folder, mod.root) && !same(mod.root, folder));
+  if (outer !== undefined) {
+    return (
+      `This folder is inside ${outer.name}. A mod made here would sit among another mod's files — ` +
+      'packed into its pbo, and taken for part of it — so make the new one in a folder of its own.'
+    );
+  }
+
+  if (around.ignored(`${folder}/${MANIFEST_FILE}`)) {
+    return (
+      `This folder is one a ${WORKSPACE_FILE} above it ignores, so a mod made here would never be ` +
+      'listed, built or launched from this window. Open the folder in a window of its own and make ' +
+      'the mod there.'
+    );
+  }
+
+  if (isWorkspaceRoot(folder, around)) {
+    return undefined;
+  }
+
+  const held = around.mods.filter((mod) => within(mod.root, folder) || within(mod.prefixRoot, folder));
+  const foreign = held.find((mod) => !mod.configured && same(mod.root, folder));
+  if (foreign !== undefined) {
+    return (
+      `This folder holds ${foreign.name} already, a mod found by its ${CONFIG_FILE}: a second mod ` +
+      `made here would take its place. Give it a ${MANIFEST_FILE} with "+ Create mod.enf" instead, ` +
+      'or make the new mod in a folder of its own.'
+    );
+  }
+
+  if (held.length > 0) {
+    return (
+      `This folder holds ${namesOf(held)} already, and a mod made here would hold ${them(held)} as ` +
+      'well: a mod is one mod. Make the new one in a folder of its own, or make this folder a ' +
+      'workspace with Create Workspace and make the mod in that.'
+    );
+  }
+
+  return undefined;
+}
+
+/** Where a new mod goes: its own root, and the `workspace.enf` that owns its launch, if any. */
+export type ModPlacement =
+  | { readonly root: string; readonly workspace: string | undefined; readonly refusal?: undefined }
+  | { readonly refusal: string };
+
+/**
+ * Where a mod of this name made in this folder goes. A workspace's own folder holds its mods each
+ * in a folder of its own, so a mod made there is made in a new one named after it; any other
+ * folder is the mod's root itself. What a folder of that name in a workspace already holds is the
+ * one thing left to refuse over — the folder the developer picked was asked about already.
+ */
+export function modPlacementOf(folder: string, name: ModName, around: Surroundings): ModPlacement {
+  const root = isWorkspaceRoot(folder, around) ? `${folder}/${name}` : folder;
+  const taken = around.mods.find(
+    (mod) => within(root, mod.prefixRoot ?? mod.root) || (!same(root, folder) && within(mod.root, root)),
+  );
+
+  if (taken !== undefined && !same(root, folder)) {
+    return {
+      refusal:
+        `${name} is a folder of this workspace already, and it is ${taken.name}'s. Give the new ` +
+        'mod another name.',
+    };
+  }
+
+  return { root, workspace: workspaceAbove(root, around.workspaces) };
+}
+
+/**
+ * Why no workspace can be made in this folder, or undefined where one can. A workspace is the
+ * folder above its mods, so it is never made inside one. And a `workspace.enf` owns the launch of
+ * every mod under it by existing, so it is not made over mods that launch by blocks of their own,
+ * or over mods another workspace launches: either way a launch that works now would stop.
+ */
+export function workspaceFolderRefusalOf(folder: string, around: Surroundings): string | undefined {
+  if (isWorkspaceRoot(folder, around)) {
+    return `This folder is a workspace already: it has a ${WORKSPACE_FILE}.`;
+  }
+
+  const outer = around.mods.find(
+    (mod) => within(folder, mod.root) && (mod.configured || !same(mod.root, folder)),
+  );
+  if (outer !== undefined) {
+    return (
+      `This folder is ${same(outer.root, folder) ? '' : 'inside '}${outer.name}. A workspace is ` +
+      'the folder above its mods, so make it in the folder that holds them.'
+    );
+  }
+
+  const under = around.mods.filter((mod) => mod.configured && within(mod.root, folder));
+  const launching = under.filter((mod) => mod.launches);
+  if (launching.length > 0) {
+    return (
+      `${namesOf(launching)} ${launching.length === 1 ? 'launches' : 'launch'} by the "launch" ` +
+      `block of ${launching.length === 1 ? 'its' : 'their'} own ${MANIFEST_FILE}, and a ` +
+      `${WORKSPACE_FILE} here would take that over: ${launching.length === 1 ? 'it' : 'those'} ` +
+      'would be ignored whole. Move the launch into a workspace.enf by hand, or make the workspace ' +
+      'somewhere that holds none of them.'
+    );
+  }
+
+  const owner = workspaceAbove(folder, around.workspaces);
+  if (owner !== undefined && under.length > 0) {
+    return (
+      `${namesOf(under)} ${under.length === 1 ? 'is' : 'are'} launched by the ${WORKSPACE_FILE} ` +
+      'above this folder, and one here would take them out of it. Make the workspace somewhere ' +
+      'that holds none of its mods.'
+    );
+  }
+
+  return undefined;
+}
+
+/** The nearest `workspace.enf` at or above this folder, compared the way Windows compares paths. */
+function workspaceAbove(folder: string, workspaces: readonly string[]): string | undefined {
+  return workspaces
+    .filter((file) => within(folder, folderOf(file)))
+    .sort((a, b) => folderOf(b).length - folderOf(a).length)
+    .at(0);
+}
+
+function isWorkspaceRoot(folder: string, around: Surroundings): boolean {
+  return around.workspaces.some((file) => same(folderOf(file), folder));
+}
+
+function same(a: string, b: string): boolean {
+  return samePath(a) === samePath(b);
+}
+
+/** A folder within another, or the other itself; a folder that is not there is within nothing. */
+function within(folder: string | undefined, root: string): boolean {
+  return folder !== undefined && isWithin(samePath(folder), samePath(root));
+}
+
+function namesOf(mods: readonly Placed[]): string {
+  const names = mods.map((mod) => mod.name);
+  const last = names.at(-1) ?? '';
+
+  return names.length <= 1 ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
+}
+
+function them(mods: readonly Placed[]): string {
+  return mods.length === 1 ? 'it' : 'them';
 }
 
 /**
@@ -342,6 +675,9 @@ const INPUTS = 'Inputs.xml';
 
 const MOD_CPP = 'mod.cpp';
 
+/** The file the dev server is started with, which a launch looks for in the mod's root. */
+const SERVER_CONFIG = 'server.cfg';
+
 const STRINGTABLE_FILE = 'stringtable.csv';
 
 const GITIGNORE_FILE = '.gitignore';
@@ -422,6 +758,59 @@ ${fieldLine('author', fields.author, 'Who made it.')}
 }
 `;
 }
+
+/**
+ * What a mod made in a workspace says about itself, and no launch block: the `workspace.enf` above
+ * owns the launch of every mod under it, so one written here would be ignored whole — and a block
+ * that is there and does nothing is a block somebody edits and then wonders about. The version is
+ * the last field so that nothing after it needs a comma; the two unanswered ones sit above it.
+ */
+function workspaceModManifestOf(name: string): string {
+  return `{
+  // The mod's name: what the panel shows, what it goes onto the work drive as (P:\\${name})
+  // and what it is built into (@${name}). The folder's own name when left out.
+  "name": ${quoted(name)},
+  // "description": "What the mod does, in a sentence.",
+  // "author": "Who made it.",
+  "version": ${quoted(VERSION)}
+
+  // No "launch" here: the ${WORKSPACE_FILE} above owns the launch of every mod under it, and a
+  // block written here would be ignored whole rather than merged into that one. This mod loads
+  // because it is named in that file's "mods".
+}
+`;
+}
+
+/**
+ * What a new workspace says: nothing about any one mod, and the launch block of all of them. The
+ * mods list starts empty and grows one name per mod made in the workspace, and the one target
+ * names no mod, so that it takes its profile and mission from whichever mod comes first.
+ */
+const WORKSPACE_MANIFEST = `{
+  // Folders this workspace does not see, each written relative to this file: nothing under one is
+  // listed, built, linked or launched from this window.
+  // "ignore": ["Folder"],
+
+  // The launch block of every mod under this folder. A "launch" written in one of their mod.enf
+  // is ignored whole rather than merged into this one.
+  "launch": {
+    // Where the built mods go, counted from this file: ${BUILT}\\@<Mod>.
+    "modsDirectory": "${BUILT}",
+    // What every target loads, in load order: nothing is added to this list on the way to the
+    // game. Create Mod names each mod it makes here; a mod one needs goes in front of it.
+    "mods": [],
+    "targets": [
+      {
+        // The client alone, which loads the vanilla offline mission of the map. A target that
+        // names no "mod" takes its profile and mission from the first mod of the workspace.
+        "name": "Client",
+        "map": "ChernarusPlus",
+        "run": "client"
+      }
+    ]
+  }
+}
+`;
 
 /** The field where something answered for it, and the hint that asks for it where nothing did. */
 function fieldLine(field: string, value: string | undefined, hint: string): string {
@@ -511,6 +900,59 @@ function addonConfigOf(patch: string): string {
 `;
 }
 
+/**
+ * The dev server's configuration: DayZ Server's own `serverDZ.cfg`, with what a local launch needs
+ * changed. A Debug launch runs the diag build off the sources rather than off signed pbo, so the
+ * server lets file patching in and checks no signatures; the clock stands at noon, because a dev
+ * server that comes up at night is one nobody can see anything on.
+ *
+ * The mission at the bottom is never the one loaded: a launch names the mission it laid down on
+ * the command line, which wins over it. It is there because a server without it will not start.
+ */
+function serverConfigOf(title: string): string {
+  return `// The dev server a launch puts up for a target that runs a server. Not packed: it sits beside
+// the mod, and a launch passes it as -config.
+hostname = "${title} dev server";
+password = "";
+passwordAdmin = "";
+
+enableWhitelist = 0;
+maxPlayers = 10;
+
+// Debug launches run the sources rather than signed pbo, so nothing is checked for a signature,
+// and clients that patch files in are let in.
+verifySignatures = 0;
+allowFilePatching = 1;
+forceSameBuild = 1;
+
+disableVoN = 0;
+vonCodecQuality = 20;
+disable3rdPerson = 0;
+disableCrosshair = 0;
+
+// Noon, passing slowly, and not kept between launches.
+serverTime = "2020/7/1/12/00";
+serverTimeAcceleration = 0.1;
+serverNightTimeAcceleration = 1;
+serverTimePersistent = 0;
+
+guaranteedUpdates = 1;
+loginQueueConcurrentPlayers = 5;
+loginQueueMaxPlayers = 500;
+instanceId = 1;
+storageAutoFix = 1;
+
+class Missions
+{
+	class DayZ
+	{
+		// Never loaded: the launch names its own mission with -mission, which wins over this.
+		template = "dayzOffline.chernarusplus";
+	};
+};
+`;
+}
+
 /** What the launcher shows. Not packed: the build copies it into the built mod itself. */
 function modCppOf(name: string): string {
   return `// What the DayZ launcher shows about this mod. It is not packed into the pbo — a builder packs
@@ -571,7 +1013,7 @@ function stringtableOf(name: string): string {
 }
 
 /** What never belongs in a repository: what the build makes, what the game writes, and the key. */
-const GITIGNORE = `# What the build makes.
+const BUILD_IGNORED = `# What the build makes.
 /${BUILT}/
 *.pbo
 *.bisign
@@ -587,7 +1029,10 @@ const GITIGNORE = `# What the build makes.
 *.DayZProfile
 texHeaders.bin
 dayz.bin
+`;
 
+/** A mod's own has its profiles to keep out as well; a workspace keeps none of its own. */
+const GITIGNORE = `${BUILD_IGNORED}
 # What the game keeps about whoever played with this profile.
 ${PROFILES}/**/Users/*
 `;

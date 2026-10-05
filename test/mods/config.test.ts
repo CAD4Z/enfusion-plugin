@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseConfig, withRequiredAddon } from '../../src/mods/config';
+import { modDefsOf, parseConfig, withRequiredAddon } from '../../src/mods/config';
 
 test('reads every CfgPatches class with what it requires', () => {
   const config = parseConfig(`
@@ -253,4 +253,47 @@ test('a class with no requiredAddons in a CRLF file keeps the file CRLF', () => 
     withRequiredAddon(source, 'Main', 'Extra'),
     'class CfgPatches\r\n{\r\n\tclass Main\r\n\t{\r\n\t\tunits[] = {};\r\n\t\trequiredAddons[] = { "Extra" };\r\n\t};\r\n};\r\n',
   );
+});
+
+/**
+ * What a Workbench project is written from: the folders of each script module and the UI a mod's
+ * defs point the game at, with the separator a project writes and nothing a config wrote empty.
+ */
+test('the defs of a mod are read as the folders of each script module and of its UI', () => {
+  const defs = modDefsOf(`
+class CfgMods
+{
+	class Foreign
+	{
+		dir = "Foreign";
+		class defs
+		{
+			class imageSets { files[] = { "Foreign\\gui\\foreign.imageset" }; };
+			class engineScriptModule { value = ""; files[] = { "Foreign/scripts/1_core/" }; };
+			class gameScriptModule { value = ""; files[] = { "Foreign/scripts/3_game", "Shared/3_Game" }; };
+			class missionScriptModule { value = ""; files[] = { "" }; };
+		};
+	};
+};
+`);
+
+  assert.deepEqual(defs, {
+    scripts: {
+      core: ['Foreign/scripts/1_core'],
+      gameLib: [],
+      game: ['Foreign/scripts/3_game', 'Shared/3_Game'],
+      world: [],
+      mission: [],
+    },
+    imageSets: ['Foreign/gui/foreign.imageset'],
+    widgetStyles: [],
+  });
+});
+
+test('a config that declares no mod attaches nothing', () => {
+  assert.deepEqual(modDefsOf('class CfgPatches { class Data { requiredAddons[] = {}; }; };'), {
+    scripts: { core: [], gameLib: [], game: [], world: [], mission: [] },
+    imageSets: [],
+    widgetStyles: [],
+  });
 });

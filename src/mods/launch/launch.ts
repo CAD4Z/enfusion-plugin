@@ -37,7 +37,13 @@ import { createHash } from 'node:crypto';
 import { sameName } from '../config';
 import type { Launch, Run, Target } from '../enf';
 import { windowSettingsOf } from './gameWindow';
-import { type GameBuild, type GameProgram, type GameSide, missingProgramOf } from '../machine';
+import {
+  type GameBuild,
+  type GameProgram,
+  type GameSide,
+  dayzServerRootOf,
+  missingProgramOf,
+} from '../machine';
 import type { MachineSettings } from '../machine';
 import {
   type LoadedModName,
@@ -546,6 +552,9 @@ const MISSIONS_FOLDER = 'missions';
 const PROFILES_SOURCE = 'Profiles';
 const MISSIONS_SOURCE = 'Missions';
 
+/** Where DayZ Server keeps the missions it comes with, one per world. */
+const VANILLA_MISSIONS = 'mpmissions';
+
 /** The file a server is configured by, which a target that names none is looked for beside. */
 const SERVER_CONFIG = 'server.cfg';
 
@@ -591,20 +600,29 @@ function rolesOf(run: Run): LaunchRole[] {
 /**
  * What the plan wants a yes or a no from the disk about before it can be made: the pbo of every
  * mod it would load, and — where a server is being put up — the `server.cfg` it would start with
- * and the mission it would lay down. Asked here and answered in `LaunchInput.found`, so that the
- * plan itself stays a function of plain data.
+ * and the mission it would lay down, the mod's own or DayZ's. Asked here and answered in
+ * `LaunchInput.found`, so that the plan itself stays a function of plain data.
  */
-export function launchPathsOf(target: LaunchTarget, mods: readonly LaunchMod[]): string[] {
+export function launchPathsOf(
+  target: LaunchTarget,
+  mods: readonly LaunchMod[],
+  settings: MachineSettings,
+): string[] {
   const roles = rolesOf(target.run);
   const targetName = targetModNameOf(target, mods);
   const built =
     modsDirectoryOf(target) === ''
       ? []
       : loadedNamesOf(target, roles).flatMap((name) => builtPathsOf(target, mods, name));
+  const vanilla = vanillaMissionOf(target, settings);
 
   const server =
     roles.includes('server') && targetName !== undefined
-      ? [...serverConfigsOf(target, mods), missionTemplateOf(target, mods)]
+      ? [
+          ...serverConfigsOf(target, mods),
+          missionTemplateOf(target, mods),
+          ...(vanilla === '' ? [] : [vanilla]),
+        ]
       : [];
 
   return unique([...built, ...server]);
@@ -922,11 +940,19 @@ function warningsOf(
 
   // The layers on their own still make a mission the engine will load, so this is a sentence
   // rather than a stop — but a server coming up on an empty world when a whole map was meant is
-  // worth one.
+  // worth one. With DayZ's own mission under the layers it comes up on the whole map, and the one
+  // thing worth saying is whose mission that is.
   if (roles.includes('server')) {
     const template = missionTemplateOf(input.target, input.mods);
+    const base = missionBaseOf(input);
 
-    if (!foundOf(input).has(samePath(template))) {
+    if (base !== template) {
+      said.push(
+        `${input.target.mod} keeps no mission of its own for ${mapOf(input.target)}: nothing is at ` +
+          `${template}, so the server starts DayZ's own ${base}, with the layers of ` +
+          `${MISSIONS_SOURCE} over it.`,
+      );
+    } else if (!foundOf(input).has(samePath(template))) {
       said.push(
         `Nothing is at ${template}, so the server starts with whatever the layers of ` +
           `${MISSIONS_SOURCE} hold and no mission of ${input.target.mod}'s own.`,
@@ -1241,9 +1267,34 @@ function missionCopiesOf(input: LaunchInput, mission: string): FolderCopy[] {
   const root = windowsPath(rootOf(input.target, input.mods), MISSIONS_SOURCE);
 
   return [
-    { from: missionTemplateOf(input.target, input.mods), to: mission },
+    { from: missionBaseOf(input), to: mission },
     ...MISSION_LAYERS.map((layer) => ({ from: windowsPath(root, layer), to: mission })),
   ];
+}
+
+/**
+ * What the mission is laid down from before the layers go over it: the mod's own for the world
+ * where it keeps one, and DayZ's own for it where it does not and DayZ Server is there to take it
+ * from. A mod made yesterday has a `Missions\Global` and nothing else, and a server on the layers
+ * alone loads a folder with no world in it.
+ */
+function missionBaseOf(input: LaunchInput): string {
+  const own = missionTemplateOf(input.target, input.mods);
+  const vanilla = vanillaMissionOf(input.target, input.settings);
+  const found = foundOf(input);
+
+  return !found.has(samePath(own)) && vanilla !== '' && found.has(samePath(vanilla)) ? vanilla : own;
+}
+
+/**
+ * DayZ's own mission of the target's world, in DayZ Server's `mpmissions` — `dayzOffline.sakhal`,
+ * the one a server of the world comes with. Empty where there is no world or no DayZ Server.
+ */
+function vanillaMissionOf(target: LaunchTarget, settings: MachineSettings): string {
+  const server = dayzServerRootOf(settings, target.experimental);
+  const map = mapOf(target);
+
+  return server === '' || map === '' ? '' : windowsPath(server, VANILLA_MISSIONS, `dayzOffline.${map}`);
 }
 
 /**

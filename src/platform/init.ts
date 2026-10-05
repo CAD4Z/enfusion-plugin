@@ -8,12 +8,17 @@
  */
 
 import * as vscode from 'vscode';
-import { type AddonRequirement, type InitPlan, requiringAddon } from '../mods/init';
+import { type AddonRequirement, type InitPlan, mergedLinesOf, requiringAddon } from '../mods/init';
 
-/** The files of the plan that are on disk already: somebody's work, and not ours to write over. */
+/**
+ * The files of the plan that are on disk already: somebody's work, and not ours to write over. A
+ * file the plan merges into is not among them — what is there is kept, and at most added to.
+ */
 export async function existingOf(root: vscode.Uri, plan: InitPlan): Promise<string[]> {
   const found = await Promise.all(
-    plan.files.map(async (file) => ((await exists(uriOf(root, file.path))) ? [file.path] : [])),
+    plan.files
+      .filter((file) => file.merge === undefined)
+      .map(async (file) => ((await exists(uriOf(root, file.path))) ? [file.path] : [])),
   );
 
   return found.flat();
@@ -31,6 +36,14 @@ export async function createFrom(root: vscode.Uri, plan: InitPlan): Promise<void
   for (const file of plan.files) {
     const uri = uriOf(root, file.path);
     await vscode.workspace.fs.createDirectory(parentOf(uri));
+
+    if (file.merge !== undefined && (await exists(uri))) {
+      if (file.merge === 'lines') {
+        await editFile(uri, (text) => mergedLinesOf(text, file.content));
+      }
+      continue;
+    }
+
     await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(file.content));
   }
 }
@@ -44,27 +57,55 @@ export async function requireAddon(
   config: vscode.Uri,
   requirement: AddonRequirement,
 ): Promise<boolean> {
-  const bytes = await vscode.workspace.fs.readFile(config);
-  // Written back only in the encoding it was read in. A config saved in a code page rather than in
-  // UTF-8 would have every byte outside ASCII replaced for good, so it is refused instead; a BOM
-  // it had is kept.
+  return editFile(config, (source) => requiringAddon(source, requirement));
+}
+
+/**
+ * A file somebody else wrote, edited in place: read, handed to the edit, and written back only if
+ * the edit came back with something and that something is different. False where the edit had
+ * nowhere to go in the file, which is for the caller to say out loud.
+ *
+ * Written back only in the encoding it was read in. A file saved in a code page rather than in
+ * UTF-8 would have every byte outside ASCII replaced for good, so it is refused instead; a BOM it
+ * had is kept.
+ */
+export async function editFile(
+  uri: vscode.Uri,
+  edit: (source: string) => string | undefined,
+): Promise<boolean> {
+  const bytes = await vscode.workspace.fs.readFile(uri);
   const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
   let source: string;
   try {
     source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
-    throw new Error(
-      `${config.fsPath} is not UTF-8, so the new addon was not written into its requiredAddons: ` +
-        'add it there by hand, or save the file as UTF-8 first.',
-    );
+    throw new Error(`${uri.fsPath} is not UTF-8, so it was not edited: save it as UTF-8 first.`);
   }
-  const written = requiringAddon(bom ? source.slice(1) : source, requirement);
 
+  const text = bom ? source.slice(1) : source;
+  const written = edit(text);
   if (written === undefined) {
     return false;
   }
 
-  await vscode.workspace.fs.writeFile(config, new TextEncoder().encode(bom ? String.fromCharCode(0xfeff) + written : written));
+  if (written !== text) {
+    await vscode.workspace.fs.writeFile(
+      uri,
+      new TextEncoder().encode(bom ? String.fromCharCode(0xfeff) + written : written),
+    );
+  }
+
+  return true;
+}
+
+/** A new file, written only where nothing is: false, and nothing written, where something is. */
+export async function writeNew(uri: vscode.Uri, content: string): Promise<boolean> {
+  if (await exists(uri)) {
+    return false;
+  }
+
+  await vscode.workspace.fs.createDirectory(parentOf(uri));
+  await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
   return true;
 }
 

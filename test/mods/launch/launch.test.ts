@@ -933,7 +933,7 @@ test('a third-party mod that is not in the mods directory stops the launch and i
 test('a missing shared mod stops a server-only launch and is checked before starting', () => {
   const target_ = target({ run: 'server', launch: launch({ mods: ['CADMap'] }) });
   const missing = 'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo';
-  assert.ok(launchPathsOf(target_, [CORE, MAP]).includes(missing));
+  assert.ok(launchPathsOf(target_, [CORE, MAP], settings()).includes(missing));
 
   const plan = launchPlanOf(
     input({ target: target_, mods: [CORE, MAP], found: [`${CORE.root}\\server.cfg`] }),
@@ -972,13 +972,15 @@ test('a world the target’s mod keeps no mission for is a warning, not a refusa
 
 /**
  * What the plan wants a yes or no about, which is what the extension asks the disk before making
- * it: the pbo of everything it would load, and the server's two files where a server is put up.
+ * it: the pbo of everything it would load, and where a server is put up its `server.cfg` and the
+ * mission it is laid down from — the mod's own, or DayZ's own where the mod keeps none.
  */
 test('the paths a launch asks the disk about are the built mods and the server’s own files', () => {
   assert.deepEqual(
     launchPathsOf(
       target({ run: 'client', launch: launch({ mods: ['CADCore', 'CADMap'] }) }),
       [CORE, MAP],
+      settings(),
     ),
     ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo', 'P:\\Mods\\@CADMap\\Addons\\CADMap.pbo'],
   );
@@ -993,6 +995,7 @@ test('the paths a launch asks the disk about are the built mods and the server�
         launch: launch({ mods: ['@CF', 'CADCore'] }),
       }),
       [CORE],
+      settings(),
     ),
     [
       'P:\\Mods\\@CF',
@@ -1000,6 +1003,7 @@ test('the paths a launch asks the disk about are the built mods and the server�
       `${CORE.root}\\server.cfg`,
       'F:\\Code\\cad4z\\server.cfg',
       `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      `${SERVER_GAME}\\mpmissions\\dayzOffline.chernarusplus`,
     ],
   );
 });
@@ -1010,13 +1014,44 @@ test('the same server.cfg looked for twice is asked about once', () => {
     launchPathsOf(
       target({ run: 'server', launch: launch({ mods: [], serverMods: ['CADCore'] }) }),
       [CORE],
+      settings(),
     ),
     [
       'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
       `${CORE.root}\\server.cfg`,
       `${CORE.root}\\Missions\\CADCore.chernarusplus`,
+      `${SERVER_GAME}\\mpmissions\\dayzOffline.chernarusplus`,
     ],
   );
+});
+
+/**
+ * A mod made yesterday keeps a `Missions\Global` and no mission of any world, and a server on the
+ * layers alone loads a folder with no world in it: DayZ's own mission of the world goes under them.
+ */
+test('a mod with no mission of the world is launched on DayZ’s own, with its layers over it', () => {
+  const vanilla = `${SERVER_GAME}\\mpmissions\\dayzOffline.chernarusplus`;
+  const plan = launchPlanOf(
+    input({
+      target: target({ run: 'server' }),
+      found: ['P:\\Mods\\@CADCore\\Addons\\CADCore.pbo', `${CORE.root}\\server.cfg`, vanilla],
+    }),
+  );
+  const mission = `${RUN}\\missions\\CADCore.chernarusplus`;
+
+  assert.deepEqual(plan.refusals, []);
+  assert.deepEqual(
+    plan.copies.filter((copy) => copy.to === mission),
+    [
+      { from: vanilla, to: mission },
+      { from: `${CORE.root}\\Missions\\Global`, to: mission },
+      { from: `${CORE.root}\\Missions\\Dev`, to: mission },
+    ],
+  );
+  assert.deepEqual(plan.warnings, [
+    `CADCore keeps no mission of its own for chernarusplus: nothing is at ${CORE.root}\\Missions\\` +
+      `CADCore.chernarusplus, so the server starts DayZ's own ${vanilla}, with the layers of Missions over it.`,
+  ]);
 });
 
 test('a target naming a mod the workspace has not got starts nothing', () => {
@@ -1037,7 +1072,7 @@ test('an invalid workspace mod name creates no file-patching path and refuses th
   assert.deepEqual(plan.filePatching.junctions, []);
   assert.deepEqual(plan.folders, []);
   assert.deepEqual(plan.processes, []);
-  assert.ok(!launchPathsOf(input().target, [unsafe]).some((path) => path.includes('Victim')));
+  assert.ok(!launchPathsOf(input().target, [unsafe], settings()).some((path) => path.includes('Victim')));
 });
 
 test('a checked name belonging to another raw mod is refused before launch paths are made', () => {
@@ -1053,14 +1088,14 @@ test('an invalid but folder-safe workspace name is not probed as a third-party m
   const invalid = { ...CORE, name: 'Bad-Mod', modName: undefined };
   const target_ = target({ mod: 'Bad-Mod', launch: launch({ mods: ['Bad-Mod'] }) });
 
-  assert.deepEqual(launchPathsOf(target_, [invalid]), []);
+  assert.deepEqual(launchPathsOf(target_, [invalid], settings()), []);
   assert.deepEqual(launchPlanOf(input({ target: target_, mods: [invalid] })).processes, []);
 });
 
 test('a loaded-mod traversal is reported and never becomes a path to probe or launch', () => {
   const target_ = target({ launch: launch({ mods: ['../Victim', 'Community-Online-Tools'] }) });
   const plan = launchPlanOf(input({ target: target_ }));
-  const paths = launchPathsOf(target_, [CORE]);
+  const paths = launchPathsOf(target_, [CORE], settings());
 
   assert.ok(plan.refusals.some((refusal) => refusal.includes('one Windows folder name')));
   assert.ok(!paths.some((path) => path.includes('Victim')));
@@ -1335,7 +1370,7 @@ function input(
     drive: { letter: 'P:', source: 'F:\\Workdrive', at: 'F:\\Workdrive', state: 'mounted' },
     runRoot: RUN,
     present: new Map(),
-    found: launchPathsOf(chosen, mods),
+    found: launchPathsOf(chosen, mods, over.settings ?? settings()),
     debugPorts: { client: 41000, server: 41001, client2: 41002 },
     user: 'dev',
     ...over,

@@ -74,6 +74,55 @@ export function parseConfig(source: string): ConfigCpp {
   return { patches, mod };
 }
 
+/** The script modules a Workbench project lists, named the way the project names them. */
+export type ScriptModuleName = 'core' | 'gameLib' | 'game' | 'world' | 'mission';
+
+/** What a mod's `CfgMods` attaches to the game, which is what a Workbench project is made of. */
+export interface ModDefs {
+  /** The folders compiled into each script module, as paths counted from the work drive. */
+  readonly scripts: Readonly<Record<ScriptModuleName, readonly string[]>>;
+  /** The image sets and widget styles the mod's own UI is drawn with. */
+  readonly imageSets: readonly string[];
+  readonly widgetStyles: readonly string[];
+}
+
+/**
+ * What the `defs` of a mod's `CfgMods` point the game at: the folders of each script module, and
+ * the image sets and widget styles its UI is drawn with. It is read for one thing, which is a
+ * Workbench project that compiles the mod's scripts the way the game does — so a mod laid out
+ * nothing like one made here, with `scripts\3_game` where ours has `Scripts\3_Game`, still gets a
+ * project that finds them.
+ *
+ * Paths come back with `/`, the way a project writes them; a config written with `\` names the
+ * same folder to the engine. A config that declares no mod, or declares one with no `defs`,
+ * attaches nothing and reads as empty.
+ */
+export function modDefsOf(source: string): ModDefs {
+  const declaration = childrenOf(parse(source), 'CfgMods')[0];
+  const defs = declaration?.classes.find((node) => sameName(node.name, 'defs'));
+  const filesOf = (name: string): string[] => {
+    const node = defs?.classes.find((child) => sameName(child.name, name));
+
+    return node === undefined
+      ? []
+      : valuesOf(node, 'files')
+          .map((path) => path.trim().replace(/\\/g, '/').replace(/\/+$/, ''))
+          .filter((path) => path !== '');
+  };
+
+  return {
+    scripts: {
+      core: filesOf('engineScriptModule'),
+      gameLib: filesOf('gameLibScriptModule'),
+      game: filesOf('gameScriptModule'),
+      world: filesOf('worldScriptModule'),
+      mission: filesOf('missionScriptModule'),
+    },
+    imageSets: filesOf('imageSets'),
+    widgetStyles: filesOf('widgetStyles'),
+  };
+}
+
 /**
  * A class body. Every entry is kept as a list of strings, whether it was written as an array or as
  * a scalar, so that reading one takes the same shape either way. Keys are lowercased because the

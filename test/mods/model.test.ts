@@ -388,6 +388,47 @@ test('an addon inside the prefix root keeps its own folder name for its pbo', ()
   assert.equal(pboNameOf(mod, addon), 'Scripts');
 });
 
+/**
+ * A `mod.enf` below another mod root is a mod of its own, and what sits under it is its own. The
+ * mod above used to reach down and take the first config it found there, which made it whichever
+ * of the two the search happened to hand over first.
+ */
+test('a mod below another mod root keeps its own addons, whatever order the scan found them in', () => {
+  const configs = [
+    { path: '/w/Outer/Outer/config.cpp', source: config({ patch: 'Outer', dir: 'Outer' }) },
+    { path: '/w/Outer/Tools/Inner/Inner/config.cpp', source: config({ patch: 'Inner', dir: 'Inner' }) },
+  ];
+  const scan = (ordered: typeof configs) =>
+    modsFromScan({
+      manifests: ['/w/Outer/mod.enf', '/w/Outer/Tools/Inner/mod.enf'],
+      configs: ordered,
+    }).map((mod) => [mod.name, mod.prefixRoot, mod.addons.map((addon) => addon.name)]);
+
+  const expected = [
+    ['Inner', '/w/Outer/Tools/Inner/Inner', ['Inner']],
+    ['Outer', '/w/Outer/Outer', ['Outer']],
+  ];
+  assert.deepEqual(scan(configs), expected);
+  assert.deepEqual(scan([...configs].reverse()), expected);
+});
+
+/** Two configs declaring a mod under one mod root: the one its manifest names is the mod's own. */
+test('a mod root holding two declarations takes the one its manifest names, in either scan order', () => {
+  const configs = [
+    { path: '/w/Repo/Foreign/config.cpp', source: config({ patch: 'Foreign', dir: 'Foreign' }) },
+    { path: '/w/Repo/Fresh/config.cpp', source: config({ patch: 'Fresh', dir: 'Fresh' }) },
+  ];
+  const scan = (ordered: typeof configs) =>
+    modsFromScan({
+      manifests: ['/w/Repo/mod.enf'],
+      configs: ordered,
+      declared: new Map([['/w/Repo/mod.enf', 'Fresh']]),
+    }).map((mod) => [mod.name, mod.prefixRoot]);
+
+  assert.deepEqual(scan(configs), [['Fresh', '/w/Repo/Fresh']]);
+  assert.deepEqual(scan([...configs].reverse()), [['Fresh', '/w/Repo/Fresh']]);
+});
+
 /** A `config.cpp` in the shape a real one is written in, with only the parts the model reads. */
 function config({
   patch,

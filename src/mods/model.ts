@@ -101,7 +101,12 @@ export function modsFromScan(scan: Scan): Mod[] {
   // hands them over in whatever order it likes — still come out the same way every scan.
   const drafts = [
     ...[...manifests].map(([root, manifest]) =>
-      draftAt(root, manifest, scan.declared?.get(manifest), sources),
+      draftAt(
+        root,
+        manifest,
+        scan.declared?.get(manifest),
+        sources.filter((source) => ownerOf(source.root, roots) === root),
+      ),
     ),
     ...unconfigured(sources.filter((source) => !roots.some((root) => isWithin(source.root, root)))),
   ].sort(byName(writtenNameOf));
@@ -167,17 +172,50 @@ interface Draft {
   readonly addons: readonly AddonSource[];
 }
 
+/** The configs given are the ones this mod root owns: under it, and under no mod root below it. */
 function draftAt(
   root: string,
   manifest: string,
   declared: string | undefined,
-  sources: readonly AddonSource[],
+  under: readonly AddonSource[],
 ): Draft {
-  const under = sources.filter((source) => isWithin(source.root, root));
-  const main = under.find((source) => source.main);
+  const main = mainOf(under, declared);
   const prefixRoot = main && prefixRootFrom(main, root, declared);
 
   return { root, manifest, declared, prefixRoot, ...addonsOf(prefixRoot, under) };
+}
+
+/**
+ * The mod root a folder belongs to: the nearest one above it. A `mod.enf` below another one is a
+ * mod of its own, and what sits under it is its own as well — not something for the mod above to
+ * reach down and take, which is what made a mod that held another come out as either of the two.
+ */
+function ownerOf(folder: string, roots: readonly string[]): string | undefined {
+  return roots
+    .filter((root) => isWithin(folder, root))
+    .sort((a, b) => b.length - a.length)
+    .at(0);
+}
+
+/**
+ * The addon that declares the mod, where a mod root holds more than one config carrying `CfgMods`.
+ * The one declaring the name the manifest gives is the mod's own; failing that the shallowest one,
+ * and then the first by path — anything but the order a search found them in, which is no order
+ * at all, and which would make the mod a different mod from one scan to the next.
+ */
+function mainOf(sources: readonly AddonSource[], declared: string | undefined): AddonSource | undefined {
+  const named = (source: AddonSource): boolean =>
+    declared !== undefined && sameName(source.dir, declared);
+
+  return sources
+    .filter((source) => source.main)
+    .sort(
+      (a, b) =>
+        Number(named(b)) - Number(named(a)) ||
+        a.root.split('/').length - b.root.split('/').length ||
+        a.config.localeCompare(b.config),
+    )
+    .at(0);
 }
 
 /**

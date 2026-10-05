@@ -22,6 +22,8 @@ import { isStolenPress } from '../press';
 import type {
   ActionView,
   AddonView,
+  EmptyAction,
+  EmptyView,
   LinkView,
   ManifestFileView,
   ModView,
@@ -36,6 +38,10 @@ declare function acquireVsCodeApi(): { postMessage(message: PanelRequest): void 
 
 const host = acquireVsCodeApi();
 const root = document.body.appendChild(div('mods'));
+
+// Until the first answer comes the panel has nothing to show, and a blank one reads as broken: the
+// search can take a while over a large folder — over a minute on the root of a drive.
+root.append(centred(['Looking for mods…'], []));
 
 /**
  * When this page last got the focus back, and how long after that a press is not believed.
@@ -99,10 +105,21 @@ function render(message: Incoming): void {
   }
 
   const mods = message.mods ?? [];
+  const workspaces = (message.workspaces ?? []).map(workspaceOf);
+
+  // Every button over the list acts on a mod, so a panel without one shows the way to make one
+  // instead — in the middle of it, rather than under a row of buttons that would all be disabled.
+  if (mods.length === 0) {
+    root.replaceChildren(...workspaces, nothingFound(message.empty));
+    return;
+  }
+
+  // An addon's own Build refuses for the same reasons the one above every addon does.
+  const build = tools.build.refusal;
   root.replaceChildren(
-    toolsOf(tools),
-    ...(message.workspaces ?? []).map(workspaceOf),
-    ...(mods.length === 0 ? [nothingFound()] : mods.map(modOf)),
+    toolsOf(tools, message.restricted),
+    ...workspaces,
+    ...mods.map((mod) => modOf(mod, build)),
   );
 }
 
@@ -138,7 +155,7 @@ function stale(): HTMLElement {
  * target over Start and Add client, the build over Build — so that the two rows read as one block
  * at every width the panel is dragged to.
  */
-function toolsOf(tools: ToolsView): HTMLElement {
+function toolsOf(tools: ToolsView, restricted: string | undefined): HTMLElement {
   const primary = div('tool-group');
   const primaryActions = div('tool-row primary-actions');
   const choices = div('choices');
@@ -169,8 +186,27 @@ function toolsOf(tools: ToolsView): HTMLElement {
   );
 
   const toolsRoot = div('tools');
-  toolsRoot.append(primary, workDrive);
+  toolsRoot.append(...(restricted === undefined ? [] : [restrictedOf(restricted)]), primary, workDrive);
   return toolsRoot;
+}
+
+/**
+ * Why most of the buttons under it are grey, in a folder the editor does not trust: said over them,
+ * with the one press that settles it, rather than left to tooltips nobody hovers. It stands in the
+ * same sticky block as the buttons, so it is there wherever the list is scrolled to.
+ */
+function restrictedOf(text: string): HTMLElement {
+  const trust = document.createElement('vscode-button');
+  trust.textContent = 'Trust Folder';
+  trust.title = 'Open the editor’s own question of whether this folder is trusted';
+  trust.addEventListener('click', () => {
+    host.postMessage({ type: 'trust' });
+  });
+
+  const notice = div('notice');
+  notice.append(span('text', text), trust);
+
+  return notice;
 }
 
 /**
@@ -265,37 +301,57 @@ function workspaceOf(file: ManifestFileView): HTMLElement {
 }
 
 /**
- * What an empty workspace is shown: the one thing worth doing about it, and the way to look again.
- * Making a mod is the first button rather than a command to be found in the palette — a developer
- * who has not made one yet is the developer least likely to know what it is called.
+ * What an empty panel is shown: why it is empty, and what can be made of it. Making a mod is a
+ * button rather than a command to be found in the palette — a developer who has not made one yet
+ * is the developer least likely to know what it is called. Which buttons, and in what words, is
+ * the extension's to say; an extension too old to say it gets the one button every version has.
  */
-function nothingFound(): HTMLElement {
-  const create = document.createElement('vscode-button');
-  create.textContent = 'Create Mod';
-  create.title = 'Make a mod in this folder: a mod.enf, a prefix root and an addon that builds';
-  create.addEventListener('click', () => {
-    host.postMessage({ type: 'init' });
-  });
+function nothingFound(view: EmptyView | undefined): HTMLElement {
+  const shown = view ?? { lines: ['No Enfusion mod was found in this workspace.'], actions: ['init'] };
 
-  const refresh = document.createElement('vscode-button');
-  refresh.textContent = 'Refresh';
-  refresh.secondary = true;
-  refresh.addEventListener('click', () => {
-    host.postMessage({ type: 'refresh' });
-  });
+  return centred(shown.lines, shown.actions);
+}
 
+/** The words and the buttons of an empty panel, in the middle of it, the first button foremost. */
+function centred(lines: readonly string[], actions: readonly EmptyAction[]): HTMLElement {
   const buttons = div('buttons');
-  buttons.append(create, refresh);
-
-  const empty = div('empty');
-  empty.append(
-    paragraph('No Enfusion mod was found in this workspace.'),
-    paragraph('A mod is a folder with a mod.enf, holding the prefix root the work drive links to.'),
-    buttons,
+  buttons.append(
+    ...actions.map((action, at) => {
+      const said = EMPTY_ACTIONS[action];
+      const button = document.createElement('vscode-button');
+      button.textContent = said.label;
+      button.title = said.title;
+      button.secondary = at > 0;
+      button.addEventListener('click', () => {
+        host.postMessage(said.request);
+      });
+      return button;
+    }),
   );
 
-  return empty;
+  const block = div('welcome');
+  block.append(...lines.map(paragraph), ...(actions.length === 0 ? [] : [buttons]));
+
+  return block;
 }
+
+const EMPTY_ACTIONS: Record<EmptyAction, { label: string; title: string; request: PanelRequest }> = {
+  init: {
+    label: 'Create Mod',
+    title: 'Make a mod: a mod.enf, a prefix root with a config.cpp and scripts, and a Workbench project',
+    request: { type: 'init' },
+  },
+  initWorkspace: {
+    label: 'Create Workspace',
+    title: 'Make this folder a workspace of several mods: a workspace.enf that launches them all, and their Workbench project',
+    request: { type: 'initWorkspace' },
+  },
+  openFolder: {
+    label: 'Open Folder',
+    title: 'Open the folder to make a mod or a workspace in',
+    request: { type: 'openFolder' },
+  },
+};
 
 /**
  * One mod: its name, whatever is wrong with it, and the addons it packs into pbo.
@@ -304,7 +360,7 @@ function nothingFound(): HTMLElement {
  * else is written on it. Its name is the whole of what the mod is called: `mod.enf` says it, and
  * that same name is `P:\<name>` and `@<name>`, so there is no second one to show beside it.
  */
-function modOf(mod: ModView): HTMLElement {
+function modOf(mod: ModView, buildRefusal: string | undefined): HTMLElement {
   const block = div('mod');
   const manifest = mod.manifest;
 
@@ -315,7 +371,7 @@ function modOf(mod: ModView): HTMLElement {
     ...(manifest === undefined
       ? [adoptRow(mod.name)]
       : mod.manifestProblems.map((problem) => problemRow(manifest, problem))),
-    ...mod.addons.map((addon) => addonOf(addon, mod.name)),
+    ...mod.addons.map((addon) => addonOf(addon, mod.name, buildRefusal)),
     addAddonRow(mod.name),
   );
 
@@ -429,7 +485,7 @@ function actionRow(label: string, title: string, request: PanelRequest): HTMLEle
  * What it requires and nothing here declares is not shown. Every mod requires `DZ_Scripts`, so the
  * mark was on every row of every mod, and a mark that is always there says nothing.
  */
-function addonOf(addon: AddonView, mod: string): HTMLElement {
+function addonOf(addon: AddonView, mod: string, buildRefusal: string | undefined): HTMLElement {
   const row = staticRow('addon');
 
   const open = document.createElement('button');
@@ -453,10 +509,15 @@ function addonOf(addon: AddonView, mod: string): HTMLElement {
   const build = document.createElement('button');
   build.className = 'action';
   build.textContent = 'Build';
-  build.title = `Pack ${addon.name} into its pbo`;
+  build.disabled = buildRefusal !== undefined;
+  build.title = buildRefusal ?? `Pack ${addon.name} into its pbo`;
   acts(build, { type: 'build', mod, addon: addon.name });
 
-  row.append(open, build);
+  // A disabled button takes no pointer events, so the reason rides on what holds it.
+  const holder = span('holds', '', build.title);
+  holder.append(build);
+
+  row.append(open, holder);
   return row;
 }
 

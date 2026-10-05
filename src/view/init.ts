@@ -1,12 +1,18 @@
 /**
- * The three commands that make something: a mod, a `mod.enf` for a mod that is already there, and
- * an addon of either.
+ * The four commands that make something: a mod, a workspace, a `mod.enf` for a mod that is already
+ * there, and an addon of a mod.
  *
  * The mod is made where the developer asked for it — the folder clicked in the explorer, or the
  * open folder when the command came from the palette or from an empty panel — and it is asked two
  * things and no more: what it is called, and whether it packs into one pbo or one per addon.
  * Everything else about it is worked out from the name in `src/mods/init.ts`, which is also where
  * every refusal is worded.
+ *
+ * Whether the folder can take a mod at all is asked before either question, and against what the
+ * search found there: a folder inside a mod, or holding mods already, is refused with nothing
+ * written, because a mod made there would quietly break the mods that are. A workspace's own folder
+ * is the one place that holds several, and a mod made there gets a folder of its own, its name in
+ * the workspace's launch block, and its scripts in the workspace's Workbench project.
  *
  * A mod somebody else wrote is asked nothing at all: what a `mod.enf` would be filled in with is
  * in its `config.cpp` already, so it is read out of there and shown, and the one question is
@@ -18,6 +24,7 @@
  */
 
 import * as vscode from 'vscode';
+import { WORKSPACE_FILE } from '../mods/enf';
 import {
   type AddonPlan,
   type Adoption,
@@ -27,24 +34,51 @@ import {
   addonsRefusalOf,
   adoptionOf,
   initPlanOf,
+  modFolderRefusalOf,
+  modPlacementOf,
+  plannedDefsOf,
+  withWorkspaceMod,
+  workspaceFolderRefusalOf,
+  workspacePlanOf,
 } from '../mods/init';
 import { type ModName, modNameOf, modNameProblemOf } from '../mods/modName';
 import { CONFIG_FILE, MANIFEST_FILE, type Layout, type Mod, mainAddonOf } from '../mods/model';
-import { type WorkDriveState, linkPathOf, linksToMake, refusalOf } from '../mods/workDrive';
-import { createFrom, existingOf, folderAt, holds, requireAddon, textOf } from '../platform/init';
+import { withProjectMod } from '../mods/workbench';
+import {
+  type WorkDriveState,
+  driveLetterOf,
+  linkPathOf,
+  linksToMake,
+  refusalOf,
+} from '../mods/workDrive';
+import {
+  createFrom,
+  editFile,
+  existingOf,
+  folderAt,
+  holds,
+  requireAddon,
+  textOf,
+} from '../platform/init';
 import { readMachineSettings } from '../platform/machine';
 import { makeLinks, platformRefusal, readLinks, readWorkDrive } from '../platform/workDrive';
-import { type Discovery, findMods } from '../platform/workspace';
+import {
+  type Discovery,
+  findMods,
+  surroundingsOf,
+  workspaceProjectUriOf,
+} from '../platform/workspace';
 import { WORK_DRIVE_COMMAND } from './workDrive';
 
 /** The command ids, which the palette, the explorer's menu and the panel all go through. */
 export const INIT_COMMAND = {
   mod: 'enfusion.init',
+  workspace: 'enfusion.workspace.init',
   adopt: 'enfusion.adopt',
   addon: 'enfusion.addon.add',
 } as const;
 
-/** Registers all three, and calls back after each so the panel shows what was made. */
+/** Registers all four, and calls back after each so the panel shows what was made. */
 export function registerInitCommands(
   log: vscode.LogOutputChannel,
   changed: () => void,
@@ -53,6 +87,9 @@ export function registerInitCommands(
 
   return vscode.Disposable.from(
     vscode.commands.registerCommand(INIT_COMMAND.mod, (where?: vscode.Uri) => commands.mod(where)),
+    vscode.commands.registerCommand(INIT_COMMAND.workspace, (where?: vscode.Uri) =>
+      commands.workspace(where),
+    ),
     vscode.commands.registerCommand(INIT_COMMAND.adopt, (target?: { mod: string }) =>
       commands.adopt(target),
     ),
@@ -68,23 +105,34 @@ class InitCommands {
     private readonly changed: () => void,
   ) {}
 
-  /** A new mod in the folder the developer pointed at. */
+  /** A new mod in the folder the developer pointed at, or in a folder of its own in a workspace. */
   async mod(where: vscode.Uri | undefined): Promise<void> {
-    const root = where === undefined ? await openFolder() : await folderAt(where);
-    if (root === undefined) {
+    const folder = where === undefined ? await openFolder(FOR_MOD) : await folderAt(where);
+    if (folder === undefined) {
       return;
     }
 
-    // One folder holds one mod: `mod.enf` in it is what says whose folder it is.
-    if (await holds(root, MANIFEST_FILE)) {
+    // One folder holds one mod: `mod.enf` in it is what says whose folder it is. Asked of the disk
+    // rather than of the search alone, which does not see what the editor's excludes hide.
+    if (await holds(folder, MANIFEST_FILE)) {
       await vscode.window.showWarningMessage(
-        `There is a mod here already: ${vscode.workspace.asRelativePath(root, true)} has a ` +
+        `There is a mod here already: ${vscode.workspace.asRelativePath(folder, true)} has a ` +
           `${MANIFEST_FILE}. Pick another folder, or add an addon to the mod that is here.`,
       );
       return;
     }
 
-    const name = await this.askName(root);
+    const found = await findMods();
+    const around = surroundingsOf(found);
+    const refusal = modFolderRefusalOf(folder.path, around);
+    if (refusal !== undefined) {
+      this.log.warn(`create mod in ${folder.fsPath}: ${refusal}`);
+      await vscode.window.showWarningMessage(refusal);
+      return;
+    }
+
+    // A workspace's own folder is the workspace, not the mod, so its name is no suggestion.
+    const name = await this.askName(folder, !(await holds(folder, WORKSPACE_FILE)));
     if (name === undefined) {
       return;
     }
@@ -94,12 +142,27 @@ class InitCommands {
       return;
     }
 
-    const plan = initPlanOf(name, layout);
+    const placement = modPlacementOf(folder.path, name, around);
+    if (placement.refusal !== undefined) {
+      this.log.warn(`create mod ${name}: ${placement.refusal}`);
+      await vscode.window.showWarningMessage(placement.refusal);
+      return;
+    }
+
+    const root = folder.with({ path: placement.root });
+    const settings = await readMachineSettings();
+    const plan = initPlanOf(name, layout, {
+      drive: driveLetterOf(settings.workDriveLetter),
+      inWorkspace: placement.workspace !== undefined,
+    });
     if (!(await this.write(root, plan, name))) {
       return;
     }
 
     this.log.info(`created ${name} (${layout}) in ${root.fsPath}`);
+    if (placement.workspace !== undefined) {
+      await this.join(found, placement.workspace, name, plan);
+    }
     this.changed();
 
     // The manifest is what the mod is configured by, so it is what the developer is left looking
@@ -107,6 +170,103 @@ class InitCommands {
     // else: as the form, where the fields a new mod has not answered for are boxes to fill in.
     await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(root, MANIFEST_FILE));
     await this.link(root, name, `Made ${name}`);
+  }
+
+  /**
+   * A new workspace in the folder the developer pointed at: the `workspace.enf` that will own the
+   * launch of every mod made in it, and nothing about any one mod yet.
+   */
+  async workspace(where: vscode.Uri | undefined): Promise<void> {
+    const folder = where === undefined ? await openFolder(FOR_WORKSPACE) : await folderAt(where);
+    if (folder === undefined) {
+      return;
+    }
+
+    const shown = vscode.workspace.asRelativePath(folder, true);
+    if (await holds(folder, WORKSPACE_FILE)) {
+      await vscode.window.showWarningMessage(
+        `${shown} is a workspace already: it has a ${WORKSPACE_FILE}. Create Mod on it makes a mod in it.`,
+      );
+      return;
+    }
+
+    const found = await findMods();
+    const around = surroundingsOf(found);
+    const refusal = workspaceFolderRefusalOf(folder.path, around);
+    if (refusal !== undefined) {
+      this.log.warn(`create workspace in ${folder.fsPath}: ${refusal}`);
+      await vscode.window.showWarningMessage(refusal);
+      return;
+    }
+
+    const settings = await readMachineSettings();
+    const title = folder.path.split('/').filter((segment) => segment !== '').at(-1) ?? 'Workspace';
+    const plan = workspacePlanOf(driveLetterOf(settings.workDriveLetter), title);
+    if (!(await this.write(folder, plan, `A workspace in ${shown}`))) {
+      return;
+    }
+
+    this.log.info(`created a workspace in ${folder.fsPath}`);
+    this.changed();
+
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(folder, WORKSPACE_FILE));
+    // Made where the workspace above ignores it is the way a workspace is kept beside another one
+    // — and the one thing about it a developer would not see from this window.
+    await vscode.window.showInformationMessage(
+      around.ignored(`${folder.path}/${WORKSPACE_FILE}`)
+        ? `Made a workspace in ${shown}. A ${WORKSPACE_FILE} above ignores that folder, so open it ` +
+            'in a window of its own to make mods in it.'
+        : `Made a workspace in ${shown}. Create Mod on it makes each mod in a folder of its own, ` +
+            'and names it in the launch block.',
+    );
+  }
+
+  /**
+   * A mod made in a workspace, made part of it: named in the launch block, which is the one way it
+   * gets loaded, and written into the workspace's Workbench project where there is one. The mod is
+   * made either way, so what could not be done is said rather than thrown over.
+   */
+  private async join(found: Discovery, workspace: string, name: ModName, plan: InitPlan): Promise<void> {
+    const manifest = found.uris.get(workspace);
+    if (manifest !== undefined) {
+      await this.edit(
+        manifest,
+        (source) => withWorkspaceMod(source, name),
+        `${name} was made, but is not loaded yet: add "@${name}" to the "mods" of`,
+      );
+    }
+
+    const project = workspaceProjectUriOf(found, workspace);
+    const defs = plannedDefsOf(plan);
+    if (project !== undefined && defs !== undefined) {
+      await this.edit(
+        project,
+        (source) => withProjectMod(source, defs),
+        `${name} was made, but Workbench does not know its scripts: add its folders to the script modules of`,
+      );
+    }
+  }
+
+  /** One edit of a file of the workspace, and the sentence that says where it did not land. */
+  private async edit(
+    uri: vscode.Uri,
+    edit: (source: string) => string | undefined,
+    unwritten: string,
+  ): Promise<void> {
+    const shown = vscode.workspace.asRelativePath(uri, true);
+
+    try {
+      if (await editFile(uri, edit)) {
+        return;
+      }
+
+      this.log.warn(`${unwritten} ${shown}`);
+      await vscode.window.showWarningMessage(`${unwritten} ${shown} by hand.`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(`${unwritten} ${shown}: ${message}`);
+      await vscode.window.showWarningMessage(`${unwritten} ${shown} by hand. ${message}`);
+    }
   }
 
   /**
@@ -334,12 +494,13 @@ class InitCommands {
   /**
    * What the mod is called. The folder it is being made in is offered as the answer, because a
    * repository cloned for one mod is usually named after it — and the same name is checked
-   * against what is already in that folder, since the mod's own folder goes inside it.
+   * against what is already in that folder, since the mod's own folder goes inside it. A
+   * workspace's folder is named after the workspace, so there it is not offered.
    */
-  private async askName(root: vscode.Uri): Promise<ModName | undefined> {
+  private async askName(root: vscode.Uri, suggest: boolean): Promise<ModName | undefined> {
     // Off the `Uri` rather than off the workspace: a folder outside the open one has a relative
     // path that is not relative at all, and its last segment is not its name.
-    const suggested = root.path.split('/').filter((segment) => segment !== '').at(-1) ?? '';
+    const suggested = suggest ? (root.path.split('/').filter((segment) => segment !== '').at(-1) ?? '') : '';
 
     const name = await vscode.window.showInputBox({
       title: 'New Enfusion mod',
@@ -353,6 +514,22 @@ class InitCommands {
     return name === undefined ? undefined : modNameOf(name);
   }
 }
+
+/** What `openFolder` asks and says, for the one thing being made. */
+interface Making {
+  readonly placeHolder: string;
+  readonly nowhere: string;
+}
+
+const FOR_MOD: Making = {
+  placeHolder: 'Folder to make the mod in',
+  nowhere: 'Open the folder the mod is to be made in, and then make it.',
+};
+
+const FOR_WORKSPACE: Making = {
+  placeHolder: 'Folder to make the workspace in',
+  nowhere: 'Open the folder the workspace is to be made in, and then make it.',
+};
 
 /**
  * How the mod packs. It is asked because it is the one thing a mod cannot be changed to later
@@ -519,16 +696,14 @@ async function pickMod(mods: readonly Mod[], asking: Asking): Promise<Mod | unde
 }
 
 /**
- * Where a mod goes when nobody clicked a folder to say. One open folder is the answer; several is
- * a question, and none is the one case where there is nowhere to write at all.
+ * Where a mod or a workspace goes when nobody clicked a folder to say. One open folder is the
+ * answer; several is a question, and none is the one case where there is nowhere to write at all.
  */
-async function openFolder(): Promise<vscode.Uri | undefined> {
+async function openFolder(making: Making): Promise<vscode.Uri | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
 
   if (folders.length === 0) {
-    await vscode.window.showWarningMessage(
-      'Open the folder the mod is to be made in, and then make it.',
-    );
+    await vscode.window.showWarningMessage(making.nowhere);
     return undefined;
   }
 
@@ -538,7 +713,7 @@ async function openFolder(): Promise<vscode.Uri | undefined> {
 
   const picked = await vscode.window.showQuickPick(
     folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
-    { placeHolder: 'Folder to make the mod in' },
+    { placeHolder: making.placeHolder },
   );
 
   return picked?.folder.uri;

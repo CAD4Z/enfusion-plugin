@@ -18,6 +18,7 @@ import {
   isWanting,
   workbenchExecutableOf,
 } from '../mods/machine';
+import { WORKSPACE_FILE } from '../mods/enf';
 import { MANIFEST_FILE, type Mod } from '../mods/model';
 import {
   type Link,
@@ -33,11 +34,13 @@ import {
   type Discovery,
   findMods,
   prefixesOf,
+  projectHomeOf,
   targetSourcesOf,
   workbenchProjectOf,
 } from '../platform/workspace';
 import type {
   ChoiceView,
+  EmptyView,
   ModView,
   ModsMessage,
   PanelRequest,
@@ -176,6 +179,15 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
       case 'init':
         this.report(runCommand(INIT_COMMAND.mod));
         return;
+      case 'initWorkspace':
+        this.report(runCommand(INIT_COMMAND.workspace));
+        return;
+      case 'openFolder':
+        this.report(runCommand('workbench.action.files.openFolder'));
+        return;
+      case 'trust':
+        this.report(runCommand('workbench.trust.manage'));
+        return;
       case 'adopt':
         this.report(runCommand(INIT_COMMAND.adopt, { mod: request.mod }));
         return;
@@ -234,6 +246,13 @@ export class ModsPanel implements vscode.WebviewViewProvider, vscode.Disposable 
         problems,
       })),
       mods: found.mods.map((mod) => toView(mod, found, links)),
+      empty: found.mods.length === 0 ? emptyOf(found) : undefined,
+      // The window says Restricted Mode at its top, and nothing says that is why Start, Build and
+      // Workbench are grey: a developer who made a mod and cannot build it looks for a bug instead.
+      restricted: vscode.workspace.isTrusted
+        ? undefined
+        : 'This folder is not trusted, so Start, Build and Workbench are off: they run programs with ' +
+          'paths out of its .enf files. Trust it to turn them on.',
     };
     await view.webview.postMessage(message);
   }
@@ -290,6 +309,39 @@ async function runCommand(
   argument?: BuildTarget | { mod: string } | string,
 ): Promise<void> {
   await vscode.commands.executeCommand(command, argument);
+}
+
+/**
+ * What a panel with no mod offers, which depends on where it is open. A window with no folder has
+ * nowhere to make anything, so the folder comes first. A workspace with no mod yet has one thing to
+ * make. Any other folder can become either a mod or a workspace of several, and is offered both.
+ */
+function emptyOf(found: Discovery): EmptyView {
+  if ((vscode.workspace.workspaceFolders ?? []).length === 0) {
+    return {
+      lines: ['No folder is open.', 'Open the folder a mod or a workspace of mods is to be made in.'],
+      actions: ['openFolder'],
+    };
+  }
+
+  if (found.workspaces.size > 0) {
+    return {
+      lines: [
+        'No mod in this workspace yet.',
+        `Create Mod makes one in a folder of its own and names it in the launch block of the ${WORKSPACE_FILE}.`,
+      ],
+      actions: ['init'],
+    };
+  }
+
+  return {
+    lines: [
+      'No Enfusion mod was found in this folder.',
+      `A mod is a folder with a ${MANIFEST_FILE}; a workspace is a folder of several mods with one ` +
+        `${WORKSPACE_FILE} over them.`,
+    ],
+    actions: ['init', 'initWorkspace'],
+  };
 }
 
 /** What each work drive button does, said the way the command that does it would say it. */
@@ -372,6 +424,9 @@ function workbenchActionOf(
 ): ToolsView['workbench'] {
   const target = chosen.target;
   const project = target === undefined ? undefined : workbenchProjectOf(found, target.mod);
+  // A mod with no project is offered one by the command, so it is only a refusal where there is
+  // nowhere to write one — a target naming a mod the workspace has not got.
+  const home = target === undefined ? undefined : projectHomeOf(found, target.mod);
   let refusal: string | undefined;
 
   if (platform !== undefined) {
@@ -380,8 +435,8 @@ function workbenchActionOf(
     refusal = 'Opening an external program with a workspace project requires a trusted workspace.';
   } else if (target === undefined) {
     refusal = 'Select a launch target before opening Workbench.';
-  } else if (project === undefined) {
-    refusal = `${target.mod} has no .gproj to open in Workbench.`;
+  } else if (project === undefined && home === undefined) {
+    refusal = `${target.mod} is not a mod of this workspace, so there is no project to open in Workbench.`;
   } else if (workbenchExecutableOf(settings) === '') {
     refusal = 'DayZ Tools was not found, so Workbench cannot be opened.';
   } else if (drive.state !== 'mounted') {
@@ -393,9 +448,11 @@ function workbenchActionOf(
 
   return {
     title:
-      project === undefined
-        ? 'Open the selected target mod in DayZ Workbench'
-        : `Open ${project.project} in DayZ Workbench`,
+      project !== undefined
+        ? `Open ${project.project} in DayZ Workbench`
+        : target !== undefined && home !== undefined
+          ? `${target.mod} has no Workbench project: write one, with its scripts in it, and open it in DayZ Workbench`
+          : 'Open the selected target mod in DayZ Workbench',
     refusal,
   };
 }

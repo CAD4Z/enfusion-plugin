@@ -19,7 +19,26 @@ export interface ModsMessage {
   /** The `workspace.enf` files of the open folders; usually none, and at most one that matters. */
   readonly workspaces: readonly ManifestFileView[];
   readonly mods: readonly ModView[];
+  /**
+   * What a panel with no mod in it offers instead of a list: present exactly when `mods` is empty.
+   * The buttons over the list act on mods, so a panel without one shows this and not them.
+   */
+  readonly empty: EmptyView | undefined;
+  /**
+   * Why the buttons that run a program are off in a folder the editor does not trust, said over
+   * them rather than only in their tooltips; undefined in a trusted one.
+   */
+  readonly restricted: string | undefined;
 }
+
+/** The middle of an empty panel: why it is empty, and the ways out, the first one foremost. */
+export interface EmptyView {
+  readonly lines: readonly string[];
+  readonly actions: readonly EmptyAction[];
+}
+
+/** What an empty panel offers: a mod, a workspace, or a folder to make either in. */
+export type EmptyAction = 'init' | 'initWorkspace' | 'openFolder';
 
 /** One button: what it does, and why it would not do it as things stand. */
 export interface ActionView {
@@ -149,6 +168,12 @@ export type PanelRequest =
   | { readonly type: 'buildAll' }
   /** Makes a mod, which is what an empty workspace has to offer. */
   | { readonly type: 'init' }
+  /** Makes a workspace, which is the other thing a folder with no mod in it can become. */
+  | { readonly type: 'initWorkspace' }
+  /** Opens a folder, which is what a window with none has to do before anything else. */
+  | { readonly type: 'openFolder' }
+  /** Opens the editor's own question of whether this folder is trusted. */
+  | { readonly type: 'trust' }
   /** Writes the `mod.enf` an unconfigured mod has not got, named the way the panel was given it. */
   | { readonly type: 'adopt'; readonly mod: string }
   /** Adds an addon to the mod, named the way the panel was given it. */

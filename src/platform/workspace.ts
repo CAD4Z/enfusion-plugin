@@ -17,10 +17,11 @@ import {
   workspaceFor,
 } from '../mods/enf';
 import { sameName } from '../mods/config';
+import type { Surroundings } from '../mods/init';
 import type { LaunchMod, TargetSource } from '../mods/launch/launch';
 import { CONFIG_FILE, MANIFEST_FILE, type Mod, modsFromScan, pboNameOf } from '../mods/model';
 import { folderOf, nameOf, windowsFolder } from '../mods/paths';
-import { projectOf } from '../mods/workbench';
+import { projectOf, workspaceProjectOf } from '../mods/workbench';
 import type { Prefix } from '../mods/workDrive';
 
 /** The three files a workspace of mods is made of, anywhere in the open folders. */
@@ -38,6 +39,8 @@ export interface Discovery {
   readonly configured: ReadonlyMap<string, Configured>;
   /** Every `workspace.enf` of the open folders, by path, with what is wrong with it. */
   readonly workspaces: ReadonlyMap<string, readonly ManifestProblem[]>;
+  /** Every `workspace.enf` the search found, with its text: what they ignore decides the window. */
+  readonly workspaceFiles: readonly ManifestSource[];
   /** Workbench projects, kept as URI paths until one is chosen for an external process. */
   readonly projects: readonly string[];
 }
@@ -79,26 +82,117 @@ export async function findMods(): Promise<Discovery> {
     uris,
     configured: configurations.mods,
     workspaces: configurations.workspaces,
+    workspaceFiles,
     projects: found.filter((uri) => nameOf(uri.path).toLowerCase().endsWith('.gproj')).map((uri) => uri.path),
   };
 }
 
-/** The selected target mod's Workbench project and repository, as Windows programs take them. */
-export function workbenchProjectOf(
-  found: Discovery,
-  targetMod: string,
-): { readonly project: string; readonly repository: string } | undefined {
-  const mod = found.mods.find((candidate) => sameName(candidate.name, targetMod));
-  const project = mod === undefined ? undefined : projectOf(mod.root, found.projects);
-  const projectUri = project === undefined ? undefined : found.uris.get(project);
-  const anchor =
-    mod === undefined
-      ? undefined
-      : found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '');
+/**
+ * What a folder asked to hold a new mod or workspace sits among, the way the domain asks it: the
+ * mods with where they are and whether they launch by blocks of their own, every workspace file,
+ * and what those files leave out of this window.
+ */
+export function surroundingsOf(found: Discovery): Surroundings {
+  return {
+    mods: found.mods.map((mod) => ({
+      name: mod.name,
+      root: mod.root,
+      prefixRoot: mod.prefixRoot,
+      configured: mod.manifest !== undefined,
+      launches:
+        mod.manifest !== undefined &&
+        found.configured.get(mod.manifest)?.configuration.manifest.launch !== undefined,
+    })),
+    workspaces: [...found.workspaces.keys()],
+    ignored: (path) => unignored([path], found.workspaceFiles).length === 0,
+  };
+}
 
-  return projectUri === undefined || anchor === undefined || mod === undefined
+/** A Workbench project to open, and the repository its plugins are told of, as Windows takes both. */
+export interface WorkbenchProject {
+  readonly project: string;
+  readonly repository: string;
+}
+
+/**
+ * The selected target mod's Workbench project and repository: the mod's own project, or else the
+ * one of the workspace it belongs to. Undefined where there is neither, which is a project the
+ * Workbench button offers to write rather than a reason to refuse — see `projectHomeOf`.
+ */
+export function workbenchProjectOf(found: Discovery, targetMod: string): WorkbenchProject | undefined {
+  const mod = modNamed(found, targetMod);
+  const project =
+    mod === undefined ? undefined : projectOf(mod.root, found.projects, workspaceRootOf(found, mod));
+  const projectUri = project === undefined ? undefined : found.uris.get(project);
+  const repository = mod === undefined ? undefined : modRootUriOf(found, mod);
+
+  return projectUri === undefined || repository === undefined
     ? undefined
-    : { project: projectUri.fsPath, repository: anchor.with({ path: mod.root }).fsPath };
+    : { project: projectUri.fsPath, repository: repository.fsPath };
+}
+
+/**
+ * Where a mod with no Workbench project gets one, and which mods it lists: the workspace's own
+ * folder and every mod of it, where the mod belongs to a workspace — one project for all, so one
+ * Workbench compiles them together — and otherwise the mod root and the mod alone.
+ */
+export interface ProjectHome {
+  readonly folder: vscode.Uri;
+  /** What the project is called in Workbench's title bar: the workspace's folder, or the mod. */
+  readonly title: string;
+  /** In build order, which is the order their scripts are listed in. */
+  readonly mods: readonly Mod[];
+  /** The repository the Workbench plugins are told about, which is the target mod's root. */
+  readonly repository: vscode.Uri;
+}
+
+export function projectHomeOf(found: Discovery, targetMod: string): ProjectHome | undefined {
+  const mod = modNamed(found, targetMod);
+  const repository = mod === undefined ? undefined : modRootUriOf(found, mod);
+  if (mod === undefined || repository === undefined) {
+    return undefined;
+  }
+
+  const workspace = workspaceFor(mod.root, [...found.workspaces.keys()]);
+  const workspaceUri = workspace === undefined ? undefined : found.uris.get(workspace);
+  if (workspace === undefined || workspaceUri === undefined) {
+    return { folder: repository, title: mod.name, mods: [mod], repository };
+  }
+
+  const root = folderOf(workspace);
+
+  return {
+    folder: workspaceUri.with({ path: root }),
+    title: nameOf(root),
+    mods: found.mods.filter((other) => workspaceFor(other.root, [...found.workspaces.keys()]) === workspace),
+    repository,
+  };
+}
+
+/**
+ * The project a workspace's mods are written into when one is made in it: the workspace's own, in
+ * its `Workbench` folder. Undefined where it has none, which leaves the mod to the Workbench button.
+ */
+export function workspaceProjectUriOf(found: Discovery, workspace: string): vscode.Uri | undefined {
+  const project = workspaceProjectOf(folderOf(workspace), found.projects);
+
+  return project === undefined ? undefined : found.uris.get(project);
+}
+
+function modNamed(found: Discovery, name: string): Mod | undefined {
+  return found.mods.find((candidate) => sameName(candidate.name, name));
+}
+
+/** The folder of the workspace a mod answers to, where its project is looked for after its own. */
+function workspaceRootOf(found: Discovery, mod: Mod): string | undefined {
+  const workspace = workspaceFor(mod.root, [...found.workspaces.keys()]);
+
+  return workspace === undefined ? undefined : folderOf(workspace);
+}
+
+/** The mod root as a `Uri`, borrowed from a file inside the mod the way `prefixesOf` borrows one. */
+function modRootUriOf(found: Discovery, mod: Mod): vscode.Uri | undefined {
+  return found.uris.get(mod.manifest ?? mod.addons[0]?.config ?? '')?.with({ path: mod.root });
 }
 
 /** All the cascade asks about a mod: where it sits, and which file configures it. */
