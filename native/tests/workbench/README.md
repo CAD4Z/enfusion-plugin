@@ -45,6 +45,11 @@ property-registration evidence before updating this oracle. Do not regenerate ex
 with the converter under test. The harness is optional research tooling; building, testing and
 shipping the converter does not require Python, Unicorn, pefile or Workbench.
 
+The four capture scripts share `oracle.py`: the installed executable, checked against its
+fingerprint, and the emulator that runs its importer. `check_target_captures.py` and
+`font_check.py` share `edds_reader.py`, a reader of the EDDS header, mip table and LZ4 frames that
+uses only the standard library. The Python style is in `../ruff.toml`.
+
 ## Swizzling captures
 
 `swizzle-goldens.json` adds 261 cases (29 for each of the nine mappings), captured by

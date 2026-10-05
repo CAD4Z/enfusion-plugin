@@ -1,0 +1,26 @@
+# The Python style of the native tests and capture tools. `ruff format` keeps the layout and
+# `ruff check` the rules selected below; the rest is by hand:
+# - Classes throughout: a class for each thing a script reads, runs or checks, and the command line
+#   is a `main` class method. Module level holds imports, constants and the one line under
+#   `if __name__ == '__main__'`.
+# - Blank lines between the steps of a method; a docstring over every class and method, and a
+#   comment over every step whose purpose the code does not say by itself. English only.
+# - A statement that fits in 140 columns stays on one line; comments and docstrings wrap at 100.
+#
+#   ruff format native/tests && ruff check native/tests
+line-length = 140
+target-version = "py311"
+
+[format]
+quote-style = "single"
+
+[lint]
+select = ["E", "W", "F", "I", "N", "UP", "B"]
+# zip() pairs sequences of equal length here, and the checks already compare the lengths that matter.
+ignore = ["B905"]
+
+[lint.pycodestyle]
+max-doc-length = 100
+
+[lint.isort]
+known-first-party = ["capture", "edds_reader", "hdr_harness", "oracle"]
