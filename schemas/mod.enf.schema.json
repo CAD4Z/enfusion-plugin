@@ -15,7 +15,7 @@
       "not": {
         "pattern": "^(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|$)"
       },
-      "description": "The mod's name, which is one name and not a title: letters, digits and underscores, starting with a letter or underscore, excluding Windows device names such as CON and LPT1. The panel shows it, the prefix root goes onto the work drive under it (P:\\<name>), and the build writes it into @<name>. The name of the mod's own folder when left out, so a folder called something else than the mod — client, holding CADNavigationClient — is exactly what this is written for. It is the same name as dir in the CfgMods of the main addon; the two disagreeing means the game loads one mod and the extension builds another."
+      "description": "The mod's name, which is one name and not a title: letters, digits and underscores, starting with a letter or underscore, excluding Windows device names such as CON and LPT1. The panel shows it, the prefix root goes onto the work drive under it (P:\\<name>), and the build writes it into @<name>. The name of the mod's own folder when left out, so a folder called something else than the mod — client, holding MyModClient — is exactly what this is written for. It is the same name as dir in the CfgMods of the main addon; the two disagreeing means the game loads one mod and the extension builds another."
     },
     "description": {
       "type": "string",

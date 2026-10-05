@@ -35,27 +35,27 @@ test('a mod name is the class-safe folder segment every owned-mod operation shar
 });
 
 test('a checked mod name is the only value source and built paths accept', () => {
-  const name = modNameOf('CADCore');
+  const name = modNameOf('ModA');
   assert.ok(name !== undefined);
 
-  assert.equal(modPathOf('P:', name, 'source'), 'P:\\CADCore');
-  assert.equal(modPathOf('P:\\Mods', name, 'built'), 'P:\\Mods\\@CADCore');
+  assert.equal(modPathOf('P:', name, 'source'), 'P:\\ModA');
+  assert.equal(modPathOf('P:\\Mods', name, 'built'), 'P:\\Mods\\@ModA');
 });
 
 test('a prepared name cannot be paired with a different raw identity', () => {
-  const name = modNameOf('CADCore');
+  const name = modNameOf('ModA');
   assert.ok(name !== undefined);
 
-  assert.equal(isModNameOf('CADCore', name), true);
-  assert.equal(isModNameOf('CADMap', name), false);
-  assert.equal(isModNameOf('CADCore', undefined), false);
+  assert.equal(isModNameOf('ModA', name), true);
+  assert.equal(isModNameOf('ModB', name), false);
+  assert.equal(isModNameOf('ModA', undefined), false);
 });
 
 test('a loaded-mod reference is a safe folder name, not an Enforce class name', () => {
   for (const [written, canonical] of [
-    ['CF', 'CF'],
-    ['@CF', 'CF'],
-    ['Community-Online-Tools', 'Community-Online-Tools'],
+    ['ModX', 'ModX'],
+    ['@ModX', 'ModX'],
+    ['A-Mod-With-Dashes', 'A-Mod-With-Dashes'],
     ['A Mod With Spaces', 'A Mod With Spaces'],
   ] as const) {
     const name = loadedModNameOf(written);

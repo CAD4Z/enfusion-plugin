@@ -668,8 +668,8 @@ test('a mod made in a workspace is named in its mods, after the ones named there
   "launch": {
     // What every target loads.
     "mods": [
-      "@CF",
-      "@CADCore"
+      "@ModX",
+      "@ModA"
     ],
     "targets": []
   }
@@ -682,8 +682,8 @@ test('a mod made in a workspace is named in its mods, after the ones named there
   "launch": {
     // What every target loads.
     "mods": [
-      "@CF",
-      "@CADCore",
+      "@ModX",
+      "@ModA",
       "@MyMod"
     ],
     "targets": []
@@ -693,8 +693,8 @@ test('a mod made in a workspace is named in its mods, after the ones named there
   );
   // A block written along one line comes out a line per member, the way the form writes a row too.
   assert.equal(
-    withWorkspaceMod('{\n  "launch": { "mods": ["@CF"] }\n}\n', name('MyMod')),
-    '{\n  "launch": {\n    "mods": [\n      "@CF",\n      "@MyMod"\n    ]\n  }\n}\n',
+    withWorkspaceMod('{\n  "launch": { "mods": ["@ModX"] }\n}\n', name('MyMod')),
+    '{\n  "launch": {\n    "mods": [\n      "@ModX",\n      "@MyMod"\n    ]\n  }\n}\n',
   );
 });
 
@@ -766,9 +766,9 @@ test('the prefix root of a mod nobody configured is inside that mod', () => {
 });
 
 test('a folder a workspace.enf ignores takes no mod, since this window would never show it', () => {
-  const around = surroundings([], ['/w/workspace.enf'], (path) => path.startsWith('/w/Maps/'));
+  const around = surroundings([], ['/w/workspace.enf'], (path) => path.startsWith('/w/Labs/'));
 
-  assert.match(modFolderRefusalOf('/w/Maps', around) ?? '', /ignores, so a mod made here would never be listed/);
+  assert.match(modFolderRefusalOf('/w/Labs', around) ?? '', /ignores, so a mod made here would never be listed/);
 });
 
 test('a folder with nothing in it is the mod root itself, and no workspace owns it', () => {

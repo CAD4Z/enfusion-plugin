@@ -1,0 +1,5 @@
+#!/bin/sh
+# What a commit has to pass before it is made; CI runs the same checks over the whole tree.
+# Turned on once per clone with: git config core.hooksPath .githooks
+node scripts/check-text.mjs --staged || exit 1
+node scripts/check-format.mjs --staged || exit 1

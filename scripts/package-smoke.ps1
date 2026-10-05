@@ -1,9 +1,17 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string] $Vsix
+  [string] $Vsix,
+
+  # A copy whose node_modules is a junction to another checkout is packaged without dependency
+  # detection: through the junction vsce finds no file of the extension at all.
+  [switch] $NoDependencies
 )
 
 $ErrorActionPreference = 'Stop'
+$dependencies = @()
+if ($NoDependencies) {
+  $dependencies = @('--no-dependencies')
+}
 
 $expected = @(
   'THIRD-PARTY.md',
@@ -30,7 +38,7 @@ $expected = @(
   'dist/native/win32-x64/enfusion.exe'
 ) | Sort-Object
 
-$listed = @(npx vsce ls | Where-Object { $_ -ne '' } | Sort-Object)
+$listed = @(npx vsce ls @dependencies | Where-Object { $_ -ne '' } | Sort-Object)
 if ($LASTEXITCODE -ne 0) {
   throw 'vsce could not list the package contents'
 }
@@ -40,7 +48,7 @@ if ($null -ne $difference) {
   throw "package contents differ from the allowlist:`n$rendered"
 }
 
-npx vsce package --target win32-x64 --out $Vsix
+npx vsce package --target win32-x64 --out $Vsix @dependencies
 if ($LASTEXITCODE -ne 0) {
   throw 'vsce could not build the Windows x64 VSIX'
 }

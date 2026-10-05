@@ -25,7 +25,7 @@ function edited(source: string, edit: FormEdit, kind: ManifestKind = 'mod'): str
 
 const MANIFEST = `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z_Core",
+  "name": "Acme_Mod",
   "version": "1.0.0",
 
   "launch": {
@@ -45,7 +45,7 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
   const form = formOf('mod', MANIFEST);
 
   assert.equal(form.kind, 'mod');
-  assert.equal(form.mod?.name, 'CAD4Z_Core');
+  assert.equal(form.mod?.name, 'Acme_Mod');
   assert.equal(form.mod?.version, '1.0.0');
   assert.equal(form.launch.modsDirectory, 'Addons');
   assert.deepEqual(form.launch.targets, [
@@ -65,10 +65,10 @@ test('a mod manifest is shown as its own fields and its launch block', () => {
 });
 
 test('a workspace manifest has the folders it ignores and the same launch block', () => {
-  const form = formOf('workspace', '{ "ignore": ["Maps"], "launch": { "modsDirectory": "Built" } }');
+  const form = formOf('workspace', '{ "ignore": ["Labs"], "launch": { "modsDirectory": "Built" } }');
 
   assert.equal(form.mod, undefined);
-  assert.deepEqual(form.workspace?.ignore, ['Maps']);
+  assert.deepEqual(form.workspace?.ignore, ['Labs']);
   assert.equal(form.launch.modsDirectory, 'Built');
   assert.equal(form.refusal, undefined);
   assert.equal(formOf('mod', MANIFEST).workspace, undefined);
@@ -78,15 +78,15 @@ test('a folder to ignore is written where the schema writes it, ahead of the lau
   assert.equal(
     edited(
       '{\n  "launch": {\n    "modsDirectory": "Built"\n  }\n}\n',
-      { kind: 'append', path: ['ignore'], value: 'Maps' },
+      { kind: 'append', path: ['ignore'], value: 'Labs' },
       'workspace',
     ),
-    '{\n  "ignore": [\n    "Maps"\n  ],\n  "launch": {\n    "modsDirectory": "Built"\n  }\n}\n',
+    '{\n  "ignore": [\n    "Labs"\n  ],\n  "launch": {\n    "modsDirectory": "Built"\n  }\n}\n',
   );
 });
 
 test('a list of ignored folders the reader could not read whole is not written into', () => {
-  assert.ok(formOf('workspace', '{ "ignore": [1, "Maps"] }').refusal?.includes('ignore'));
+  assert.ok(formOf('workspace', '{ "ignore": [1, "Labs"] }').refusal?.includes('ignore'));
 });
 
 test('an empty file is a form with empty fields rather than one that refuses', () => {
@@ -101,19 +101,19 @@ test('an empty file is a form with empty fields rather than one that refuses', (
 
 test('a broken file keeps everything that was readable and is not written into', () => {
   const source = `{
-  "name": "CAD4Z_Core"
-  "author": "hurfy"
+  "name": "Acme_Mod"
+  "author": "Acme"
 }`;
   const form = formOf('mod', source);
 
-  assert.equal(form.mod?.name, 'CAD4Z_Core');
+  assert.equal(form.mod?.name, 'Acme_Mod');
   assert.deepEqual(form.problems, [{ message: 'Comma expected.', line: 3, column: 3 }]);
   assert.ok(form.refusal?.includes('syntax error'));
   assert.deepEqual(changesOf('mod', source, { kind: 'set', path: ['name'], value: 'Other' }), []);
 });
 
 test('a file that is not an object at all is shown and left alone', () => {
-  const source = '["CAD4Z Core"]';
+  const source = '["Mod A"]';
   const form = formOf('mod', source);
 
   assert.ok(form.refusal?.includes('a list'));
@@ -164,7 +164,7 @@ test('a list the reader could not read whole leaves rows that are not addresses'
 test('the same holds for a plain list, and for the file a workspace is configured by', () => {
   assert.ok(formOf('mod', '{ "exclude": [1, "*.psd"] }').refusal?.includes('exclude'));
   assert.ok(
-    formOf('workspace', '{ "launch": { "mods": ["@CF", 2] } }').refusal?.includes(
+    formOf('workspace', '{ "launch": { "mods": ["@ModX", 2] } }').refusal?.includes(
       'launch.mods',
     ),
   );
@@ -172,10 +172,10 @@ test('the same holds for a plain list, and for the file a workspace is configure
 
 test('an unreadable target-specific mod keeps later target rows from being misaddressed', () => {
   const source =
-    '{ "launch": { "targets": [{ "name": "A", "mods": [2, "@CF"] }] } }';
+    '{ "launch": { "targets": [{ "name": "A", "mods": [2, "@ModX"] }] } }';
   const form = formOf('mod', source);
 
-  assert.deepEqual(form.launch.targets[0]?.mods, ['@CF']);
+  assert.deepEqual(form.launch.targets[0]?.mods, ['@ModX']);
   assert.ok(form.refusal?.includes('launch.targets.0.mods'), form.refusal);
 });
 
@@ -188,18 +188,18 @@ test('a list of the wrong type altogether shows no rows, so there is nothing to 
 
 test('a field that is there is replaced where it stands, and nothing else moves', () => {
   assert.equal(
-    edited(MANIFEST, { kind: 'set', path: ['name'], value: 'CAD4Z' }),
-    MANIFEST.replace('"CAD4Z_Core"', '"CAD4Z"'),
+    edited(MANIFEST, { kind: 'set', path: ['name'], value: 'Acme' }),
+    MANIFEST.replace('"Acme_Mod"', '"Acme"'),
   );
 });
 
 test('a field that is not there is written where the schema writes it', () => {
   assert.equal(
-    edited(MANIFEST, { kind: 'set', path: ['author'], value: 'hurfy' }),
+    edited(MANIFEST, { kind: 'set', path: ['author'], value: 'Acme' }),
     `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z_Core",
-  "author": "hurfy",
+  "name": "Acme_Mod",
+  "author": "Acme",
   "version": "1.0.0",
 
   "launch": {
@@ -219,12 +219,12 @@ test('a field that is not there is written where the schema writes it', () => {
 
 test('a new field goes after a field nobody declared rather than in front of it', () => {
   assert.equal(
-    edited('{\n  "name": "CAD4Z_Core",\n  "autor": "hurfy"\n}\n', {
+    edited('{\n  "name": "Acme_Mod",\n  "autor": "Acme"\n}\n', {
       kind: 'set',
       path: ['version'],
       value: '1.0.0',
     }),
-    '{\n  "name": "CAD4Z_Core",\n  "autor": "hurfy",\n  "version": "1.0.0"\n}\n',
+    '{\n  "name": "Acme_Mod",\n  "autor": "Acme",\n  "version": "1.0.0"\n}\n',
   );
 });
 
@@ -241,13 +241,13 @@ test('a workspace file is written into the same way, and its launch block made t
 
 test('a launch block the form has to make goes last, where both files write it', () => {
   const written = edited(
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core",\n  "version": "1.0.0"\n}\n',
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "Acme_Mod",\n  "version": "1.0.0"\n}\n',
     { kind: 'set', path: ['launch', 'modsDirectory'], value: 'Addons' },
   );
 
   assert.equal(
     written,
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core",\n  "version": "1.0.0",\n' +
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "Acme_Mod",\n  "version": "1.0.0",\n' +
       '  "launch": {\n    "modsDirectory": "Addons"\n  }\n}\n',
   );
 });
@@ -257,7 +257,7 @@ test('a box emptied takes the field out of the file', () => {
     edited(MANIFEST, { kind: 'set', path: ['version'], value: '' }),
     `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z_Core",
+  "name": "Acme_Mod",
 
   "launch": {
     "modsDirectory": "Addons",
@@ -297,7 +297,7 @@ test('a field taken out leaves the note above the field below it', () => {
 test('a field taken out does take the notes and the blank line that were its own', () => {
   assert.equal(
     edited(
-      '{\n  "name": "A",\n\n  // who made it\n  "author": "hurfy",\n  "version": "1"\n}\n',
+      '{\n  "name": "A",\n\n  // who made it\n  "author": "Acme",\n  "version": "1"\n}\n',
       { kind: 'clear', path: ['author'] },
     ),
     '{\n  "name": "A",\n  "version": "1"\n}\n',
@@ -322,12 +322,12 @@ test('a field of the launch block is written into the block rather than beside i
 
 test('a launch block the file has not got is made to hold the field', () => {
   assert.equal(
-    edited('{ "name": "CAD4Z_Core" }', {
+    edited('{ "name": "Acme_Mod" }', {
       kind: 'set',
       path: ['launch', 'modsDirectory'],
       value: 'Addons',
     }),
-    '{\n  "name": "CAD4Z_Core",\n  "launch": {\n    "modsDirectory": "Addons"\n  }\n}',
+    '{\n  "name": "Acme_Mod",\n  "launch": {\n    "modsDirectory": "Addons"\n  }\n}',
   );
 });
 
@@ -356,10 +356,10 @@ test('a list made by its first item stands where the schema writes it, not at th
     written,
   );
 
-  const launched = edited(MANIFEST, { kind: 'append', path: ['launch', 'mods'], value: '@CF' });
+  const launched = edited(MANIFEST, { kind: 'append', path: ['launch', 'mods'], value: '@ModX' });
 
   assert.ok(
-    launched.includes('"modsDirectory": "Addons",\n    "mods": [\n      "@CF"\n    ],\n    "targets"'),
+    launched.includes('"modsDirectory": "Addons",\n    "mods": [\n      "@ModX"\n    ],\n    "targets"'),
     launched,
   );
 });
@@ -464,12 +464,12 @@ test('a target mod list is made inside that target and stays distinct from the l
   const written = edited(MANIFEST, {
     kind: 'append',
     path: ['launch', 'targets', 0, 'mods'],
-    value: '@CF',
+    value: '@ModX',
   });
 
-  assert.deepEqual(formOf('mod', written).launch.targets[0]?.mods, ['@CF']);
+  assert.deepEqual(formOf('mod', written).launch.targets[0]?.mods, ['@ModX']);
   assert.deepEqual(formOf('mod', written).launch.mods, []);
-  assert.ok(written.includes('"mods": [\n          "@CF"\n        ]'), written);
+  assert.ok(written.includes('"mods": [\n          "@ModX"\n        ]'), written);
 });
 
 test('removing the last target mod removes its override and restores inheritance', () => {
@@ -503,11 +503,11 @@ test('a field of a target is written where the schema writes it, not at the end'
   const written = edited(MANIFEST, {
     kind: 'set',
     path: ['launch', 'targets', 0, 'mod'],
-    value: 'CADCore',
+    value: 'ModA',
   });
 
   assert.ok(
-    written.includes('"name": "Client",\n        "mod": "CADCore",\n        "map"'),
+    written.includes('"name": "Client",\n        "mod": "ModA",\n        "map"'),
     written,
   );
 });
@@ -515,7 +515,7 @@ test('a field of a target is written where the schema writes it, not at the end'
 test('the comments around what is written survive being written around', () => {
   const source = `{
   // What the panel and the launcher call this mod.
-  "name": "CAD4Z_Core",
+  "name": "Acme_Mod",
   /* Sources the builder has no business packing. */
   "exclude": [
     "*.psd" // Photoshop
@@ -523,7 +523,7 @@ test('the comments around what is written survive being written around', () => {
 }
 `;
 
-  const named = edited(source, { kind: 'set', path: ['author'], value: 'hurfy' });
+  const named = edited(source, { kind: 'set', path: ['author'], value: 'Acme' });
   assert.ok(named.includes('// What the panel and the launcher call this mod.'), named);
   assert.ok(named.includes('/* Sources the builder has no business packing. */'), named);
   assert.ok(named.includes('"*.psd" // Photoshop'), named);
@@ -535,11 +535,11 @@ test('the comments around what is written survive being written around', () => {
 });
 
 test('what the form adds is indented the way the file already is', () => {
-  const tabbed = '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons"\n\t}\n}';
+  const tabbed = '{\n\t"name": "Acme_Mod",\n\t"launch": {\n\t\t"modsDirectory": "Addons"\n\t}\n}';
 
   assert.equal(
     edited(tabbed, { kind: 'set', path: ['launch', 'mods'], value: 'x' }),
-    '{\n\t"name": "CAD4Z_Core",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"mods": "x"\n\t}\n}',
+    '{\n\t"name": "Acme_Mod",\n\t"launch": {\n\t\t"modsDirectory": "Addons",\n\t\t"mods": "x"\n\t}\n}',
   );
 
   const wide = '{\n    "launch": {\n        "modsDirectory": "Addons"\n    }\n}';
@@ -550,26 +550,26 @@ test('what the form adds is indented the way the file already is', () => {
 });
 
 test('a file written with CRLF stays written with CRLF', () => {
-  const source = '{\r\n  "name": "CAD4Z_Core"\r\n}\r\n';
+  const source = '{\r\n  "name": "Acme_Mod"\r\n}\r\n';
   const written = edited(source, { kind: 'set', path: ['version'], value: '1.0.0' });
 
-  assert.equal(written, '{\r\n  "name": "CAD4Z_Core",\r\n  "version": "1.0.0"\r\n}\r\n');
+  assert.equal(written, '{\r\n  "name": "Acme_Mod",\r\n  "version": "1.0.0"\r\n}\r\n');
 });
 
 test('a trailing comma is JSONC, so the form still writes into the file', () => {
-  const written = edited('{\n  "name": "CAD4Z_Core",\n}\n', {
+  const written = edited('{\n  "name": "Acme_Mod",\n}\n', {
     kind: 'set',
     path: ['version'],
     value: '1.0.0',
   });
 
   assert.equal(formOf('mod', written).mod?.version, '1.0.0');
-  assert.equal(formOf('mod', written).mod?.name, 'CAD4Z_Core');
+  assert.equal(formOf('mod', written).mod?.name, 'Acme_Mod');
 });
 
 test('writing back what is already there is not a change, so the file is not marked dirty', () => {
   assert.deepEqual(
-    changesOf('mod', MANIFEST, { kind: 'set', path: ['name'], value: 'CAD4Z_Core' }),
+    changesOf('mod', MANIFEST, { kind: 'set', path: ['name'], value: 'Acme_Mod' }),
     [],
   );
   assert.deepEqual(
@@ -599,15 +599,15 @@ test('the schema line a file points at itself with stays first', () => {
     edited('{\n  "$schema": "./mod.enf.schema.json"\n}\n', {
       kind: 'set',
       path: ['name'],
-      value: 'CAD4Z_Core',
+      value: 'Acme_Mod',
     }),
-    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "CAD4Z_Core"\n}\n',
+    '{\n  "$schema": "./mod.enf.schema.json",\n  "name": "Acme_Mod"\n}\n',
   );
 });
 
 test('an empty file is one the form writes into rather than refuses', () => {
   assert.equal(
-    edited('', { kind: 'set', path: ['name'], value: 'CAD4Z_Core' }),
-    '{\n  "name": "CAD4Z_Core"\n}',
+    edited('', { kind: 'set', path: ['name'], value: 'Acme_Mod' }),
+    '{\n  "name": "Acme_Mod"\n}',
   );
 });

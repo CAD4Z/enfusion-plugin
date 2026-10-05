@@ -1236,7 +1236,7 @@ function missionOf(input: LaunchInput): string {
   return windowsPath(input.runRoot, MISSIONS_FOLDER, missionNameOf(input.target, input.mods));
 }
 
-/** `CADCore.chernarusplus`: the mod, and the world it is being launched on. */
+/** `MyMod.chernarusplus`: the mod, and the world it is being launched on. */
 function missionNameOf(target: LaunchTarget, mods: readonly LaunchMod[]): string {
   const name = targetModNameOf(target, mods);
   return name === undefined ? '' : `${name}.${mapOf(target)}`;

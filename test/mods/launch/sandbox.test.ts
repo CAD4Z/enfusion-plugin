@@ -27,7 +27,7 @@ import {
 const ACCOUNT_ID = '123';
 
 const SECOND: SecondClient = {
-  account: 'estrv05733',
+  account: 'player2',
   sandboxie: 'C:\\Program Files\\Sandboxie-Plus',
   steam: 'C:\\Program Files (x86)\\Steam',
 };
@@ -46,7 +46,7 @@ test('an account with Sandboxie and Steam behind it is a box', () => {
       start: 'C:\\Program Files\\Sandboxie-Plus\\Start.exe',
       ini: 'C:\\Program Files\\Sandboxie-Plus\\SbieIni.exe',
       steam: 'C:\\Program Files (x86)\\Steam',
-      account: 'estrv05733',
+      account: 'player2',
     },
   });
 });
@@ -89,7 +89,7 @@ test('the game waits in the box, and Steam skips the bootstrap update that canno
   assert.deepEqual(steamCommandOf(plan.sandbox), [
     'C:\\Program Files (x86)\\Steam\\steam.exe',
     '-login',
-    'estrv05733',
+    'player2',
     '-silent',
     '-inhibitbootstrap',
   ]);
@@ -136,26 +136,26 @@ test('the pids of a program are read out of the quoted rows and nothing else', (
 });
 
 test('a box root nobody configured is the one Sandboxie would have used', () => {
-  assert.equal(boxRootOf('', 'steam2', 'Ilya', 'C:'), 'C:\\Sandbox\\Ilya\\steam2');
+  assert.equal(boxRootOf('', 'steam2', 'dev', 'C:'), 'C:\\Sandbox\\dev\\steam2');
   assert.equal(
-    boxRootOf('\\??\\%SystemDrive%\\Sandbox\\%USER%\\%SANDBOX%\r\n', 'steam2', 'Ilya', 'D:'),
-    'D:\\Sandbox\\Ilya\\steam2',
+    boxRootOf('\\??\\%SystemDrive%\\Sandbox\\%USER%\\%SANDBOX%\r\n', 'steam2', 'dev', 'D:'),
+    'D:\\Sandbox\\dev\\steam2',
   );
 });
 
 test('a box root that names no box gets the box put under it', () => {
-  assert.equal(boxRootOf('E:\\Sandboxes', 'steam2', 'Ilya', 'C:'), 'E:\\Sandboxes\\steam2');
+  assert.equal(boxRootOf('E:\\Sandboxes', 'steam2', 'dev', 'C:'), 'E:\\Sandboxes\\steam2');
 });
 
 test('the box holds Steam’s record of the sign-in under a folder per drive letter', () => {
   assert.equal(
-    loginUsersPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
-    'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\loginusers.vdf',
+    loginUsersPathOf('C:\\Sandbox\\dev\\steam2', 'C:\\Program Files (x86)\\Steam'),
+    'C:\\Sandbox\\dev\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\loginusers.vdf',
   );
-  assert.equal(loginUsersPathOf('C:\\Sandbox\\Ilya\\steam2', '\\\\server\\Steam'), undefined);
+  assert.equal(loginUsersPathOf('C:\\Sandbox\\dev\\steam2', '\\\\server\\Steam'), undefined);
   assert.equal(
-    steamConfigPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
-    'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\config.vdf',
+    steamConfigPathOf('C:\\Sandbox\\dev\\steam2', 'C:\\Program Files (x86)\\Steam'),
+    'C:\\Sandbox\\dev\\steam2\\drive\\C\\Program Files (x86)\\Steam\\config\\config.vdf',
   );
 });
 
@@ -166,24 +166,24 @@ test('the box holds Steam’s record of the sign-in under a folder per drive let
 test('the box keeps its copy of any file on a drive under that drive letter', () => {
   assert.equal(
     inBoxOf(
-      'C:\\Sandbox\\Ilya\\steam2',
-      'F:\\Code\\DayZ\\PDrive\\Profiles\\CADCore\\client2\\Users\\Ilya\\DayZ.cfg',
+      'C:\\Sandbox\\dev\\steam2',
+      'D:\\Mods\\PDrive\\Profiles\\ModA\\client2\\Users\\dev\\DayZ.cfg',
     ),
-    'C:\\Sandbox\\Ilya\\steam2\\drive\\F\\Code\\DayZ\\PDrive\\Profiles\\CADCore\\client2\\Users\\Ilya\\DayZ.cfg',
+    'C:\\Sandbox\\dev\\steam2\\drive\\D\\Mods\\PDrive\\Profiles\\ModA\\client2\\Users\\dev\\DayZ.cfg',
   );
-  assert.equal(inBoxOf('C:\\Sandbox\\Ilya\\steam2', '\\\\server\\share\\DayZ.cfg'), undefined);
+  assert.equal(inBoxOf('C:\\Sandbox\\dev\\steam2', '\\\\server\\share\\DayZ.cfg'), undefined);
 });
 
 test('the box holds Steam’s connection log beside the rest of its installation', () => {
   assert.equal(
-    connectionLogPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
-    'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\logs\\connection_log.txt',
+    connectionLogPathOf('C:\\Sandbox\\dev\\steam2', 'C:\\Program Files (x86)\\Steam'),
+    'C:\\Sandbox\\dev\\steam2\\drive\\C\\Program Files (x86)\\Steam\\logs\\connection_log.txt',
   );
   assert.equal(
-    previousConnectionLogPathOf('C:\\Sandbox\\Ilya\\steam2', 'C:\\Program Files (x86)\\Steam'),
-    'C:\\Sandbox\\Ilya\\steam2\\drive\\C\\Program Files (x86)\\Steam\\logs\\connection_log.previous.txt',
+    previousConnectionLogPathOf('C:\\Sandbox\\dev\\steam2', 'C:\\Program Files (x86)\\Steam'),
+    'C:\\Sandbox\\dev\\steam2\\drive\\C\\Program Files (x86)\\Steam\\logs\\connection_log.previous.txt',
   );
-  assert.equal(connectionLogPathOf('C:\\Sandbox\\Ilya\\steam2', '\\\\server\\Steam'), undefined);
+  assert.equal(connectionLogPathOf('C:\\Sandbox\\dev\\steam2', '\\\\server\\Steam'), undefined);
 });
 
 test('the account id in what Steam wrote is what a connection is read against', () => {
@@ -191,15 +191,15 @@ test('the account id in what Steam wrote is what a connection is read against', 
 {
 \t"76561197960265851"
 \t{
-\t\t"AccountName"\t\t"estrv05733"
+\t\t"AccountName"\t\t"player2"
 \t\t"AutoLogin"\t\t"1"
 \t}
 }`;
 
-  assert.equal(steamAccountIdOf(vdf, 'estrv05733'), ACCOUNT_ID);
-  assert.equal(steamAccountIdOf(vdf, 'ESTRV05733'), ACCOUNT_ID);
-  assert.equal(steamAccountIdOf(vdf, 'thehurfy'), undefined);
-  assert.equal(steamAccountIdOf('', 'estrv05733'), undefined);
+  assert.equal(steamAccountIdOf(vdf, 'player2'), ACCOUNT_ID);
+  assert.equal(steamAccountIdOf(vdf, 'PLAYER2'), ACCOUNT_ID);
+  assert.equal(steamAccountIdOf(vdf, 'nobody'), undefined);
+  assert.equal(steamAccountIdOf('', 'player2'), undefined);
 });
 
 test('every account the box remembers keeps an id of its own', () => {

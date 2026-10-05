@@ -452,8 +452,12 @@
     "check-types": "tsc -p tsconfig.json && tsc -p src/webview/tsconfig.json && tsc -p test/tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check:text": "node scripts/check-text.mjs",
+    "check:format": "node scripts/check-format.mjs",
     "test": "node esbuild.js --tests && node --test \"out/test/**/*.test.js\"",
     "test:installed": "node esbuild.js --smoke && node scripts/run-installed-smoke.mjs enfusion-plugin-win32-x64.vsix",
+    "install:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-local.ps1",
+    "logs": "node scripts/logs.mjs",
     "vsix": "vsce package",
     "vscode:prepublish": "npm run package"
   },

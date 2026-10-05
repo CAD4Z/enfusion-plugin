@@ -6,11 +6,17 @@ native/.build*/
 *.tsbuildinfo
 *.log
 __pycache__/
+.ruff_cache/
 .vscode-test/
 .vscode/*
 !.vscode/launch.json
 !.vscode/tasks.json
+Thumbs.db
+desktop.ini
+.DS_Store
 
 # Documents of the workspace this plugin lives in, kept out of the plugin's own repository
 CONTEXT.md
+CODING_STANDARDS.md
 docs/
+.claude/

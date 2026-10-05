@@ -1,7 +1,10 @@
 .vscode/**
 .claude/**
 .github/**
+.githooks/**
 .gitignore
+.gitattributes
+.editorconfig
 .vscode-test/**
 .ruff_cache/**
 src/**
@@ -16,5 +19,6 @@ tsconfig.json
 package-lock.json
 **/*.map
 CONTEXT.md
+CODING_STANDARDS.md
 MANUAL.md
 docs/**

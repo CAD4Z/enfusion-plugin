@@ -47,8 +47,8 @@ export interface ModManifest {
   /**
    * The mod's one name: what the panel shows it as, what its prefix root goes onto the work drive
    * as (`P:\<name>`), and what it is built into (`@<name>`). The folder's own name if unset —
-   * which is why a mod whose folder is called something else (`client`, holding
-   * `CADNavigationClient`) is a mod that has to write its name down.
+   * which is why a mod whose folder is called something else (`client`, holding `MyModClient`)
+   * is a mod that has to write its name down.
    */
   readonly name: string | undefined;
   readonly description: string | undefined;
@@ -244,7 +244,7 @@ export function workspaceFor(modRoot: string, files: readonly string[]): string 
  * one — sits beside it without the panel listing, building, linking or launching any of it. What
  * that set builds is loaded all the same, by its folder in `mods`, like a mod of somebody else's.
  *
- * Folders are compared the way Windows compares them, so `maps\` ignores what `Maps` holds. A
+ * Folders are compared the way Windows compares them, so `labs\` ignores what `Labs` holds. A
  * folder written wrong ignores nothing: it is reported where it is written (`readWorkspace`), and
  * a guess at what it meant could hide a mod nobody asked to hide.
  */

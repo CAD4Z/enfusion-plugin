@@ -149,7 +149,7 @@ export function mainAddonOf(mod: Mod): Addon | undefined {
  * through the work drive: `P:\<Mod>\<Addon>` for an addon inside the prefix root, and `P:\<Mod>`
  * for the addon that *is* the prefix root — because the prefix root goes onto the drive under the
  * mod's name rather than under its own. So a mod in a folder called `client` that calls itself
- * `CADNavigationClient` packs into `CADNavigationClient.pbo`.
+ * `MyModClient` packs into `MyModClient.pbo`.
  */
 export function pboNameOf(mod: Mod, addon: Addon): string {
   return addon.root === mod.prefixRoot ? mod.name : addon.name;
@@ -254,7 +254,7 @@ function byName<T extends { readonly root: string }>(name: (item: T) => string) 
 /**
  * The mod's name: the one its `mod.enf` declares, and failing that its folder's own — the prefix
  * root's, and the mod root's only until one is found. A mod whose folder goes by something other
- * than the mod does — `client` holding `CADNavigationClient` — is what declaring one is for.
+ * than the mod does — `client` holding `MyModClient` — is what declaring one is for.
  */
 function writtenNameOf(draft: Draft): string {
   return draft.declared ?? nameOf(draft.prefixRoot ?? draft.root);

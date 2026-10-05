@@ -15,11 +15,11 @@ import type { Link, LinkState } from '../../../src/mods/workDrive';
 
 const TOOLS = 'F:\\DayZ Tools';
 const PBOPROJECT = 'C:\\Mikero\\bin\\pboProject.exe';
-const KEY = 'C:\\keys\\hurfy.biprivatekey';
+const KEY = 'C:\\keys\\mykey.biprivatekey';
 const MODS = 'P:\\Mods';
 
-const CORE = link('CADCore', 'F:\\Code\\CADCore\\CADCore');
-const MAP = link('CADMap', 'F:\\Code\\CADMap\\CADMap');
+const MOD_A = link('ModA', 'F:\\Code\\ModA\\ModA');
+const MOD_B = link('ModB', 'F:\\Code\\ModB\\ModB');
 
 /**
  * The whole plan for the plainest case there is: one addon, one mod, a key set. Compared entire,
@@ -35,49 +35,49 @@ test('a single-addon mod comes out as pack, sign and the root files, in that ord
     steps: [
       {
         kind: 'pack',
-        subject: 'CADCore',
-        what: 'Packing CADCore',
-        folders: ['P:\\Mods\\@CADCore', 'P:\\Mods\\@CADCore\\Addons', 'P:\\Mods\\@CADCore\\Keys'],
+        subject: 'ModA',
+        what: 'Packing ModA',
+        folders: ['P:\\Mods\\@ModA', 'P:\\Mods\\@ModA\\Addons', 'P:\\Mods\\@ModA\\Keys'],
         stale: [
-          'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
-          'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo.*.bisign',
+          'P:\\Mods\\@ModA\\Addons\\ModA.pbo',
+          'P:\\Mods\\@ModA\\Addons\\ModA.pbo.*.bisign',
         ],
         command:
           'start "pboProject" /wait /MIN "C:\\Mikero\\bin\\pboProject.exe" -P -R -W -K ' +
-          '-Mod="P:\\Mods\\@CADCore" "P:\\CADCore" ' +
+          '-Mod="P:\\Mods\\@ModA" "P:\\ModA" ' +
           `+X="${DEFAULT_EXCLUDE.join(',')}"`,
-        pbo: 'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
-        log: { path: 'P:\\temp\\CADCore.packing.log', appends: false },
+        pbo: 'P:\\Mods\\@ModA\\Addons\\ModA.pbo',
+        log: { path: 'P:\\temp\\ModA.packing.log', appends: false },
         attempts: 2,
         pauseMs: 3000,
       },
       {
         kind: 'sign',
-        subject: 'CADCore',
-        what: 'Signing CADCore.pbo',
+        subject: 'ModA',
+        what: 'Signing ModA.pbo',
         program: 'F:\\DayZ Tools\\Bin\\DsUtils\\DSSignFile.exe',
-        arguments: [KEY, 'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo'],
+        arguments: [KEY, 'P:\\Mods\\@ModA\\Addons\\ModA.pbo'],
       },
       {
         kind: 'copy',
-        subject: 'CADCore',
+        subject: 'ModA',
         what: 'Copying mod.cpp',
-        from: 'F:\\Code\\CADCore\\CADCore\\mod.cpp',
-        to: 'P:\\Mods\\@CADCore\\mod.cpp',
+        from: 'F:\\Code\\ModA\\ModA\\mod.cpp',
+        to: 'P:\\Mods\\@ModA\\mod.cpp',
       },
       {
         kind: 'copy',
-        subject: 'CADCore',
+        subject: 'ModA',
         what: 'Copying meta.cpp',
-        from: 'F:\\Code\\CADCore\\CADCore\\meta.cpp',
-        to: 'P:\\Mods\\@CADCore\\meta.cpp',
+        from: 'F:\\Code\\ModA\\ModA\\meta.cpp',
+        to: 'P:\\Mods\\@ModA\\meta.cpp',
       },
       {
         kind: 'copy',
-        subject: 'CADCore',
-        what: 'Copying hurfy.bikey',
-        from: 'C:\\keys\\hurfy.bikey',
-        to: 'P:\\Mods\\@CADCore\\Keys\\hurfy.bikey',
+        subject: 'ModA',
+        what: 'Copying mykey.bikey',
+        from: 'C:\\keys\\mykey.bikey',
+        to: 'P:\\Mods\\@ModA\\Keys\\mykey.bikey',
       },
     ],
   });
@@ -99,10 +99,10 @@ test('AddonBuilder is handed the addons folder, the prefix and the drive to coun
   assert.equal(
     pack.command,
     'start "AddonBuilder" /wait /MIN "F:\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe" ' +
-      '"P:\\CADCore\\Scripts" "P:\\Mods\\@CADCore\\Addons" -prefix="CADCore\\Scripts" ' +
+      '"P:\\ModA\\Scripts" "P:\\Mods\\@ModA\\Addons" -prefix="ModA\\Scripts" ' +
       '-project=P:\\ -temp="P:\\temp"',
   );
-  assert.equal(pack.pbo, 'P:\\Mods\\@CADCore\\Addons\\Scripts.pbo');
+  assert.equal(pack.pbo, 'P:\\Mods\\@ModA\\Addons\\Scripts.pbo');
 });
 
 /**
@@ -117,9 +117,9 @@ test('AddonBuilder is handed no exclude list, because the option it takes one th
 });
 
 test('both builders keep their workings on the work drive, under the letter that is set', () => {
-  const elsewhere = { ...job(), link: link('CADCore', 'F:\\Code\\CADCore\\CADCore', 'linked', 'W:') };
+  const elsewhere = { ...job(), link: link('ModA', 'F:\\Code\\ModA\\ModA', 'linked', 'W:') };
 
-  assert.equal(packOf(buildPlanOf([elsewhere], settings())).log.path, 'W:\\temp\\CADCore.packing.log');
+  assert.equal(packOf(buildPlanOf([elsewhere], settings())).log.path, 'W:\\temp\\ModA.packing.log');
   assert.ok(
     packOf(buildPlanOf([elsewhere], settings({ builder: 'AddonBuilder' }))).command.includes(
       '-project=W:\\ -temp="W:\\temp"',
@@ -130,7 +130,7 @@ test('both builders keep their workings on the work drive, under the letter that
 /** Which log to read is a fact about the builder, and the runner should not have to know it. */
 test('pboProject writes one log per addon, and AddonBuilder appends to one for everything', () => {
   assert.deepEqual(packOf(buildPlanOf([job()], settings())).log, {
-    path: 'P:\\temp\\CADCore.packing.log',
+    path: 'P:\\temp\\ModA.packing.log',
     appends: false,
   });
 
@@ -143,17 +143,17 @@ test('pboProject writes one log per addon, and AddonBuilder appends to one for e
 /** pboProject pointed at a folder that is not there packs nothing and says nothing about it. */
 test('the folders of the built mod are made before the builder is let near them', () => {
   assert.deepEqual(packOf(buildPlanOf([job()], settings())).folders, [
-    'P:\\Mods\\@CADCore',
-    'P:\\Mods\\@CADCore\\Addons',
-    'P:\\Mods\\@CADCore\\Keys',
+    'P:\\Mods\\@ModA',
+    'P:\\Mods\\@ModA\\Addons',
+    'P:\\Mods\\@ModA\\Keys',
   ]);
 });
 
 /** Both builders answer 0 for a build that failed, so what is there afterwards has to be this run's. */
 test('the old pbo and every signature of it come off before the builder runs', () => {
   assert.deepEqual(packOf(buildPlanOf([job()], settings())).stale, [
-    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
-    'P:\\Mods\\@CADCore\\Addons\\CADCore.pbo.*.bisign',
+    'P:\\Mods\\@ModA\\Addons\\ModA.pbo',
+    'P:\\Mods\\@ModA\\Addons\\ModA.pbo.*.bisign',
   ]);
 });
 
@@ -174,7 +174,7 @@ test('AddonBuilder ignoring an exclude list is said out loud, and does not stop 
   assert.equal(plan.refusals.length, 0);
   assert.equal(plan.steps.filter((step) => step.kind === 'pack').length, 1);
   assert.equal(plan.warnings.length, 1);
-  assert.ok(plan.warnings[0]?.includes('CADCore'), plan.warnings[0]);
+  assert.ok(plan.warnings[0]?.includes('ModA'), plan.warnings[0]);
 });
 
 test('a mod that excludes nothing has nothing taken from it, so there is nothing to warn about', () => {
@@ -253,15 +253,15 @@ test('a machine with no builder on it builds nothing, and says which one it want
  */
 test('a mod that is not on the work drive refuses to build, and names the path it is not at', () => {
   for (const [state, expected] of [
-    ['unlinked', 'nothing is at P:\\CADCore'],
+    ['unlinked', 'nothing is at P:\\ModA'],
     ['elsewhere', 'points at'],
     ['occupied', 'not a link'],
     ['unavailable', 'not mounted'],
   ] as const) {
-    const plan = buildPlanOf([job({ link: link('CADCore', 'F:\\Old', state) })], settings());
+    const plan = buildPlanOf([job({ link: link('ModA', 'F:\\Old', state) })], settings());
 
     assert.deepEqual(plan.steps, []);
-    assert.equal(plan.refusals[0]?.subject, 'CADCore');
+    assert.equal(plan.refusals[0]?.subject, 'ModA');
     assert.ok(plan.refusals[0]?.reason.includes(expected), `${state}: ${plan.refusals[0]?.reason}`);
   }
 });
@@ -280,11 +280,11 @@ test('an invalid mod name produces a refusal and no path-derived build step', ()
   assert.equal(plan.refusals[0]?.subject, '../Victim');
   assert.match(plan.refusals[0]?.reason ?? '', /letters, digits and underscores/);
   assert.ok(!plan.steps.some((step) => JSON.stringify(step).includes('Victim')));
-  assert.ok(plan.steps.some((step) => step.subject === 'CADCore'));
+  assert.ok(plan.steps.some((step) => step.subject === 'ModA'));
 });
 
 test('a checked name belonging to another raw mod is refused before build paths are made', () => {
-  const mismatched = job({ link: { ...CORE, name: 'CADMap' } });
+  const mismatched = job({ link: { ...MOD_A, name: 'ModB' } });
   const plan = buildPlanOf([mismatched], settings());
 
   assert.deepEqual(plan.steps, []);
@@ -310,28 +310,28 @@ test('a quotation mark in what goes on the command line is refused rather than q
 test('a relative mods directory is counted from the file that set it, an absolute one is not', () => {
   assert.equal(
     packOf(buildPlanOf([job({ modsDirectory: '..\\builds' })], settings())).pbo,
-    'F:\\Code\\..\\builds\\@CADCore\\Addons\\CADCore.pbo',
+    'F:\\Code\\..\\builds\\@ModA\\Addons\\ModA.pbo',
   );
   assert.equal(
     packOf(buildPlanOf([job({ modsDirectory: 'D:/Mods' })], settings())).pbo,
-    'D:\\Mods\\@CADCore\\Addons\\CADCore.pbo',
+    'D:\\Mods\\@ModA\\Addons\\ModA.pbo',
   );
 });
 
 /** One mod refusing is not a reason to leave the others unbuilt. */
 test('the mods that can be built are, and the one that cannot is reported beside them', () => {
   const plan = buildPlanOf(
-    [job(), job({ link: { ...MAP, state: 'unlinked', at: '' }, addon: 'CADMap' })],
+    [job(), job({ link: { ...MOD_B, state: 'unlinked', at: '' }, addon: 'ModB' })],
     settings({ privateKey: '' }),
   );
 
   assert.deepEqual(
     plan.steps.filter((step) => step.kind === 'pack').map((step) => step.subject),
-    ['CADCore'],
+    ['ModA'],
   );
   assert.deepEqual(
     plan.refusals.map((refusal) => refusal.subject),
-    ['CADMap'],
+    ['ModB'],
   );
 });
 
@@ -341,13 +341,13 @@ test('the mods that can be built are, and the one that cannot is reported beside
  * root files off an addon that is not being built, and lose them.
  */
 test('the root files of a mod are copied even where a mod of the same name was refused after it', () => {
-  const twin = job({ link: { ...CORE, prefixRoot: '/f:/Other/CADCore', state: 'elsewhere' } });
+  const twin = job({ link: { ...MOD_A, prefixRoot: '/f:/Other/ModA', state: 'elsewhere' } });
   const plan = buildPlanOf([job(), twin], settings({ privateKey: '' }));
 
   assert.deepEqual(
     plan.steps.map((step) => [step.kind, step.what]),
     [
-      ['pack', 'Packing CADCore'],
+      ['pack', 'Packing ModA'],
       ['copy', 'Copying mod.cpp'],
       ['copy', 'Copying meta.cpp'],
     ],
@@ -372,34 +372,34 @@ test('a mod of several addons packs each one and copies its root files once, at 
   assert.deepEqual(
     plan.steps.map((step) => [step.kind, step.subject]),
     [
-      ['pack', 'CADCore\\Scripts'],
-      ['pack', 'CADCore\\Data'],
-      ['copy', 'CADCore'],
-      ['copy', 'CADCore'],
+      ['pack', 'ModA\\Scripts'],
+      ['pack', 'ModA\\Data'],
+      ['copy', 'ModA'],
+      ['copy', 'ModA'],
     ],
   );
 });
 
 /**
- * The order is the graph's, all the way from the `config.cpp` files a scan found: CADCore before
+ * The order is the graph's, all the way from the `config.cpp` files a scan found: ModA before
  * the mod that requires it, and inside that mod the addon that is required before the one that
  * requires it. Nothing about the order is decided by the build.
  */
 test('the addons of a workspace are built in the order the requiredAddons graph puts them', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADMap/mod.enf', '/w/CADCore/mod.enf'],
+    manifests: ['/w/ModB/mod.enf', '/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADMap/CADMap/config.cpp',
-        source: config({ patch: 'CADMap', requires: ['CADCore_Scripts'], dir: 'CADMap' }),
+        path: '/w/ModB/ModB/config.cpp',
+        source: config({ patch: 'ModB', requires: ['ModA_Scripts'], dir: 'ModB' }),
       },
       {
-        path: '/w/CADCore/CADCore/Data/config.cpp',
-        source: config({ patch: 'CADCore_Data', requires: ['CADCore_Scripts'] }),
+        path: '/w/ModA/ModA/Data/config.cpp',
+        source: config({ patch: 'ModA_Data', requires: ['ModA_Scripts'] }),
       },
       {
-        path: '/w/CADCore/CADCore/Scripts/config.cpp',
-        source: config({ patch: 'CADCore_Scripts', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/Scripts/config.cpp',
+        source: config({ patch: 'ModA_Scripts', dir: 'ModA' }),
       },
     ],
   });
@@ -417,18 +417,18 @@ test('the addons of a workspace are built in the order the requiredAddons graph 
 
   assert.deepEqual(
     plan.steps.filter((step) => step.kind === 'pack').map((step) => step.subject),
-    ['CADCore\\Scripts', 'CADCore\\Data', 'CADMap'],
+    ['ModA\\Scripts', 'ModA\\Data', 'ModB'],
   );
 });
 
 /** The layout is read off the tree, and it is the whole of what a command line differs by. */
 test('a single-addon mod is packed from the prefix root and a multi-addon one from below it', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/config.cpp',
-        source: config({ patch: 'CADCore', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/config.cpp',
+        source: config({ patch: 'ModA', dir: 'ModA' }),
       },
     ],
   });
@@ -439,7 +439,7 @@ test('a single-addon mod is packed from the prefix root and a multi-addon one fr
   const jobs = jobsOf([
     {
       mod: only,
-      link: CORE,
+      link: MOD_A,
       modsDirectory: MODS,
       exclude: [],
       configuredIn: 'F:\\Code',
@@ -449,7 +449,7 @@ test('a single-addon mod is packed from the prefix root and a multi-addon one fr
 
   assert.deepEqual(
     jobs.map((made) => [made.addon, made.within]),
-    [['CADCore', '']],
+    [['ModA', '']],
   );
 });
 
@@ -461,15 +461,15 @@ test('a single-addon mod is packed from the prefix root and a multi-addon one fr
  * build that failed.
  */
 test('a mod whose folder is not its name packs into a pbo named after the mod', () => {
-  const client = link('CADNavigationClient', 'F:\\Code\\CADNavigation\\client');
+  const client = link('ModC', 'F:\\Code\\Repo\\client');
   const plan = buildPlanOf([job({ link: client, addon: 'client', within: '' })], settings());
   const pack = plan.steps[0];
 
   assert.equal(pack?.kind, 'pack');
-  assert.equal(pack.pbo, 'P:\\Mods\\@CADNavigationClient\\Addons\\CADNavigationClient.pbo');
-  assert.equal(pack.log.path, 'P:\\temp\\CADNavigationClient.packing.log');
-  assert.ok(pack.command.includes('"P:\\CADNavigationClient"'));
-  assert.equal(plan.steps[1]?.what, 'Signing CADNavigationClient.pbo');
+  assert.equal(pack.pbo, 'P:\\Mods\\@ModC\\Addons\\ModC.pbo');
+  assert.equal(pack.log.path, 'P:\\temp\\ModC.packing.log');
+  assert.ok(pack.command.includes('"P:\\ModC"'));
+  assert.equal(plan.steps[1]?.what, 'Signing ModC.pbo');
 });
 
 /** A multi-addon mod is pointed at the addon, so there the pbo is the addon's folder after all. */
@@ -478,14 +478,14 @@ test('an addon inside the prefix root packs into a pbo named after its own folde
   const pack = plan.steps[0];
 
   assert.equal(pack?.kind, 'pack');
-  assert.equal(pack.pbo, 'P:\\Mods\\@CADCore\\Addons\\Scripts.pbo');
+  assert.equal(pack.pbo, 'P:\\Mods\\@ModA\\Addons\\Scripts.pbo');
   assert.equal(pack.log.path, 'P:\\temp\\Scripts.packing.log');
 });
 
 function job(over: Partial<BuildJob> = {}): BuildJob {
   return {
-    link: CORE,
-    addon: 'CADCore',
+    link: MOD_A,
+    addon: 'ModA',
     within: '',
     modsDirectory: MODS,
     configuredIn: 'F:\\Code',

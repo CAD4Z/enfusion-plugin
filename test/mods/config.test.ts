@@ -6,17 +6,17 @@ test('reads every CfgPatches class with what it requires', () => {
   const config = parseConfig(`
 class CfgPatches
 {
-	class CADMap
+	class ModB
 	{
 		units[] = {};
 		requiredVersion = 0.1;
-		requiredAddons[] = { "DZ_Scripts", "CADCore" };
+		requiredAddons[] = { "DZ_Scripts", "ModA" };
 	};
 };
 `);
 
   assert.deepEqual(config.patches, [
-    { name: 'CADMap', requiredAddons: ['DZ_Scripts', 'CADCore'], author: undefined, version: undefined },
+    { name: 'ModB', requiredAddons: ['DZ_Scripts', 'ModA'], author: undefined, version: undefined },
   ]);
 });
 
@@ -24,24 +24,24 @@ test('reads the mod a CfgMods block declares, which is what makes an addon the m
   const config = parseConfig(`
 class CfgMods
 {
-	class CADCore
+	class ModA
 	{
 		type = "mod";
-		dir = "CADCore";
-		name = "CAD4Z Core";
+		dir = "ModA";
+		name = "Mod A";
 		picture = "";
-		overview = "Base module required by the other CAD4Z mods.";
-		author = "cad4z";
+		overview = "An example mod.";
+		author = "Repo";
 		version = "1.2.0";
 	};
 };
 `);
 
   assert.deepEqual(config.mod, {
-    dir: 'CADCore',
-    name: 'CAD4Z Core',
-    overview: 'Base module required by the other CAD4Z mods.',
-    author: 'cad4z',
+    dir: 'ModA',
+    name: 'Mod A',
+    overview: 'An example mod.',
+    author: 'Repo',
     version: '1.2.0',
   });
 });
@@ -95,10 +95,10 @@ class CfgPatches
 
 class CfgMods
 {
-	class CADCore
+	class ModA
 	{
 		overview = "Says ""hello"" to nobody";
-		dir = "CADCore";
+		dir = "ModA";
 	};
 };
 `);
@@ -106,7 +106,7 @@ class CfgMods
   assert.deepEqual(config.patches, [
     { name: 'DZ_Worlds_Sakhal_CE', requiredAddons: ['DZ_Data'], author: undefined, version: undefined },
   ]);
-  assert.equal(config.mod?.dir, 'CADCore');
+  assert.equal(config.mod?.dir, 'ModA');
   assert.equal(config.mod?.overview, 'Says "hello" to nobody');
 });
 
@@ -119,7 +119,7 @@ test('has no mod declaration when there is no CfgMods', () => {
 test('writes an addon into the requiredAddons of a class that has one', () => {
   const source = `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
 		requiredAddons[] = { "DZ_Scripts" };
 	};
@@ -127,12 +127,12 @@ test('writes an addon into the requiredAddons of a class that has one', () => {
 `;
 
   assert.equal(
-    withRequiredAddon(source, 'CADCore_Scripts', 'CADCore_Data'),
+    withRequiredAddon(source, 'ModA_Scripts', 'ModA_Data'),
     `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
-		requiredAddons[] = { "DZ_Scripts", "CADCore_Data" };
+		requiredAddons[] = { "DZ_Scripts", "ModA_Data" };
 	};
 };
 `,
@@ -142,7 +142,7 @@ test('writes an addon into the requiredAddons of a class that has one', () => {
 test('keeps a list written a line at a time written that way', () => {
   const source = `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
 		requiredAddons[] =
 		{
@@ -154,16 +154,16 @@ test('keeps a list written a line at a time written that way', () => {
 `;
 
   assert.equal(
-    withRequiredAddon(source, 'CADCore_Scripts', 'CADCore_Data'),
+    withRequiredAddon(source, 'ModA_Scripts', 'ModA_Data'),
     `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
 		requiredAddons[] =
 		{
 			"DZ_Scripts",
 			"DZ_Data",
-			"CADCore_Data"
+			"ModA_Data"
 		};
 	};
 };
@@ -174,7 +174,7 @@ test('keeps a list written a line at a time written that way', () => {
 test('gives a class with no requiredAddons one, indented the way its members are', () => {
   const source = `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
 		units[] = {};
 	};
@@ -182,13 +182,13 @@ test('gives a class with no requiredAddons one, indented the way its members are
 `;
 
   assert.equal(
-    withRequiredAddon(source, 'CADCore_Scripts', 'CADCore_Data'),
+    withRequiredAddon(source, 'ModA_Scripts', 'ModA_Data'),
     `class CfgPatches
 {
-	class CADCore_Scripts
+	class ModA_Scripts
 	{
 		units[] = {};
-		requiredAddons[] = { "CADCore_Data" };
+		requiredAddons[] = { "ModA_Data" };
 	};
 };
 `,

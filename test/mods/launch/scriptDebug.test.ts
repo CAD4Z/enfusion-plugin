@@ -247,8 +247,8 @@ test('every line of one write carries the prefix, and the trailing newline makes
  * character that is not one.
  */
 test('the null a write really ends with is not printed, and the server is red', () => {
-  assert.deepEqual(scriptDebugSaidOf('server', 'SCRIPT       : CAD4Z probe alive\u0000'), [
-    `${RED}[SERVER]${OFF} SCRIPT       : CAD4Z probe alive`,
+  assert.deepEqual(scriptDebugSaidOf('server', 'SCRIPT       : Acme probe alive\u0000'), [
+    `${RED}[SERVER]${OFF} SCRIPT       : Acme probe alive`,
   ]);
 });
 

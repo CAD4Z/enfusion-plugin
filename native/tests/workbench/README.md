@@ -34,7 +34,8 @@ Observed for this DayZ build:
   the uncompressed output rounds to UNORM16 then drops the low eight bits. Packing a level
   does not quantize the samples used to generate the next level.
 
-To reproduce in a separate Python environment with `pefile==2024.8.26` and `unicorn==2.1.4`:
+To reproduce in a Python environment with what `../requirements.txt` pins
+(`py -3 -m pip install -r native/tests/requirements.txt` from the repository root):
 
 ```powershell
 py capture.py '<DayZ Tools>/Bin/Workbench/workbenchApp.exe' reproduced.json
@@ -48,7 +49,8 @@ shipping the converter does not require Python, Unicorn, pefile or Workbench.
 The four capture scripts share `oracle.py`: the installed executable, checked against its
 fingerprint, and the emulator that runs its importer. `check_target_captures.py` and
 `font_check.py` share `edds_reader.py`, a reader of the EDDS header, mip table and LZ4 frames that
-uses only the standard library. The Python style is in `../ruff.toml`.
+uses only the standard library. The Python style is in `../ruff.toml`, and `npm run check:format`
+holds the scripts to it.
 
 ## Swizzling captures
 

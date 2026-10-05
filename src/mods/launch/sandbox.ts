@@ -304,8 +304,8 @@ function steamFileInBoxOf(
  * is. A sandboxed program reads that copy once there is one, and the file on the disk until then.
  *
  * The path has to be the real one. A box files what is on a `subst` drive under the drive it is
- * mapped from — `P:\Profiles` of a work drive mounted from `F:\Code\DayZ\PDrive` is kept under
- * `drive\F\Code\DayZ\PDrive\Profiles` — so a path through the mount is resolved before it is asked.
+ * mapped from — `P:\Profiles` of a work drive mounted from `D:\Mods\PDrive` is kept under
+ * `drive\D\Mods\PDrive\Profiles` — so a path through the mount is resolved before it is asked.
  */
 export function inBoxOf(boxRoot: string, path: string): string | undefined {
   const drive = /^([A-Za-z]):[\\/]?(.*)$/.exec(path);

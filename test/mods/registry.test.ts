@@ -5,11 +5,11 @@ import { registryValue } from '../../src/mods/registry';
 test('reads what reg printed, whatever case the value was written in and spaces and all', () => {
   const output = `
 HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Bohemia Interactive\\DayZ
-    MAIN    REG_SZ    F:\\SteamLibrary\\steamapps\\common\\DayZ
+    MAIN    REG_SZ    D:\\SteamLibrary\\steamapps\\common\\DayZ
 
 `;
 
-  assert.equal(registryValue(output, 'main'), 'F:\\SteamLibrary\\steamapps\\common\\DayZ');
+  assert.equal(registryValue(output, 'main'), 'D:\\SteamLibrary\\steamapps\\common\\DayZ');
 });
 
 test('reads what reg printed with the line endings Windows gives it', () => {
@@ -30,12 +30,12 @@ test('a key that is not there is an empty value, not something to fail over', ()
 test('the value asked for is the one read, not whichever came first', () => {
   const output = `
 HKEY_CURRENT_USER\\SOFTWARE\\Bohemia Interactive\\DayZ Tools
-    path    REG_SZ    F:\\SteamLibrary\\steamapps\\common\\DayZ Tools
-    Exe    REG_SZ    F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\bin\\launcher
+    path    REG_SZ    D:\\SteamLibrary\\steamapps\\common\\DayZ Tools
+    Exe    REG_SZ    D:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\bin\\launcher
     version    REG_SZ    1.00
 `;
 
-  assert.equal(registryValue(output, 'path'), 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools');
+  assert.equal(registryValue(output, 'path'), 'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools');
 });
 
 /** `reg` speaks the machine's language, so nothing here may depend on the words it uses. */

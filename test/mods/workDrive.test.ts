@@ -22,19 +22,19 @@ const UNMOUNTED = workDriveOf('P:', SOURCE, '');
 const MISMOUNTED = workDriveOf('P:', SOURCE, ELSEWHERE);
 const UNSET = workDriveOf('P:', '', '');
 
-const CORE: Prefix = {
-  prefixRoot: '/f:/Code/cad4z/CADCore/CADCore',
-  name: 'CADCore',
-  modName: modNameOf('CADCore'),
-  target: 'f:\\Code\\cad4z\\CADCore\\CADCore',
+const MOD_A: Prefix = {
+  prefixRoot: '/f:/Code/Repo/ModA/ModA',
+  name: 'ModA',
+  modName: modNameOf('ModA'),
+  target: 'f:\\Code\\Repo\\ModA\\ModA',
 };
-const MAP: Prefix = {
-  prefixRoot: '/f:/Code/cad4z/CADMap/CADMap',
-  name: 'CADMap',
-  modName: modNameOf('CADMap'),
-  target: 'f:\\Code\\cad4z\\CADMap\\CADMap',
+const MOD_B: Prefix = {
+  prefixRoot: '/f:/Code/Repo/ModB/ModB',
+  name: 'ModB',
+  modName: modNameOf('ModB'),
+  target: 'f:\\Code\\Repo\\ModB\\ModB',
 };
-const PREFIXES: readonly Prefix[] = [CORE, MAP];
+const PREFIXES: readonly Prefix[] = [MOD_A, MOD_B];
 
 test('a letter is typed every way there is, and taken the one way the tools take it', () => {
   assert.equal(driveLetterOf('P'), 'P:');
@@ -99,28 +99,28 @@ test('a letter that is up comes down whatever the settings say about it', () => 
 });
 
 test('a mod is linked under its prefix root name, in the root of the drive', () => {
-  const name = modNameOf('CADCore');
+  const name = modNameOf('ModA');
   assert.ok(name !== undefined);
-  assert.equal(linkPathOf('P:', name), 'P:\\CADCore');
+  assert.equal(linkPathOf('P:', name), 'P:\\ModA');
 });
 
 test('an invalid name has no work-drive path and can never become link work', () => {
   const unsafe: Prefix = {
-    prefixRoot: '/f:/Code/cad4z/Safe/Victim',
+    prefixRoot: '/f:/Code/Repo/Safe/Victim',
     name: '../Victim',
     modName: undefined,
     target: 'F:\\Victim',
   };
-  const links = linksOf([unsafe, CORE], MOUNTED, facts([]));
+  const links = linksOf([unsafe, MOD_A], MOUNTED, facts([]));
 
   assert.equal(links[0]?.state, 'invalid');
   assert.equal(links[0]?.path, '');
   assert.match(links[0]?.problem ?? '', /letters, digits and underscores/);
-  assert.deepEqual(linksToMake(links).map(name), ['CADCore']);
+  assert.deepEqual(linksToMake(links).map(name), ['ModA']);
 });
 
 test('a checked name borrowed from another mod is not used for a work-drive path', () => {
-  const mismatched: Prefix = { ...CORE, name: 'CADMap' };
+  const mismatched: Prefix = { ...MOD_A, name: 'ModB' };
   const [link] = linksOf([mismatched], MOUNTED, facts([]));
 
   assert.equal(link?.state, 'invalid');
@@ -135,45 +135,45 @@ test('nothing at the link is a mod waiting to be linked', () => {
   assert.deepEqual(
     links.map((link) => [link.path, link.state, link.at]),
     [
-      ['P:\\CADCore', 'unlinked', ''],
-      ['P:\\CADMap', 'unlinked', ''],
+      ['P:\\ModA', 'unlinked', ''],
+      ['P:\\ModB', 'unlinked', ''],
     ],
   );
 });
 
 /** What SetupWorkdrive.bat skipped is what a second run mostly finds, so it cannot be a failure. */
 test('a junction already pointing where it should is not an error and not work', () => {
-  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\CADCore', pointsAt(CORE.target)]]));
+  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\ModA', pointsAt(MOD_A.target)]]));
 
   assert.deepEqual(links.map(state), ['linked', 'unlinked']);
-  assert.deepEqual(linksToMake(links).map(name), ['CADMap']);
+  assert.deepEqual(linksToMake(links).map(name), ['ModB']);
 });
 
 test('a junction pointing somewhere else is repointed rather than left to build the wrong sources', () => {
-  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\CADCore', pointsAt('D:\\Old\\CADCore')]]));
+  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\ModA', pointsAt('D:\\Old\\ModA')]]));
 
   assert.deepEqual(links.map(state), ['elsewhere', 'unlinked']);
   assert.deepEqual(
     links.map((link) => link.at),
-    ['D:\\Old\\CADCore', ''],
+    ['D:\\Old\\ModA', ''],
   );
-  assert.deepEqual(linksToMake(links).map(name), ['CADCore', 'CADMap']);
+  assert.deepEqual(linksToMake(links).map(name), ['ModA', 'ModB']);
 });
 
 test('a junction is the same junction however Windows spelled it back', () => {
-  const spelled = pointsAt('F:/Code/CAD4Z/CADCore/CADCore');
-  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\CADCore', spelled]]));
+  const spelled = pointsAt('F:/Code/REPO/ModA/ModA');
+  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\ModA', spelled]]));
 
   assert.deepEqual(links.map(state), ['linked', 'unlinked']);
 });
 
 /** A real folder on the drive is somebody's data, and unpicking it is not the button's business. */
 test('a real folder in the way is shown rather than removed', () => {
-  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\CADCore', { kind: 'occupied' }]]));
+  const links = linksOf(PREFIXES, MOUNTED, facts([['P:\\ModA', { kind: 'occupied' }]]));
 
   assert.deepEqual(links.map(state), ['occupied', 'unlinked']);
-  assert.deepEqual(links.filter(isUnlinked).map(name), ['CADCore', 'CADMap']);
-  assert.deepEqual(linksToMake(links).map(name), ['CADMap']);
+  assert.deepEqual(links.filter(isUnlinked).map(name), ['ModA', 'ModB']);
+  assert.deepEqual(linksToMake(links).map(name), ['ModB']);
 });
 
 test('with the drive down there is nothing to say about any link on it', () => {
@@ -186,7 +186,7 @@ test('with the drive down there is nothing to say about any link on it', () => {
 
 /** The link is a fact about `P:\<Name>`, and where the drive is mounted is a fact about `P:`. */
 test('a drive mounted elsewhere is still asked what is on it', () => {
-  const links = linksOf(PREFIXES, MISMOUNTED, facts([['P:\\CADCore', pointsAt(CORE.target)]]));
+  const links = linksOf(PREFIXES, MISMOUNTED, facts([['P:\\ModA', pointsAt(MOD_A.target)]]));
 
   assert.deepEqual(links.map(state), ['linked', 'unlinked']);
 });
@@ -197,18 +197,18 @@ test('a drive mounted elsewhere is still asked what is on it', () => {
  */
 test('two mods of the same name are not both made, and the same one wins every run', () => {
   const twin: Prefix = {
-    ...MAP,
-    prefixRoot: '/f:/Other/CADCore/CADCore',
-    name: 'CADCore',
-    modName: modNameOf('CADCore'),
+    ...MOD_B,
+    prefixRoot: '/f:/Other/ModA/ModA',
+    name: 'ModA',
+    modName: modNameOf('ModA'),
   };
-  const both = [CORE, twin];
+  const both = [MOD_A, twin];
 
   const fresh = linksOf(both, MOUNTED, facts([]));
-  assert.deepEqual(linksToMake(fresh).map(target), [CORE.target]);
+  assert.deepEqual(linksToMake(fresh).map(target), [MOD_A.target]);
 
   // And once the first has it, the second showing "elsewhere" does not take it back off it.
-  const after = linksOf(both, MOUNTED, facts([['P:\\CADCore', pointsAt(CORE.target)]]));
+  const after = linksOf(both, MOUNTED, facts([['P:\\ModA', pointsAt(MOD_A.target)]]));
   assert.deepEqual(after.map(state), ['linked', 'elsewhere']);
   assert.deepEqual(linksToMake(after), []);
 });
@@ -218,11 +218,11 @@ test('a mod keeps hold of the link that is its own, so the panel can find it aga
 
   assert.deepEqual(
     links.map((link) => link.prefixRoot),
-    [CORE.prefixRoot, MAP.prefixRoot],
+    [MOD_A.prefixRoot, MOD_B.prefixRoot],
   );
   assert.deepEqual(
     links.map((link) => link.target),
-    [CORE.target, MAP.target],
+    [MOD_A.target, MOD_B.target],
   );
 });
 

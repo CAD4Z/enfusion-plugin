@@ -15,12 +15,12 @@ import {
   workDriveToolOf,
 } from '../../src/mods/machine';
 
-const DAYZ = 'F:\\SteamLibrary\\steamapps\\common\\DayZ';
-const DAYZ_EXPERIMENTAL = 'F:\\SteamLibrary\\steamapps\\common\\DayZ Exp';
+const DAYZ = 'D:\\SteamLibrary\\steamapps\\common\\DayZ';
+const DAYZ_EXPERIMENTAL = 'D:\\SteamLibrary\\steamapps\\common\\DayZ Exp';
 
 /** Steam's own name for the folder it puts DayZ Server in, beside DayZ and never inside it. */
-const DAYZ_SERVER = 'F:\\SteamLibrary\\steamapps\\common\\DayZServer';
-const DAYZ_EXPERIMENTAL_SERVER = 'F:\\SteamLibrary\\steamapps\\common\\DayZ Server Exp';
+const DAYZ_SERVER = 'D:\\SteamLibrary\\steamapps\\common\\DayZServer';
+const DAYZ_EXPERIMENTAL_SERVER = 'D:\\SteamLibrary\\steamapps\\common\\DayZ Server Exp';
 
 const SETTINGS: MachineSettings = {
   dayz: DAYZ,
@@ -28,10 +28,10 @@ const SETTINGS: MachineSettings = {
   executable: '',
   dayzServer: '',
   dayzExperimentalServer: '',
-  dayzTools: 'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
+  dayzTools: 'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   pboProject: 'C:\\Mikero\\bin\\pboProject.exe',
   signing: true,
-  privateKey: 'F:\\Keys\\CAD4Z.biprivatekey',
+  privateKey: 'F:\\Keys\\Acme.biprivatekey',
   workDrive: 'F:\\DayZ\\Workdrive',
   workDriveLetter: 'P:',
   filePatchingRoot: '',
@@ -43,7 +43,7 @@ const SETTINGS: MachineSettings = {
 test('DayZ WorkDrive is found inside the configured tools installation', () => {
   assert.equal(
     workDriveToolOf(SETTINGS),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\WorkDrive\\WorkDrive.exe',
+    'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\WorkDrive\\WorkDrive.exe',
   );
   assert.equal(workDriveToolOf({ ...SETTINGS, dayzTools: '' }), '');
 });
@@ -51,7 +51,7 @@ test('DayZ WorkDrive is found inside the configured tools installation', () => {
 test('DayZ Workbench is found inside the configured tools installation', () => {
   assert.equal(
     workbenchExecutableOf(SETTINGS),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\Workbench\\workbenchApp.exe',
+    'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\Workbench\\workbenchApp.exe',
   );
   assert.equal(workbenchExecutableOf({ ...SETTINGS, dayzTools: '' }), '');
 });
@@ -136,7 +136,7 @@ test('the builder shown is the one that was chosen, and the setting offered is t
   });
   assert.equal(
     builderExecutableOf({ ...SETTINGS, builder: 'AddonBuilder' }),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe',
+    'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe',
   );
 });
 
@@ -198,8 +198,8 @@ test('the paths to ask the disk about are the paths the environment is made of',
 
 test('a path is the same path however it was typed, which on Windows is any way at all', () => {
   const environment = environmentOf(
-    { ...SETTINGS, dayz: 'F:/steamlibrary/steamapps/common/dayz/' },
-    ['F:\\SteamLibrary\\steamapps\\common\\DayZ'],
+    { ...SETTINGS, dayz: 'D:/steamlibrary/steamapps/common/dayz/' },
+    ['D:\\SteamLibrary\\steamapps\\common\\DayZ'],
   );
 
   assert.equal(environment[0]?.state, 'ok');

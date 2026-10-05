@@ -232,7 +232,7 @@ meant could hide a mod nobody asked to hide.
 The `name` field in `mod.enf` is not a title but a name: the panel shows the mod under it, its
 prefix root goes up on `P:\<Name>` under it, it builds into `@<Name>`, and the same name has to
 stand in `dir` in `CfgMods`. A mod that did not name itself is called after its folder — which is
-why a mod in a folder called `client` that is really `NavigationClient` has to write its name down,
+why a mod in a folder called `client` that is really `MyModClient` has to write its name down,
 or it links as `P:\client` and builds into `@client`. What the launcher shows a player is
 `mod.cpp`'s business, and the title there can be anything at all. A mod name consists of letters,
 digits and underscores and starts with a letter or underscore; Windows device names such as `CON`
@@ -421,7 +421,7 @@ There is one notification for all of it — one per run of the queue, not one pe
 one per mod in a build. It goes up from the press rather than from the builder's first step (reading
 the workspace, the machine and the work drive is a wait in itself), names the current step and the
 number of presses standing behind it while it runs, and ends in one sentence saying what came out:
-`Built CoreMod, NavigationClient and NavigationServer.` A failure names what failed and offers to
+`Built MyMod, MyModClient and OtherMod.` A failure names what failed and offers to
 open the packing log; cancelling in it cancels the whole run.
 
 ### Focus

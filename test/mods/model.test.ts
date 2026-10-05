@@ -4,27 +4,27 @@ import { modsFromScan, pboNameOf } from '../../src/mods/model';
 
 test('a mod is a folder with mod.enf, and a config.cpp in its prefix root is one addon', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
-      { path: '/w/CADCore/CADCore/config.cpp', source: config({ patch: 'CADCore', dir: 'CADCore' }) },
+      { path: '/w/ModA/ModA/config.cpp', source: config({ patch: 'ModA', dir: 'ModA' }) },
     ],
   });
 
   assert.deepEqual(mods, [
     {
-      name: 'CADCore',
-      modName: 'CADCore',
-      root: '/w/CADCore',
-      manifest: '/w/CADCore/mod.enf',
-      prefixRoot: '/w/CADCore/CADCore',
+      name: 'ModA',
+      modName: 'ModA',
+      root: '/w/ModA',
+      manifest: '/w/ModA/mod.enf',
+      prefixRoot: '/w/ModA/ModA',
       layout: 'single',
       addons: [
         {
-          name: 'CADCore',
-          root: '/w/CADCore/CADCore',
-          config: '/w/CADCore/CADCore/config.cpp',
+          name: 'ModA',
+          root: '/w/ModA/ModA',
+          config: '/w/ModA/ModA/config.cpp',
           main: true,
-          patches: ['CADCore'],
+          patches: ['ModA'],
           requires: [],
           unresolved: [],
         },
@@ -36,44 +36,44 @@ test('a mod is a folder with mod.enf, and a config.cpp in its prefix root is one
 
 test('the same tree with no config.cpp in the prefix root makes the subfolders the addons', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/Scripts/config.cpp',
-        source: config({ patch: 'CADCore_Scripts', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/Scripts/config.cpp',
+        source: config({ patch: 'ModA_Scripts', dir: 'ModA' }),
       },
       {
-        path: '/w/CADCore/CADCore/Data/config.cpp',
-        source: config({ patch: 'CADCore_Data', requires: ['CADCore_Scripts'] }),
+        path: '/w/ModA/ModA/Data/config.cpp',
+        source: config({ patch: 'ModA_Data', requires: ['ModA_Scripts'] }),
       },
     ],
   });
 
   assert.deepEqual(mods, [
     {
-      name: 'CADCore',
-      modName: 'CADCore',
-      root: '/w/CADCore',
-      manifest: '/w/CADCore/mod.enf',
-      prefixRoot: '/w/CADCore/CADCore',
+      name: 'ModA',
+      modName: 'ModA',
+      root: '/w/ModA',
+      manifest: '/w/ModA/mod.enf',
+      prefixRoot: '/w/ModA/ModA',
       layout: 'multi',
       addons: [
         {
           name: 'Scripts',
-          root: '/w/CADCore/CADCore/Scripts',
-          config: '/w/CADCore/CADCore/Scripts/config.cpp',
+          root: '/w/ModA/ModA/Scripts',
+          config: '/w/ModA/ModA/Scripts/config.cpp',
           main: true,
-          patches: ['CADCore_Scripts'],
+          patches: ['ModA_Scripts'],
           requires: [],
           unresolved: [],
         },
         {
           name: 'Data',
-          root: '/w/CADCore/CADCore/Data',
-          config: '/w/CADCore/CADCore/Data/config.cpp',
+          root: '/w/ModA/ModA/Data',
+          config: '/w/ModA/ModA/Data/config.cpp',
           main: false,
-          patches: ['CADCore_Data'],
-          requires: ['CADCore_Scripts'],
+          patches: ['ModA_Data'],
+          requires: ['ModA_Scripts'],
           unresolved: [],
         },
       ],
@@ -84,22 +84,22 @@ test('the same tree with no config.cpp in the prefix root makes the subfolders t
 
 test('a mod requiring an addon of its neighbour is listed after it, whatever the scan order', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADMap/mod.enf', '/w/CADCore/mod.enf'],
+    manifests: ['/w/ModB/mod.enf', '/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADMap/CADMap/config.cpp',
-        source: config({ patch: 'CADMap', requires: ['CADCore'], dir: 'CADMap' }),
+        path: '/w/ModB/ModB/config.cpp',
+        source: config({ patch: 'ModB', requires: ['ModA'], dir: 'ModB' }),
       },
       {
-        path: '/w/CADCore/CADCore/config.cpp',
-        source: config({ patch: 'CADCore', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/config.cpp',
+        source: config({ patch: 'ModA', dir: 'ModA' }),
       },
     ],
   });
 
   assert.deepEqual(
     mods.map((mod) => mod.name),
-    ['CADCore', 'CADMap'],
+    ['ModA', 'ModB'],
   );
 });
 
@@ -129,28 +129,28 @@ test('addons of one mod are ordered by the same graph, and a vanilla name stays 
 
 test('two mods requiring each other stay in the list, marked with the cycle they are in', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf', '/w/CADMap/mod.enf'],
+    manifests: ['/w/ModA/mod.enf', '/w/ModB/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/config.cpp',
-        source: config({ patch: 'CADCore', requires: ['CADMap'], dir: 'CADCore' }),
+        path: '/w/ModA/ModA/config.cpp',
+        source: config({ patch: 'ModA', requires: ['ModB'], dir: 'ModA' }),
       },
       {
-        path: '/w/CADMap/CADMap/config.cpp',
-        source: config({ patch: 'CADMap', requires: ['CADCore'], dir: 'CADMap' }),
+        path: '/w/ModB/ModB/config.cpp',
+        source: config({ patch: 'ModB', requires: ['ModA'], dir: 'ModB' }),
       },
     ],
   });
 
   assert.deepEqual(
     mods.map((mod) => mod.name).sort(),
-    ['CADCore', 'CADMap'],
+    ['ModA', 'ModB'],
   );
   assert.deepEqual(
     mods.map((mod) => mod.problems),
     [
-      [{ kind: 'cycle', patches: ['CADCore', 'CADMap'] }],
-      [{ kind: 'cycle', patches: ['CADCore', 'CADMap'] }],
+      [{ kind: 'cycle', patches: ['ModA', 'ModB'] }],
+      [{ kind: 'cycle', patches: ['ModA', 'ModB'] }],
     ],
   );
 });
@@ -192,15 +192,15 @@ test('a mod whose config.cpp declares it but which has no mod.enf is listed unco
 
 test('a config.cpp that declares no mod is neither an addon of one nor a mod of its own', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/config.cpp',
-        source: config({ patch: 'CADCore', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/config.cpp',
+        source: config({ patch: 'ModA', dir: 'ModA' }),
       },
       // A mission of the mod: a config.cpp under the mod root, but outside the prefix root.
       {
-        path: '/w/CADCore/Missions/CADCore.sakhal/config.cpp',
+        path: '/w/ModA/Missions/ModA.sakhal/config.cpp',
         source: config({ patch: 'DZ_Worlds_Sakhal_CE' }),
       },
       // Something a monorepo carries that is no mod at all.
@@ -210,7 +210,7 @@ test('a config.cpp that declares no mod is neither an addon of one nor a mod of 
 
   assert.deepEqual(
     mods.map((mod) => [mod.name, mod.addons.map((addon) => addon.name)]),
-    [['CADCore', ['CADCore']]],
+    [['ModA', ['ModA']]],
   );
 });
 
@@ -248,35 +248,35 @@ test('mods the graph does not relate are listed by name, not in the order the sc
 
 test('the name the manifest declares is the mod, whatever the folder is called', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADNavigation/client/mod.enf'],
+    manifests: ['/w/Repo/client/mod.enf'],
     configs: [
       {
-        path: '/w/CADNavigation/client/config.cpp',
-        source: config({ patch: 'CADNavigationClient', dir: 'CADNavigationClient' }),
+        path: '/w/Repo/client/config.cpp',
+        source: config({ patch: 'ModC', dir: 'ModC' }),
       },
     ],
-    declared: new Map([['/w/CADNavigation/client/mod.enf', 'CADNavigationClient']]),
+    declared: new Map([['/w/Repo/client/mod.enf', 'ModC']]),
   });
 
-  assert.equal(mods[0]?.name, 'CADNavigationClient');
+  assert.equal(mods[0]?.name, 'ModC');
   // The folder that goes onto the work drive is still the folder: it is what is linked, and it is
   // linked under the name, not renamed to it.
-  assert.equal(mods[0]?.prefixRoot, '/w/CADNavigation/client');
+  assert.equal(mods[0]?.prefixRoot, '/w/Repo/client');
 });
 
 test('a manifest that declares no name leaves the mod named after its folder', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/config.cpp',
-        source: config({ patch: 'CADCore', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/config.cpp',
+        source: config({ patch: 'ModA', dir: 'ModA' }),
       },
     ],
     declared: new Map(),
   });
 
-  assert.equal(mods[0]?.name, 'CADCore');
+  assert.equal(mods[0]?.name, 'ModA');
 });
 
 test('an invalid declared name stays on the mod and is never replaced with its folder', () => {
@@ -373,11 +373,11 @@ test('the addon that is the prefix root packs into a pbo named after the mod', (
 
 test('an addon inside the prefix root keeps its own folder name for its pbo', () => {
   const mods = modsFromScan({
-    manifests: ['/w/CADCore/mod.enf'],
+    manifests: ['/w/ModA/mod.enf'],
     configs: [
       {
-        path: '/w/CADCore/CADCore/Scripts/config.cpp',
-        source: config({ patch: 'CADCore_Scripts', dir: 'CADCore' }),
+        path: '/w/ModA/ModA/Scripts/config.cpp',
+        source: config({ patch: 'ModA_Scripts', dir: 'ModA' }),
       },
     ],
   });

@@ -20,12 +20,12 @@ const WRITTEN_BY_THE_GAME = [
 
 test('the settings of a client are filed under the Windows account, in the file of its build', () => {
   assert.equal(
-    windowSettingsOf('P:\\Profiles\\CADCore\\client', 'Ilya', false),
-    'P:\\Profiles\\CADCore\\client\\Users\\Ilya\\DayZ.cfg',
+    windowSettingsOf('P:\\Profiles\\ModA\\client', 'Survivor', false),
+    'P:\\Profiles\\ModA\\client\\Users\\Survivor\\DayZ.cfg',
   );
   assert.equal(
-    windowSettingsOf('P:\\Profiles\\CADCore\\client2', 'Ilya', true),
-    'P:\\Profiles\\CADCore\\client2\\Users\\Ilya\\DayZ Exp.cfg',
+    windowSettingsOf('P:\\Profiles\\ModA\\client2', 'Survivor', true),
+    'P:\\Profiles\\ModA\\client2\\Users\\Survivor\\DayZ Exp.cfg',
   );
 });
 

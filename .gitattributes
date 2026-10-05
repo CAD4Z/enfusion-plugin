@@ -1,0 +1,11 @@
+# Text is stored, and checked out on every platform, with LF line endings: git converts on commit
+# whatever an editor or a script wrote, and every checkout reads the same bytes as CI does.
+* text=auto eol=lf
+
+# Files git must never convert.
+*.png  binary
+*.ttf  binary
+*.otf  binary
+*.edds binary
+*.dds  binary
+*.vsix binary

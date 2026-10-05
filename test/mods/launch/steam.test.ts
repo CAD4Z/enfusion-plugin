@@ -25,7 +25,7 @@ const LIBRARIES = `"libraryfolders"
 \t}
 \t"1"
 \t{
-\t\t"path"\t\t"F:\\\\SteamLibrary"
+\t\t"path"\t\t"D:\\\\SteamLibrary"
 \t\t"label"\t\t""
 \t\t"apps"
 \t\t{
@@ -37,8 +37,8 @@ const LIBRARIES = `"libraryfolders"
 `;
 
 test('the library holding an app is the one whose apps list names it', () => {
-  assert.equal(libraryOf(LIBRARIES, STEAM_APP.dayz), 'F:\\SteamLibrary');
-  assert.equal(libraryOf(LIBRARIES, STEAM_APP.dayzTools), 'F:\\SteamLibrary');
+  assert.equal(libraryOf(LIBRARIES, STEAM_APP.dayz), 'D:\\SteamLibrary');
+  assert.equal(libraryOf(LIBRARIES, STEAM_APP.dayzTools), 'D:\\SteamLibrary');
   assert.equal(libraryOf(LIBRARIES, '228980'), 'C:\\Program Files (x86)\\Steam');
 });
 
@@ -49,10 +49,10 @@ test('an app no library holds is nowhere, not the first library', () => {
 test('manifest lookup still checks every library when the apps cache omits an installed app', () => {
   assert.deepEqual(libraryCandidatesOf(LIBRARIES, STEAM_APP.dayzExperimental), [
     'C:\\Program Files (x86)\\Steam',
-    'F:\\SteamLibrary',
+    'D:\\SteamLibrary',
   ]);
   assert.deepEqual(libraryCandidatesOf(LIBRARIES, STEAM_APP.dayz), [
-    'F:\\SteamLibrary',
+    'D:\\SteamLibrary',
     'C:\\Program Files (x86)\\Steam',
   ]);
 });
@@ -82,12 +82,12 @@ test('the paths are built the way Steam lays a library out', () => {
     'C:\\Program Files (x86)\\Steam\\steamapps\\libraryfolders.vdf',
   );
   assert.equal(
-    appManifestPath('F:\\SteamLibrary', STEAM_APP.dayz),
-    'F:\\SteamLibrary\\steamapps\\appmanifest_221100.acf',
+    appManifestPath('D:\\SteamLibrary', STEAM_APP.dayz),
+    'D:\\SteamLibrary\\steamapps\\appmanifest_221100.acf',
   );
   assert.equal(
-    appPath('F:\\SteamLibrary', 'DayZ Tools'),
-    'F:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
+    appPath('D:\\SteamLibrary', 'DayZ Tools'),
+    'D:\\SteamLibrary\\steamapps\\common\\DayZ Tools',
   );
 });
 

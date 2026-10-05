@@ -8,16 +8,16 @@ import {
   workbenchArgumentsOf,
 } from '../../src/mods/workbench';
 
-const ROOT = '/f:/Code/cad4z/CADCore';
+const ROOT = '/f:/Code/Repo/ModA';
 
 test('the conventional dayz.gproj of the target mod wins over helper projects', () => {
   assert.equal(
     projectOf(ROOT, [
       `${ROOT}/Tools/Preview.gproj`,
-      '/f:/Code/cad4z/Another/Workbench/dayz.gproj',
-      `${ROOT}/CADCore/Workbench/dayz.gproj`,
+      '/f:/Code/Repo/Another/Workbench/dayz.gproj',
+      `${ROOT}/ModA/Workbench/dayz.gproj`,
     ]),
-    `${ROOT}/CADCore/Workbench/dayz.gproj`,
+    `${ROOT}/ModA/Workbench/dayz.gproj`,
   );
 });
 
@@ -33,7 +33,7 @@ test('without dayz.gproj the shallowest stable project is used', () => {
 });
 
 test('a project from another mod is never borrowed', () => {
-  assert.equal(projectOf(ROOT, ['/f:/Code/cad4z/CADMap/Workbench/dayz.gproj']), undefined);
+  assert.equal(projectOf(ROOT, ['/f:/Code/Repo/ModB/Workbench/dayz.gproj']), undefined);
 });
 
 /** One project for every mod of a workspace, which is what lets one Workbench compile them all. */
@@ -50,14 +50,14 @@ test('a mod with no project of its own opens its workspace’s, and never anothe
 
 /** A copy of a project to try something on is not the workspace's project, wherever it sits. */
 test('a workspace’s project is the one in its Workbench folder, and no other project in it', () => {
-  assert.equal(projectOf('/w/Mods/Fresh', ['/w/Mods/.scratch/probe/dayz.gproj'], '/w/Mods'), undefined);
+  assert.equal(projectOf('/w/Mods/Fresh', ['/w/Mods/Drafts/probe/dayz.gproj'], '/w/Mods'), undefined);
   assert.equal(projectOf('/w/Mods/Fresh', ['/w/Mods/Workbench/Tools/dayz.gproj'], '/w/Mods'), undefined);
 });
 
 test('the repository is one quoted argument, spaces and all', () => {
   assert.equal(
-    workbenchArgumentsOf('F:\\Code\\my mods\\CADCore'),
-    '-doLogs "-repository=F:\\Code\\my mods\\CADCore"',
+    workbenchArgumentsOf('F:\\Code\\my mods\\ModA'),
+    '-doLogs "-repository=F:\\Code\\my mods\\ModA"',
   );
 });
 
@@ -202,7 +202,7 @@ test('a mod written into a project comes out as the project written with it from
 test('a mod written into a project somebody else wrote goes where its lists are, and nowhere else', () => {
   const handWritten = [
     'GameProjectClass {',
-    '\tID "CAD4Z"',
+    '\tID "Acme"',
     '\tConfigurations {',
     '\t\tGameProjectConfigClass PC {',
     '\t\t\tplatformHardware PC',
@@ -217,14 +217,14 @@ test('a mod written into a project somebody else wrote goes where its lists are,
     '\t\t\t\t\tName "game"',
     '\t\t\t\t\tPaths {',
     '\t\t\t\t\t\t"scripts/3_Game"',
-    '\t\t\t\t\t\t"CADCore/Scripts/3_Game"',
+    '\t\t\t\t\t\t"ModA/Scripts/3_Game"',
     '\t\t\t\t\t}',
     '\t\t\t\t\tEntryPoint "CreateGame"',
     '\t\t\t\t}',
     '\t\t\t\tScriptModulePathClass {',
     '\t\t\t\t\tName "workbench"',
     '\t\t\t\t\tPaths {',
-    '\t\t\t\t\t\t"CADCore/Workbench/ToolAddons"',
+    '\t\t\t\t\t\t"ModA/Workbench/ToolAddons"',
     '\t\t\t\t\t}',
     '\t\t\t\t\tEntryPoint "CreateWorkbench"',
     '\t\t\t\t}',
@@ -245,8 +245,8 @@ test('a mod written into a project somebody else wrote goes where its lists are,
     handWritten
       .replace('Paths { "scripts/1_Core" }', 'Paths { "scripts/1_Core" "Fresh/Scripts/1_Core" }')
       .replace(
-        '\t\t\t\t\t\t"CADCore/Scripts/3_Game"\r\n',
-        '\t\t\t\t\t\t"CADCore/Scripts/3_Game"\r\n\t\t\t\t\t\t"Fresh/Scripts/3_Game"\r\n',
+        '\t\t\t\t\t\t"ModA/Scripts/3_Game"\r\n',
+        '\t\t\t\t\t\t"ModA/Scripts/3_Game"\r\n\t\t\t\t\t\t"Fresh/Scripts/3_Game"\r\n',
       ),
   );
 });

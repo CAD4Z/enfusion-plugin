@@ -1,0 +1,9 @@
+# What the native Python tests and capture tools import, and ruff, which checks their style.
+# Building, testing and shipping the extension needs none of it.
+#
+#   py -3 -m pip install -r native/tests/requirements.txt
+fonttools==4.66.1
+numpy==2.4.4
+pefile==2024.8.26
+unicorn==2.1.4
+ruff==0.16.10

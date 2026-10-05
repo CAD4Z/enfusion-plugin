@@ -29,13 +29,13 @@ const ADDON_BUILDER = `2026-08-21 11:59:03,546 [ INFO]   1:  - Converting cfg "P
 2026-08-21 11:59:03,593 [ERROR]   1: !> Config : some input after EndOfFile.
 2026-08-21 11:59:03,594 [ERROR]   1: Build failed`;
 
-const CORE: Link = {
-  prefixRoot: '/f:/Code/CADCore/CADCore',
-  name: 'CADCore',
-  modName: modNameOf('CADCore'),
-  path: 'P:\\CADCore',
-  target: 'F:\\Code\\CADCore\\CADCore',
-  at: 'F:\\Code\\CADCore\\CADCore',
+const MOD_A: Link = {
+  prefixRoot: '/f:/Code/ModA/ModA',
+  name: 'ModA',
+  modName: modNameOf('ModA'),
+  path: 'P:\\ModA',
+  target: 'F:\\Code\\ModA\\ModA',
+  at: 'F:\\Code\\ModA\\ModA',
   problem: undefined,
   state: 'linked',
 };
@@ -68,10 +68,10 @@ test('the same complaint about the same line is reported once', () => {
 });
 
 test('a build that went through says nothing about any place, and reads as nothing wrong', () => {
-  const success = `Processing \\CADCore...
+  const success = `Processing \\ModA...
 <MakePbo start>
 config.cpp:lint checking...
-File written to P:\\Mods\\@CADCore\\addons\\CADCore.pbo
+File written to P:\\Mods\\@ModA\\addons\\ModA.pbo
 <MakePbo end>
 success`;
 
@@ -80,41 +80,41 @@ success`;
 });
 
 test('a place with nothing said about it is not a problem worth sending anybody to', () => {
-  assert.deepEqual(problemsOf('\\CADCore\\config.cpp Rapify:circa Line 3 '), []);
+  assert.deepEqual(problemsOf('\\ModA\\config.cpp Rapify:circa Line 3 '), []);
 });
 
 /** The developer has the file open in the workspace; a second way to the same bytes is a second tab. */
 test('a file on the work drive is reported as the file in the workspace it is linked from', () => {
   assert.equal(
-    fileOf('\\CADCore\\Scripts\\3_Game\\Thing.c', 'P:', [CORE]),
-    'F:\\Code\\CADCore\\CADCore\\Scripts\\3_Game\\Thing.c',
+    fileOf('\\ModA\\Scripts\\3_Game\\Thing.c', 'P:', [MOD_A]),
+    'F:\\Code\\ModA\\ModA\\Scripts\\3_Game\\Thing.c',
   );
   assert.equal(
-    fileOf('P:\\CADCore\\config.cpp', 'P:', [CORE]),
-    'F:\\Code\\CADCore\\CADCore\\config.cpp',
+    fileOf('P:\\ModA\\config.cpp', 'P:', [MOD_A]),
+    'F:\\Code\\ModA\\ModA\\config.cpp',
   );
-  assert.equal(fileOf('p:/cadcore/config.cpp', 'P:', [CORE]), 'F:\\Code\\CADCore\\CADCore\\config.cpp');
+  assert.equal(fileOf('p:/moda/config.cpp', 'P:', [MOD_A]), 'F:\\Code\\ModA\\ModA\\config.cpp');
 });
 
 test('the prefix root itself is the mod itself, not a file below it', () => {
-  assert.equal(fileOf('P:\\CADCore', 'P:', [CORE]), 'F:\\Code\\CADCore\\CADCore');
+  assert.equal(fileOf('P:\\ModA', 'P:', [MOD_A]), 'F:\\Code\\ModA\\ModA');
 });
 
 /** A vanilla file is on the drive too, and it opens through the drive perfectly well. */
 test('a file under no link of ours is left as the builder named it', () => {
-  assert.equal(fileOf('\\DZ\\data\\config.cpp', 'P:', [CORE]), 'P:\\DZ\\data\\config.cpp');
-  assert.equal(fileOf('C:\\Elsewhere\\config.cpp', 'P:', [CORE]), 'C:\\Elsewhere\\config.cpp');
+  assert.equal(fileOf('\\DZ\\data\\config.cpp', 'P:', [MOD_A]), 'P:\\DZ\\data\\config.cpp');
+  assert.equal(fileOf('C:\\Elsewhere\\config.cpp', 'P:', [MOD_A]), 'C:\\Elsewhere\\config.cpp');
 });
 
 /** A mod whose name is the start of another's is not the other one. */
 test('a link is matched by whole folders, never by the letters its name starts with', () => {
   const other: Link = {
-    ...CORE,
-    name: 'CADCoreExtra',
-    modName: modNameOf('CADCoreExtra'),
-    path: 'P:\\CADCoreExtra',
+    ...MOD_A,
+    name: 'ModAExtra',
+    modName: modNameOf('ModAExtra'),
+    path: 'P:\\ModAExtra',
     target: 'F:\\X',
   };
 
-  assert.equal(fileOf('\\CADCoreExtra\\config.cpp', 'P:', [CORE, other]), 'F:\\X\\config.cpp');
+  assert.equal(fileOf('\\ModAExtra\\config.cpp', 'P:', [MOD_A, other]), 'F:\\X\\config.cpp');
 });

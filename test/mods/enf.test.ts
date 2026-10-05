@@ -11,18 +11,18 @@ import {
 
 test('reads what a mod says about itself', () => {
   const read = readMod(`{
-  "name": "CAD4Z_Core",
-  "description": "The base every other CAD mod builds on",
-  "author": "hurfy",
+  "name": "Acme_Mod",
+  "description": "The base every other Acme mod builds on",
+  "author": "Acme",
   "version": "1.0.0",
   "exclude": ["**/*.psd", "**/*.blend"]
 }`);
 
   assert.deepEqual(read.problems, []);
   assert.deepEqual(read.value, {
-    name: 'CAD4Z_Core',
-    description: 'The base every other CAD mod builds on',
-    author: 'hurfy',
+    name: 'Acme_Mod',
+    description: 'The base every other Acme mod builds on',
+    author: 'Acme',
     version: '1.0.0',
     exclude: ['**/*.psd', '**/*.blend'],
     launch: undefined,
@@ -48,28 +48,28 @@ test('an empty manifest declares a mod all the same, and so does an empty file',
 test('comments and a trailing comma are what JSONC is read as', () => {
   const read = readMod(`{
   // The mod as the launcher shows it.
-  "name": "CAD4Z_Core",
+  "name": "Acme_Mod",
   /* Sources the builder has no business packing. */
   "exclude": ["**/*.psd",],
 }`);
 
   assert.deepEqual(read.problems, []);
-  assert.equal(read.value.name, 'CAD4Z_Core');
+  assert.equal(read.value.name, 'Acme_Mod');
   assert.deepEqual(read.value.exclude, ['**/*.psd']);
 });
 
 test('a syntax error is reported where it is, and the rest of the manifest is still read', () => {
   const read = readMod(`{
-  "name": "CAD4Z_Core"
-  "author": "hurfy"
+  "name": "Acme_Mod"
+  "author": "Acme"
 }`);
 
   assert.deepEqual(read.problems, [{ message: 'Comma expected.', line: 3, column: 3 }]);
-  assert.equal(read.value.name, 'CAD4Z_Core');
+  assert.equal(read.value.name, 'Acme_Mod');
 });
 
 test('an invalid mod name stays readable and is reported on the name field', () => {
-  const read = readMod('{\n  "name": "../Victim",\n  "author": "hurfy"\n}');
+  const read = readMod('{\n  "name": "../Victim",\n  "author": "Acme"\n}');
 
   assert.equal(read.value.name, '../Victim');
   assert.deepEqual(read.problems, [
@@ -113,7 +113,7 @@ test('a misspelled field is reported rather than silently ignored', () => {
 });
 
 test('a manifest that is not an object leaves the mod with an empty configuration', () => {
-  const read = readMod('["CADCore"]');
+  const read = readMod('["ModA"]');
 
   assert.deepEqual(read.problems, [
     { message: 'A manifest must be an object.', line: 1, column: 1 },
@@ -125,16 +125,16 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
   const read = readMod(`{
   "launch": {
     "modsDirectory": "F:/DayZ/Mods",
-    "mods": ["@CF"],
-    "serverMods": ["@ServerTools"],
+    "mods": ["@ModX"],
+    "serverMods": ["@ModW"],
     "targets": [
       {
         "name": "Sakhal",
-        "mod": "CADCore",
+        "mod": "ModA",
         "map": "sakhal",
         "run": "both",
         "experimental": true,
-        "mods": ["@TargetCF"],
+        "mods": ["@TargetMod"],
         "serverMods": [],
         "serverConfig": "Profiles/Dev/server.cfg"
       },
@@ -147,16 +147,16 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
   assert.deepEqual(read.problems, []);
   assert.deepEqual(read.value.launch, {
     modsDirectory: 'F:/DayZ/Mods',
-    mods: ['@CF'],
-    serverMods: ['@ServerTools'],
+    mods: ['@ModX'],
+    serverMods: ['@ModW'],
     targets: [
       {
         name: 'Sakhal',
-        mod: 'CADCore',
+        mod: 'ModA',
         map: 'sakhal',
         run: 'both',
         experimental: true,
-        mods: ['@TargetCF'],
+        mods: ['@TargetMod'],
         serverMods: [],
         serverConfig: 'Profiles/Dev/server.cfg',
       },
@@ -186,10 +186,10 @@ test('reads the launch block a mod carries, filling in what a target leaves out'
 
 test('an unsafe loaded-mod folder stays readable and is reported where it was written', () => {
   const read = readMod(
-    '{\n  "launch": {\n    "mods": ["../Victim", "Community-Online-Tools"]\n  }\n}',
+    '{\n  "launch": {\n    "mods": ["../Victim", "A-Mod-With-Dashes"]\n  }\n}',
   );
 
-  assert.deepEqual(read.value.launch?.mods, ['../Victim', 'Community-Online-Tools']);
+  assert.deepEqual(read.value.launch?.mods, ['../Victim', 'A-Mod-With-Dashes']);
   assert.equal(read.problems.length, 1);
   assert.equal(read.problems[0]?.line, 3);
   assert.match(read.problems[0]?.message ?? '', /one Windows folder name/);
@@ -235,7 +235,7 @@ test('a workspace manifest carries the launch block and nothing about a single m
   const read = readWorkspace(`{
   "launch": {
     "modsDirectory": "F:/DayZ/Mods",
-    "targets": [{ "name": "Sakhal", "mod": "CADCore" }]
+    "targets": [{ "name": "Sakhal", "mod": "ModA" }]
   }
 }`);
 
@@ -278,11 +278,11 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
   const mod = readMod(`{
   "launch": {
     "modsDirectory": "F:/Mods",
-    "mods": ["@CF"],
+    "mods": ["@ModX"],
     "targets": [{ "name": "Sakhal" }]
   }
 }`).value;
-  const workspace = readWorkspace('{ "launch": { "targets": [{ "name": "Namalsk" }] } }').value;
+  const workspace = readWorkspace('{ "launch": { "targets": [{ "name": "Livonia" }] } }').value;
 
   const configuration = configurationOf(mod, workspace);
 
@@ -292,7 +292,7 @@ test('a workspace file owns launch whole: the block in the mod is ignored, not m
     serverMods: [],
     targets: [
       {
-        name: 'Namalsk',
+        name: 'Livonia',
         mod: undefined,
         map: undefined,
         run: 'both',
@@ -328,18 +328,18 @@ test('a mod with no launch block of its own and no workspace file still has a co
 test('a mod answers to the nearest workspace.enf above it, and to none where there is none', () => {
   const files = ['/w/workspace.enf', '/w/inner/workspace.enf'];
 
-  assert.equal(workspaceFor('/w/inner/CADCore', files), '/w/inner/workspace.enf');
-  assert.equal(workspaceFor('/w/CADMap', files), '/w/workspace.enf');
-  assert.equal(workspaceFor('/elsewhere/CADMap', files), undefined);
-  assert.equal(workspaceFor('/w/CADMap', []), undefined);
+  assert.equal(workspaceFor('/w/inner/ModA', files), '/w/inner/workspace.enf');
+  assert.equal(workspaceFor('/w/ModB', files), '/w/workspace.enf');
+  assert.equal(workspaceFor('/elsewhere/ModB', files), undefined);
+  assert.equal(workspaceFor('/w/ModB', []), undefined);
 });
 
 test('a workspace names the folders it ignores, and one written wrong is reported where it is', () => {
   const read = readWorkspace(`{
-  "ignore": ["Maps", "Archive/Old", "", "../Elsewhere", "C:/Mods", "**/Tiles"]
+  "ignore": ["Labs", "Archive/Old", "", "../Elsewhere", "C:/Mods", "**/Cache"]
 }`);
 
-  assert.deepEqual(read.value.ignore, ['Maps', 'Archive/Old', '', '../Elsewhere', 'C:/Mods', '**/Tiles']);
+  assert.deepEqual(read.value.ignore, ['Labs', 'Archive/Old', '', '../Elsewhere', 'C:/Mods', '**/Cache']);
   assert.deepEqual(read.problems, [
     {
       message: 'An ignored folder has to be named: an empty one would be the whole workspace.',
@@ -362,7 +362,7 @@ test('a workspace names the folders it ignores, and one written wrong is reporte
 
 test('a workspace that ignores nothing says so by leaving the field out', () => {
   assert.deepEqual(readWorkspace('{}').value.ignore, []);
-  assert.deepEqual(readWorkspace('{ "ignore": "Maps" }').problems.map((problem) => problem.message), [
+  assert.deepEqual(readWorkspace('{ "ignore": "Labs" }').problems.map((problem) => problem.message), [
     '"ignore" must be an array of strings.',
   ]);
 });
@@ -370,32 +370,32 @@ test('a workspace that ignores nothing says so by leaving the field out', () => 
 test('what a workspace ignores is gone from the scan, whatever it is', () => {
   const scan = [
     '/w/workspace.enf',
-    '/w/CADCore/mod.enf',
-    '/w/CADCore/config.cpp',
-    '/w/CADCore/Workbench/dayz.gproj',
-    '/w/Maps/workspace.enf',
-    '/w/Maps/Chernarus/mod.enf',
-    '/w/Maps/Chernarus/config.cpp',
-    '/w/Maps/Loose/config.cpp',
-    '/w/MapsArchive/Old/config.cpp',
+    '/w/ModA/mod.enf',
+    '/w/ModA/config.cpp',
+    '/w/ModA/Workbench/dayz.gproj',
+    '/w/Labs/workspace.enf',
+    '/w/Labs/ModE/mod.enf',
+    '/w/Labs/ModE/config.cpp',
+    '/w/Labs/Loose/config.cpp',
+    '/w/LabsArchive/Old/config.cpp',
   ];
   const workspaces = [
-    { path: '/w/workspace.enf', source: '{ "ignore": ["Maps"] }' },
-    { path: '/w/Maps/workspace.enf', source: '{ "launch": { "modsDirectory": "P:/Mods" } }' },
+    { path: '/w/workspace.enf', source: '{ "ignore": ["Labs"] }' },
+    { path: '/w/Labs/workspace.enf', source: '{ "launch": { "modsDirectory": "P:/Mods" } }' },
   ];
 
   // The workspace kept in the ignored folder goes with everything else in it, and a folder whose
   // name merely starts the same way stays
   assert.deepEqual(unignored(scan, workspaces), [
     '/w/workspace.enf',
-    '/w/CADCore/mod.enf',
-    '/w/CADCore/config.cpp',
-    '/w/CADCore/Workbench/dayz.gproj',
-    '/w/MapsArchive/Old/config.cpp',
+    '/w/ModA/mod.enf',
+    '/w/ModA/config.cpp',
+    '/w/ModA/Workbench/dayz.gproj',
+    '/w/LabsArchive/Old/config.cpp',
   ]);
 
   // Opened on its own folder, the ignored workspace has nobody to ignore it
-  const alone = scan.filter((path) => path.startsWith('/w/Maps/'));
+  const alone = scan.filter((path) => path.startsWith('/w/Labs/'));
 
   assert.deepEqual(unignored(alone, [workspaces[1]]), alone);
 });
@@ -403,12 +403,12 @@ test('what a workspace ignores is gone from the scan, whatever it is', () => {
 test('an ignored folder is compared the way Windows compares paths', () => {
   const scan = [
     '/f:/Repo/workspace.enf',
-    '/f:/Repo/Maps/Chernarus/mod.enf',
+    '/f:/Repo/Labs/ModE/mod.enf',
     '/f:/Repo/Tools/Old/A/mod.enf',
     '/f:/Repo/Tools/New/mod.enf',
   ];
   const workspaces = [
-    { path: '/f:/Repo/workspace.enf', source: '{ "ignore": ["maps\\\\", "./Tools/Old/"] }' },
+    { path: '/f:/Repo/workspace.enf', source: '{ "ignore": ["labs\\\\", "./Tools/Old/"] }' },
   ];
 
   assert.deepEqual(unignored(scan, workspaces), [
@@ -418,18 +418,18 @@ test('an ignored folder is compared the way Windows compares paths', () => {
 });
 
 test('a folder is ignored by the workspace that names it, counted from that workspace', () => {
-  const scan = ['/a/workspace.enf', '/a/Maps/mod.enf', '/b/workspace.enf', '/b/Maps/mod.enf'];
+  const scan = ['/a/workspace.enf', '/a/Labs/mod.enf', '/b/workspace.enf', '/b/Labs/mod.enf'];
   const workspaces = [
-    { path: '/a/workspace.enf', source: '{ "ignore": ["Maps"] }' },
+    { path: '/a/workspace.enf', source: '{ "ignore": ["Labs"] }' },
     { path: '/b/workspace.enf', source: '{}' },
   ];
 
-  assert.deepEqual(unignored(scan, workspaces), ['/a/workspace.enf', '/b/workspace.enf', '/b/Maps/mod.enf']);
+  assert.deepEqual(unignored(scan, workspaces), ['/a/workspace.enf', '/b/workspace.enf', '/b/Labs/mod.enf']);
 });
 
 test('a folder written wrong ignores nothing rather than a guess at what it meant', () => {
-  const scan = ['/w/workspace.enf', '/w/Maps/mod.enf', '/elsewhere/Mod/mod.enf'];
-  const wrong = { path: '/w/workspace.enf', source: '{ "ignore": ["../elsewhere", "", "**", "/w/Maps"] }' };
+  const scan = ['/w/workspace.enf', '/w/Labs/mod.enf', '/elsewhere/Mod/mod.enf'];
+  const wrong = { path: '/w/workspace.enf', source: '{ "ignore": ["../elsewhere", "", "**", "/w/Labs"] }' };
 
   assert.deepEqual(unignored(scan, [wrong]), scan);
   assert.deepEqual(unignored(scan, []), scan);
@@ -445,18 +445,18 @@ test('the line an editor is pointed at the schema by is a field like any other',
 test('a workspace of mods is configured in one pass, each mod against the file above it', () => {
   const configurations = configurationsOf(
     [
-      { root: '/w/CADCore', manifest: '/w/CADCore/mod.enf' },
-      { root: '/w/CADMap', manifest: '/w/CADMap/mod.enf' },
+      { root: '/w/ModA', manifest: '/w/ModA/mod.enf' },
+      { root: '/w/ModB', manifest: '/w/ModB/mod.enf' },
       { root: '/elsewhere/Alone', manifest: '/elsewhere/Alone/mod.enf' },
       { root: '/w/Foreign', manifest: undefined },
     ],
     [
-      { path: '/w/workspace.enf', source: '{ "launch": { "targets": [{ "name": "Namalsk" }] } }' },
+      { path: '/w/workspace.enf', source: '{ "launch": { "targets": [{ "name": "Livonia" }] } }' },
       {
-        path: '/w/CADCore/mod.enf',
-        source: '{ "name": "CAD4Z_Core", "launch": { "targets": [{ "name": "Sakhal" }] } }',
+        path: '/w/ModA/mod.enf',
+        source: '{ "name": "Acme_Mod", "launch": { "targets": [{ "name": "Sakhal" }] } }',
       },
-      { path: '/w/CADMap/mod.enf', source: '{ "descriptoin": "typo" }' },
+      { path: '/w/ModB/mod.enf', source: '{ "descriptoin": "typo" }' },
       {
         path: '/elsewhere/Alone/mod.enf',
         source: '{ "launch": { "targets": [{ "name": "Chernarus" }] } }',
@@ -466,13 +466,13 @@ test('a workspace of mods is configured in one pass, each mod against the file a
 
   // The mod under a workspace.enf launches the way that file says, whatever its own block holds.
   assert.deepEqual(
-    configurations.mods.get('/w/CADCore/mod.enf')?.configuration.launch.targets.map((t) => t.name),
-    ['Namalsk'],
+    configurations.mods.get('/w/ModA/mod.enf')?.configuration.launch.targets.map((t) => t.name),
+    ['Livonia'],
   );
-  assert.equal(configurations.mods.get('/w/CADCore/mod.enf')?.workspace, '/w/workspace.enf');
+  assert.equal(configurations.mods.get('/w/ModA/mod.enf')?.workspace, '/w/workspace.enf');
   assert.equal(
-    configurations.mods.get('/w/CADCore/mod.enf')?.configuration.manifest.name,
-    'CAD4Z_Core',
+    configurations.mods.get('/w/ModA/mod.enf')?.configuration.manifest.name,
+    'Acme_Mod',
   );
 
   // The one outside it keeps its own launch block, and has no workspace file to name.
@@ -485,7 +485,7 @@ test('a workspace of mods is configured in one pass, each mod against the file a
   assert.equal(configurations.mods.get('/elsewhere/Alone/mod.enf')?.workspace, undefined);
 
   // A mistake in one manifest is reported against that manifest and nothing else.
-  assert.deepEqual(configurations.mods.get('/w/CADMap/mod.enf')?.problems, [
+  assert.deepEqual(configurations.mods.get('/w/ModB/mod.enf')?.problems, [
     { message: 'Unknown field "descriptoin".', line: 1, column: 3 },
   ]);
 
@@ -496,12 +496,12 @@ test('a workspace of mods is configured in one pass, each mod against the file a
 });
 
 test('a workspace file that is wrong is reported against itself, not against the mods under it', () => {
-  const configurations = configurationsOf([{ root: '/w/CADCore', manifest: '/w/CADCore/mod.enf' }], [
+  const configurations = configurationsOf([{ root: '/w/ModA', manifest: '/w/ModA/mod.enf' }], [
     { path: '/w/workspace.enf', source: '{ "launch": { "targets": [{ "map": "sakhal" }] } }' },
-    { path: '/w/CADCore/mod.enf', source: '{}' },
+    { path: '/w/ModA/mod.enf', source: '{}' },
   ]);
 
-  assert.deepEqual(configurations.mods.get('/w/CADCore/mod.enf')?.problems, []);
+  assert.deepEqual(configurations.mods.get('/w/ModA/mod.enf')?.problems, []);
   assert.deepEqual(configurations.workspaces.get('/w/workspace.enf'), [
     {
       message: 'A target must have a "name": it is what the Run and Debug list shows.',

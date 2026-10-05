@@ -18,19 +18,19 @@ test('a file name with glob characters in it becomes a pattern that still matche
 test('parts are joined with one separator, however many the parts brought', () => {
   assert.equal(windowsPath('P:', 'temp'), 'P:\\temp');
   assert.equal(windowsPath('P:\\', '\\temp\\'), 'P:\\temp');
-  assert.equal(windowsPath('F:\\Mods', 'Addons', 'CADCore.pbo'), 'F:\\Mods\\Addons\\CADCore.pbo');
+  assert.equal(windowsPath('F:\\Mods', 'Addons', 'ModA.pbo'), 'F:\\Mods\\Addons\\ModA.pbo');
 });
 
 /** A single-addon mod has nothing under its prefix root, and joining it must not leave a stray `\`. */
 test('an empty part joins nothing rather than a separator', () => {
-  assert.equal(windowsPath('P:\\CADCore', ''), 'P:\\CADCore');
-  assert.equal(windowsPath('', 'CADCore'), 'CADCore');
+  assert.equal(windowsPath('P:\\ModA', ''), 'P:\\ModA');
+  assert.equal(windowsPath('', 'ModA'), 'ModA');
   assert.equal(windowsPath('', ''), '');
 });
 
 /** A builder names a file from the root of the drive, and it joins on under the letter. */
 test('a part counted from the root of a drive joins on without doubling the separator', () => {
-  assert.equal(windowsPath('P:', '\\CADCore\\config.cpp'), 'P:\\CADCore\\config.cpp');
+  assert.equal(windowsPath('P:', '\\ModA\\config.cpp'), 'P:\\ModA\\config.cpp');
 });
 
 /** Only the first part keeps what is in front of it, which is what leaves a UNC path a UNC path. */
@@ -39,20 +39,20 @@ test('a share keeps the two separators it is known by', () => {
 });
 
 test('the name is the last segment, and the folder is everything above it', () => {
-  assert.equal(windowsName('C:\\keys\\hurfy.biprivatekey'), 'hurfy.biprivatekey');
-  assert.equal(windowsFolder('C:\\keys\\hurfy.biprivatekey'), 'C:\\keys');
-  assert.equal(windowsName('P:\\CADCore\\'), 'CADCore');
-  assert.equal(windowsFolder('P:\\CADCore\\'), 'P:');
+  assert.equal(windowsName('C:\\keys\\mykey.biprivatekey'), 'mykey.biprivatekey');
+  assert.equal(windowsFolder('C:\\keys\\mykey.biprivatekey'), 'C:\\keys');
+  assert.equal(windowsName('P:\\ModA\\'), 'ModA');
+  assert.equal(windowsFolder('P:\\ModA\\'), 'P:');
 });
 
 /** A path typed into a manifest is typed whichever way, and both ways mean the same folder. */
 test('either separator is a separator', () => {
-  assert.equal(windowsName('F:/Mods/@CADCore'), '@CADCore');
-  assert.equal(windowsFolder('F:/Mods/@CADCore'), 'F:/Mods');
+  assert.equal(windowsName('F:/Mods/@ModA'), '@ModA');
+  assert.equal(windowsFolder('F:/Mods/@ModA'), 'F:/Mods');
 });
 
 test('nothing above the last segment is no folder at all', () => {
-  assert.equal(windowsFolder('CADCore'), '');
+  assert.equal(windowsFolder('ModA'), '');
   assert.equal(windowsName(''), '');
 });
 
@@ -61,9 +61,9 @@ test('nothing above the last segment is no folder at all', () => {
  * mods directory typed as an absolute path is only ever right on the machine that typed it.
  */
 test('a relative path is counted from the file that holds it', () => {
-  assert.equal(resolveWindows('F:\\Code\\cad4z', 'builds'), 'F:\\Code\\cad4z\\builds');
-  assert.equal(resolveWindows('F:\\Code\\cad4z', '..\\builds'), 'F:\\Code\\cad4z\\..\\builds');
-  assert.equal(resolveWindows('F:\\Code\\cad4z', 'out/mods'), 'F:\\Code\\cad4z\\out\\mods');
+  assert.equal(resolveWindows('F:\\Code\\Repo', 'builds'), 'F:\\Code\\Repo\\builds');
+  assert.equal(resolveWindows('F:\\Code\\Repo', '..\\builds'), 'F:\\Code\\Repo\\..\\builds');
+  assert.equal(resolveWindows('F:\\Code\\Repo', 'out/mods'), 'F:\\Code\\Repo\\out\\mods');
 });
 
 test('a path that is already rooted is left where it was typed', () => {

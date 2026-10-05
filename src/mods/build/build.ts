@@ -305,8 +305,8 @@ function builtModOf(job: BuildJob): string {
  * runs through the work drive: `P:\<Mod>\<Addon>` in a multi-addon mod, and `P:\<Mod>` in a
  * single-addon one, where the addon *is* the prefix root. The prefix root goes onto the drive under
  * the mod's name rather than its own — so a mod in a folder called `client` that calls itself
- * `CADNavigationClient` packs into `CADNavigationClient.pbo`, and looking for `client.pbo`
- * afterwards would report a build that worked as a build that failed.
+ * `MyModClient` packs into `MyModClient.pbo`, and looking for `client.pbo` afterwards would
+ * report a build that worked as a build that failed.
  */
 function packedNameOf(job: BuildJob): string {
   return windowsName(prefixOf(job));
@@ -317,7 +317,7 @@ function pboOf(job: BuildJob): string {
   return windowsPath(builtModOf(job), ADDONS_FOLDER, `${packedNameOf(job)}.pbo`);
 }
 
-/** `hurfy.bikey` next to `hurfy.biprivatekey`; empty when no key is set to sign with. */
+/** `mykey.bikey` next to `mykey.biprivatekey`; empty when no key is set to sign with. */
 function publicKeyOf(privateKey: string): string {
   if (privateKey === '') {
     return '';
@@ -329,12 +329,12 @@ function publicKeyOf(privateKey: string): string {
   return windowsPath(windowsFolder(privateKey), `${stem}.bikey`);
 }
 
-/** What the addon is called on the work drive: `CADCore\Scripts`, or `CADCore` on its own. */
+/** What the addon is called on the work drive: `MyMod\Scripts`, or `MyMod` on its own. */
 function prefixOf(job: BuildJob): string {
   return windowsPath(checkedNameOf(job), job.within);
 }
 
-/** And where that is: `P:\CADCore\Scripts`, which is the folder the builder is pointed at. */
+/** And where that is: `P:\MyMod\Scripts`, which is the folder the builder is pointed at. */
 function sourceOf(job: BuildJob): string {
   return windowsPath(job.link.path, job.within);
 }

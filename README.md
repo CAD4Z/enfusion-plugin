@@ -246,9 +246,9 @@ Every setting is in the [table below](#settings).
    ├── server.cfg
    ├── .gitignore
    ├── Workbench/dayz.gproj      one project with the scripts of every mod
-   ├── Addons/                   @CoreMod and @MapMod after a Build
-   ├── CoreMod/                  a mod: mod.enf, the CoreMod/ prefix root, Missions/, Profiles/
-   └── MapMod/
+   ├── Addons/                   @MyMod and @OtherMod after a Build
+   ├── MyMod/                    a mod: mod.enf, the MyMod/ prefix root, Missions/, Profiles/
+   └── OtherMod/
    ```
 3. Keep `mods` in load order, a mod after the mods it needs, and give each target the mod whose
    profile, mission and `server.cfg` it runs with:
@@ -256,10 +256,10 @@ Every setting is in the [table below](#settings).
    ```jsonc
    "launch": {
      "modsDirectory": "Addons",
-     "mods": ["@CoreMod", "@MapMod"],
+     "mods": ["@MyMod", "@OtherMod"],
      "targets": [
        { "name": "Client", "map": "ChernarusPlus", "run": "client" },
-       { "name": "Map server", "map": "ChernarusPlus", "run": "both", "mod": "MapMod" }
+       { "name": "Other server", "map": "ChernarusPlus", "run": "both", "mod": "OtherMod" }
      ]
    }
    ```
@@ -367,6 +367,11 @@ Sandboxie that shaped them — is written down in [MANUAL.md](MANUAL.md).
 | `npm run check-types` | `tsc --noEmit` over the host, browser and test projects (esbuild only transpiles, it checks no types) |
 | `npm run lint` | ESLint with type checking |
 | `npm test` | builds `*.test.ts` through esbuild and runs `node --test`, with no extension host |
+| `npm run check:text` | every tracked and new file against what a public repository must not hold: Cyrillic, invisible characters, machine paths, tracker references, files left behind |
+| `npm run check:format` | the native C sources against clang-format 20+ and the native Python tests against ruff, rewriting nothing |
+| `git config core.hooksPath .githooks` | once per clone: the two checks above run on the staged files before every commit |
+| `npm run install:local` | builds a commit in a clean worktree, checks it the way CI does and installs the VSIX into VS Code |
+| `npm run logs` | the extension's log from every VS Code window, with the folder each window has open |
 | `npm run vsix` | build the `.vsix` |
 | `cmake -S native -B native/.build -A x64` | configure the C17 `enfusion.exe` with MSVC |
 | `cmake --build native/.build --config Release` | build `enfusion.exe` with the static CRT |
@@ -389,7 +394,7 @@ that the panel has some mods to show straight away.
 ├── schemas/            the JSON schemas of mod.enf and workspace.enf
 ├── native/             the C17 enfusion.exe, its tests and fuzz targets — see native/README.md
 ├── resources/          the Activity Bar icon
-├── scripts/            packaging checks
+├── scripts/            text, format and packaging checks, the local install, the log finder
 ├── MANUAL.md           how everything behaves, and why
 └── THIRD-PARTY.md      notices for what the extension bundles
 ```
