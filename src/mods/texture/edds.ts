@@ -500,34 +500,44 @@ function envelopeOf(source: string, kind: string): Record<string, unknown> {
   return value;
 }
 
+/** The six bits each base64 character stands for, by character code; -1 for any other code. */
+const BASE64_VALUES = Int8Array.from({ length: 128 }, (_, code) =>
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(String.fromCharCode(code)));
+
+/**
+ * Exactly byteLength bytes from canonical base64, checked one character at a time. A regular
+ * expression over the whole text backtracks through every quad, and from a 916 x 916 mip on V8
+ * throws "Maximum call stack size exceeded" instead of answering.
+ */
 function base64Of(encoded: string, byteLength: number): Uint8Array {
-  const expectedCharacters = 4 * Math.ceil(byteLength / 3);
-  const shape = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-  if (encoded.length !== expectedCharacters || !shape.test(encoded)) {
+  // The characters that carry bits; the rest of the last quad is '=' padding.
+  const significant = Math.ceil((byteLength * 4) / 3);
+  if (
+    encoded.length !== 4 * Math.ceil(byteLength / 3) ||
+    encoded.slice(significant) !== '='.repeat(encoded.length - significant)
+  ) {
     throw new Error('preview.pixelsBase64 is not canonical base64 for the declared byteLength.');
   }
 
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const decoded = new Uint8Array(byteLength);
   let written = 0;
-  for (let at = 0; at < encoded.length; at += 4) {
-    const a = alphabet.indexOf(encoded[at] ?? '=');
-    const b = alphabet.indexOf(encoded[at + 1] ?? '=');
-    const cText = encoded[at + 2] ?? '=';
-    const dText = encoded[at + 3] ?? '=';
-    const c = cText === '=' ? 0 : alphabet.indexOf(cText);
-    const d = dText === '=' ? 0 : alphabet.indexOf(dText);
-    const value = (a << 18) | (b << 12) | (c << 6) | d;
-
-    if ((cText === '=' && (b & 0x0f) !== 0) || (dText === '=' && cText !== '=' && (c & 0x03) !== 0)) {
-      throw new Error('preview.pixelsBase64 has non-canonical padding bits.');
+  let pending = 0;
+  let bits = 0;
+  for (let at = 0; at < significant; at++) {
+    const code = encoded.charCodeAt(at);
+    const value = code < BASE64_VALUES.length ? BASE64_VALUES[code] : -1;
+    if (value < 0) {
+      throw new Error('preview.pixelsBase64 is not canonical base64 for the declared byteLength.');
     }
-    if (written < decoded.length) decoded[written++] = value >> 16;
-    if (cText !== '=' && written < decoded.length) decoded[written++] = value >> 8;
-    if (dText !== '=' && written < decoded.length) decoded[written++] = value;
+    pending = ((pending << 6) | value) & 0xfff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded[written++] = (pending >> bits) & 0xff;
+    }
   }
-  if (written !== byteLength) {
-    throw new Error('preview.pixelsBase64 does not decode to the declared byteLength.');
+  if ((pending & ((1 << bits) - 1)) !== 0) {
+    throw new Error('preview.pixelsBase64 has non-canonical padding bits.');
   }
 
   return decoded;

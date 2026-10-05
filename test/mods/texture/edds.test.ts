@@ -487,6 +487,42 @@ test('preview returns exactly the declared top-to-bottom RGBA bytes', () => {
   assert.deepEqual(preview.rgba, rgba);
 });
 
+test('a 1024 x 1024 mip decodes rather than running out of stack', () => {
+  // A regular expression over the whole base64 text threw "Maximum call stack size exceeded" here.
+  const side = 1024;
+  const rgba = Uint8Array.from({ length: side * side * 4 }, (_, at) => Math.imul(at, 0x9e3779b1) >>> 24);
+  const preview = previewOf(
+    JSON.stringify({
+      protocolVersion: 1,
+      kind: 'preview',
+      mip: 0,
+      width: side,
+      height: side,
+      pixelFormat: 'RGBA8',
+      byteLength: rgba.byteLength,
+      pixelsBase64: Buffer.from(rgba).toString('base64'),
+    }),
+  );
+
+  assert.deepEqual(preview.rgba, rgba);
+});
+
+test('preview refuses base64 of the declared length that is not canonical', () => {
+  const read = (width: number, pixelsBase64: string) => previewOf(JSON.stringify({
+    protocolVersion: 1, kind: 'preview', mip: 0, width, height: 1, pixelFormat: 'RGBA8', byteLength: width * 4, pixelsBase64,
+  })).rgba;
+
+  assert.deepEqual(read(1, '/wAA/w=='), Uint8Array.from([255, 0, 0, 255]));
+  assert.deepEqual(read(2, 'AQIDBAUGBwg='), Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]));
+  assert.throws(() => read(1, '/w!A/w=='), /not canonical base64/);
+  assert.throws(() => read(1, '/wAA/w\u00e9='), /not canonical base64/);
+  assert.throws(() => read(1, '/wAA/w=A'), /not canonical base64/);
+  assert.throws(() => read(1, '/wAA/wA='), /not canonical base64/);
+  assert.throws(() => read(2, 'AQIDBAUGBw=='), /not canonical base64/);
+  assert.throws(() => read(1, '/wAA/x=='), /padding bits/);
+  assert.throws(() => read(2, 'AQIDBAUGBwh='), /padding bits/);
+});
+
 test('a cube too large for six faces arrives as +X with the reason, never with both', () => {
   const rgba = Uint8Array.from([1, 2, 3, 4]);
   const message = {
