@@ -141,7 +141,9 @@ Steam's library list, so in the usual case nothing has to be configured.
 
 ## Install
 
-There is no Marketplace listing yet. Every CI run builds `enfusion-plugin-win32-x64.vsix`: download
+Install [Enfusion from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=hurfy.enfusion-plugin).
+
+Every CI run builds `enfusion-plugin-win32-x64.vsix`: download
 it from the run's artifacts on the Actions tab, or build it yourself (see
 [Development](#development)), then install it:
 
