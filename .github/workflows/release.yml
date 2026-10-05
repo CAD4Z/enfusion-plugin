@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       publish_marketplace:
-        description: Publish the Windows x64 extension to VS Code Marketplace
+        description: Also publish to VS Code Marketplace (requires configured credentials)
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
