@@ -357,7 +357,7 @@ def main():
         output = pathlib.Path(folder) / (stem + '.fnt')
         result = subprocess.run([arguments.enfusion, 'font', 'generate', '--machine', '--protocol', '1',
                                  '--input', str(pathlib.Path(arguments.font).resolve()), '--output', str(output),
-                                 '--resource-name', 'Check/' + stem + '.fnt', '--size', str(arguments.size),
+                                 '--size', str(arguments.size),
                                  '--characters', str(pathlib.Path(arguments.characters).resolve())],
                                 capture_output=True, text=True)
         if result.returncode != 0:
