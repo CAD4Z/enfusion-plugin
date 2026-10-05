@@ -1,0 +1,199 @@
+name: Release
+run-name: Release by @${{ github.actor }} (Marketplace=${{ inputs.publish_marketplace }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_marketplace:
+        description: Publish the Windows x64 extension to VS Code Marketplace
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check version, release branch, and publishing credentials
+        id: metadata
+        uses: actions/github-script@v9
+        env:
+          PUBLISH_MARKETPLACE: ${{ inputs.publish_marketplace }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        with:
+          script: |
+            if (context.ref !== `refs/heads/${context.payload.repository.default_branch}`) {
+              throw new Error('Release must run from the default branch.');
+            }
+            const manifest = require('./package.json');
+            const lock = require('./package-lock.json');
+            if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(manifest.version)) {
+              throw new Error('package.json must contain a stable major.minor.patch version.');
+            }
+            if (lock.version !== manifest.version || lock.packages[''].version !== manifest.version) {
+              throw new Error('package.json and package-lock.json versions must match.');
+            }
+            if (process.env.PUBLISH_MARKETPLACE === 'true') {
+              const { AZURE_CLIENT_ID, AZURE_TENANT_ID, VSCE_PAT } = process.env;
+              if (AZURE_CLIENT_ID || AZURE_TENANT_ID) {
+                if (!AZURE_CLIENT_ID || !AZURE_TENANT_ID) {
+                  throw new Error('Set both repository variables AZURE_CLIENT_ID and AZURE_TENANT_ID.');
+                }
+              } else if (!VSCE_PAT) {
+                throw new Error('Set repository variables AZURE_CLIENT_ID and AZURE_TENANT_ID, or the repository secret VSCE_PAT.');
+              }
+            }
+            const tag = `v${manifest.version}`;
+            let release;
+            try {
+              ({ data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag }));
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (release && (!release.draft || !release.body?.includes(`<!-- release-run:${context.runId} -->`))) {
+              throw new Error(`${tag} already belongs to another release. Bump the package version.`);
+            }
+            // A pre-existing tag must never redirect a release to another commit.
+            try {
+              const { data: ref } = await github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` });
+              if (ref.object.type !== 'commit' || ref.object.sha !== context.sha) {
+                throw new Error(`${tag} already points to another commit or an annotated tag.`);
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            core.setOutput('tag', tag);
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  draft:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: enfusion-plugin-win32-x64-vsix
+          path: release
+
+      - name: Attach the tested VSIX to a draft release
+        id: draft
+        uses: actions/github-script@v9
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { createHash } = require('node:crypto');
+            const tag = process.env.RELEASE_TAG;
+            const marker = `<!-- release-run:${context.runId} -->`;
+            // The by-tag endpoint only promises published releases; list also includes drafts.
+            const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
+            let release = releases.find(candidate => candidate.tag_name === tag);
+            if (release) {
+              if (!release.draft || release.target_commitish !== context.sha || !release.body?.includes(marker)) {
+                throw new Error('Refusing to change a release from another run or commit.');
+              }
+            } else {
+              ({ data: release } = await github.rest.repos.createRelease({
+                ...context.repo, tag_name: tag, target_commitish: context.sha,
+                name: `Enfusion ${tag}`, body: marker, draft: true, generate_release_notes: true,
+              }));
+            }
+            const name = `enfusion-plugin-${tag}-win32-x64.vsix`;
+            const data = fs.readFileSync('release/enfusion-plugin-win32-x64.vsix');
+            const digest = `sha256:${createHash('sha256').update(data).digest('hex')}`;
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              ...context.repo, release_id: release.id,
+            });
+            const existing = assets.find(asset => asset.name === name);
+            if (existing) {
+              if (existing.digest !== digest) throw new Error('Existing release asset has a different checksum.');
+            } else {
+              await github.rest.repos.uploadReleaseAsset({
+                ...context.repo, release_id: release.id, name, data,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+              });
+            }
+            core.setOutput('release_id', release.id);
+
+  marketplace:
+    needs: draft
+    if: inputs.publish_marketplace
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: enfusion-plugin-win32-x64-vsix
+          path: release
+
+      - name: Sign in to Microsoft Entra with GitHub OIDC
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Publish the tested VSIX with Microsoft Entra
+        if: vars.AZURE_CLIENT_ID != ''
+        run: npx --no-install vsce publish --packagePath release/enfusion-plugin-win32-x64.vsix --azure-credential
+
+      - name: Publish the tested VSIX with an existing PAT
+        if: vars.AZURE_CLIENT_ID == ''
+        run: npx --no-install vsce publish --packagePath release/enfusion-plugin-win32-x64.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  publish-release:
+    needs: [draft, marketplace]
+    if: >-
+      ${{ !cancelled() && needs.draft.result == 'success' &&
+          (needs.marketplace.result == 'success' || needs.marketplace.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the GitHub release
+        uses: actions/github-script@v9
+        env:
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+        with:
+          script: |
+            const { data: release } = await github.rest.repos.updateRelease({
+              ...context.repo, release_id: Number(process.env.RELEASE_ID), draft: false,
+            });
+            await core.summary.addLink('GitHub release', release.html_url).write();

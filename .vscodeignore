@@ -3,6 +3,7 @@
 .github/**
 .gitignore
 .vscode-test/**
+.ruff_cache/**
 src/**
 native/**
 scripts/**
