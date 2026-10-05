@@ -5,7 +5,7 @@
 
 <div align="center">
     <img src="https://img.shields.io/github/issues/CAD4Z/enfusion-plugin?style=for-the-badge" alt="open issues" />
-    <img src="https://img.shields.io/badge/version-0.0.28-blue?style=for-the-badge" alt="version" />
+    <img src="https://img.shields.io/badge/version-0.0.29-blue?style=for-the-badge" alt="version" />
     <img src="https://img.shields.io/badge/platform-Windows%20x64-lightgrey?style=for-the-badge" alt="platform" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Strict%201.0.0-red?style=for-the-badge" alt="license" /></a>
 </div>
