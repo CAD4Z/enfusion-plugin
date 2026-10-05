@@ -1,6 +1,7 @@
 {
   "name": "enfusion-plugin",
   "displayName": "Enfusion",
+  "icon": "resources/icon.png",
   "description": "Enfusion mod tooling for VS Code: discover, build, launch and open DayZ mods in Workbench",
   "version": "0.0.28",
   "publisher": "hurfy",

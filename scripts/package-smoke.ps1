@@ -11,6 +11,7 @@ $expected = @(
   'package.json',
   'LICENSE',
   'resources/enfusion.svg',
+  'resources/icon.png',
   'schemas/workspace.enf.schema.json',
   'schemas/mod.enf.schema.json',
   'dist/webview.js',
