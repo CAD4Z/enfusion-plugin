@@ -72,8 +72,8 @@ instead.
 ### Second client
 
 **Add client** puts one more client into the running launch. Given a second Steam account, it runs
-in a Sandboxie-Plus box with a Steam of its own and joins the same server; the box is made and
-signed in for you, once.
+in a [Sandboxie-Plus](https://sandboxie-plus.com/) box with a Steam of its own and joins the same
+server; the box is made and signed in for you, once.
 
 ### Mod manifests
 
@@ -122,9 +122,9 @@ Choose a size (32 by default, 8–40), a nearby `.txt` character set or the buil
 The command writes `.fnt`, `.edds` and the recipe `.fnt.meta` beside the source, reports missing
 characters and glyphs whose strokes are thinner than an atlas pixel, and asks before replacing
 existing files. Outside a mod's prefix root, as with textures, it writes the font without a recipe.
-**Regenerate Enfusion Font** on the `.fnt` uses the saved recipe and keeps its GUID. Both commands show cancellable progress; no Workbench
-or DayZ Tools are needed. The same generator is available through the
-[native CLI](native/README.md#fonts-sdf-fonts-from-truetype).
+**Regenerate Enfusion Font** on the `.fnt` uses the saved recipe and keeps its GUID. Both commands
+show cancellable progress; no Workbench or DayZ Tools are needed. The same generator is available
+through the [native CLI](native/README.md#fonts-sdf-fonts-from-truetype).
 
 ## Requirements
 
@@ -133,7 +133,8 @@ or DayZ Tools are needed. The same generator is available through the
   launching.
 - **pboProject** (Mikero), the default builder — or switch `enfusion.builder` to AddonBuilder.
 - **DayZ Server** from Steam, for a Release launch that puts a server up.
-- **Sandboxie-Plus** and a second Steam account, for a second client that joins a server.
+- **[Sandboxie-Plus](https://sandboxie-plus.com/)** and a second Steam account, for a second client
+  that joins a server.
 
 EDDS preview and texture conversion need none of these. Paths are read from the registry and from
 Steam's library list, so in the usual case nothing has to be configured.
@@ -150,14 +151,132 @@ code --install-extension enfusion-plugin-win32-x64.vsix
 
 ## Quick start
 
-1. Open the folder that holds your mods. The **Enfusion** panel lists the mods it finds: those with
-   a `mod.enf`, and those without one by the `CfgMods` in their `config.cpp`.
-2. No mod yet? Press **Create Mod** in the panel, or **Create Workspace** for a folder of several
-   mods. A mod without a manifest? Press **+ Create mod.enf** on its card.
-3. Press **Mount** to put the work drive up (set `enfusion.workDrive.source` first if `P:` has never
-   been mounted on this machine), then **Link mods**.
-4. Press **Build**.
-5. Pick a target at the top of the panel and press **Start**, or `F5`.
+Everything below happens in the **Enfusion** panel in the Activity Bar. The work drive has to have
+been set up with DayZ Tools once, the way any DayZ modding starts: `P:` with the game data unpacked
+onto it. **Mount** puts it up when it is down.
+
+### Paths and settings
+
+DayZ, DayZ Server, DayZ Tools, pboProject, Steam and Sandboxie-Plus are found on their own, in the
+registry and in Steam's library list; what was found and what was not is written to the
+**Enfusion** log in the Output panel. A setting is needed only for what is not found, and for a few
+choices: open **Settings** and search for `enfusion`. They are machine settings, so a repository
+never carries them and every developer sets their own.
+
+- `enfusion.workDrive.source` — the folder holding the unpacked game data, if `P:` has never been
+  mounted on this machine. `enfusion.workDrive.letter` if it is not `P:`.
+- `enfusion.signing.privateKey` — the `.biprivatekey` the pbos are signed with (`DSCreateKey.exe` in
+  DayZ Tools makes a pair). Without one every build warns that it went out unsigned; turn
+  `enfusion.signing.enabled` off to build unsigned without the warning.
+- `enfusion.builder` — `AddonBuilder` from DayZ Tools instead of pboProject.
+- `enfusion.dayz.path`, `enfusion.dayzServer.path`, `enfusion.dayzTools.path`,
+  `enfusion.pboProject.path` — an installation the registry and Steam do not point at.
+- `enfusion.launch.profiles` — where the profiles of a launch go, `.RPT` and `.ADM` among them;
+  point it at `P:\Profiles` to share them with the Workbench plugins.
+- `enfusion.launch.secondAccount` — the Steam account of the second client.
+
+Every setting is in the [table below](#settings).
+
+### A mod of your own
+
+1. Open the folder the mod will live in: an empty folder, or the repository it is going into. A
+   folder with no mod in it shows **Create Mod** and **Create Workspace** in the middle of the
+   panel.
+2. Press **Create Mod**. It asks two things: the name, and whether the mod packs into one pbo or
+   into one pbo per addon. The name is used everywhere at once — the folder, `dir` in `CfgMods`,
+   `P:\<Name>` and `@<Name>` — so it is letters, digits and underscores.
+3. The mod is written into the folder and linked onto the work drive. If `P:` was down, the notice
+   offers **Mount Work Drive**; press **Link mods** after it.
+
+   ```
+   MyMod/                        the folder you opened: the mod's root
+   ├── mod.enf                   the name, the version and the launch block
+   ├── server.cfg                what a target with a dev server puts it up with
+   ├── .gitignore
+   ├── MyMod/                    the prefix root: linked as P:\MyMod, built into @MyMod
+   │   ├── config.cpp            CfgPatches and CfgMods
+   │   ├── mod.cpp               what the DayZ launcher shows
+   │   ├── stringtable.csv
+   │   └── Scripts/
+   │       ├── Inputs.xml
+   │       ├── 1_Core/MyMod.c    and the same in 3_Game, 4_World and 5_Mission
+   │       └── ...
+   ├── Missions/Global/          laid over the mission of every launch
+   ├── Profiles/Global/          laid into the profile of every launch; Dev/ only into Debug ones
+   ├── Profiles/Dev/
+   ├── Workbench/dayz.gproj      the project the Workbench button opens
+   └── Addons/                   where Build puts @MyMod; ignored by git
+   ```
+
+   With one pbo per addon, `config.cpp` and `stringtable.csv` sit in `Scripts/` instead, and every
+   addon added later with **Add Addon** is a folder of its own beside it.
+4. Press **Build**. The pbo is packed (pboProject by default), signed, and put into
+   `Addons\@MyMod`; a build error lands in Problems, on the line of your own file.
+5. Pick **Debug** and the **Client** target at the top of the panel and press **Start**, or `F5`.
+   DayZDiag comes up with the mod loaded straight off your sources, on the map's offline mission,
+   and the script log streams into the Debug Console.
+6. For a dev server, add a target to `mod.enf` — the form shows it as a row, or write it by hand:
+
+   ```jsonc
+   "targets": [
+     { "name": "Client", "map": "ChernarusPlus", "run": "client" },
+     { "name": "Client and server", "map": "ChernarusPlus", "run": "both" }
+   ]
+   ```
+
+   The server starts with `server.cfg` and the client joins it on its own. Until the mod keeps a
+   mission of its own in `Missions\MyMod.<map>`, the server runs DayZ's `dayzOffline.<map>` with
+   your `Missions` layers over it. **Release** runs the retail game off the packed pbos instead.
+7. **Workbench** opens `Workbench\dayz.gproj`, which already lists the mod's script folders.
+
+### Several mods in one repository
+
+1. Open the repository's folder and press **Create Workspace**. It writes a `workspace.enf` that
+   owns the launch of every mod under it, one `Addons` they are all built into, one `server.cfg`
+   and one Workbench project.
+2. Press **Create Mod** once for each mod. Each goes into a folder of its own named after it, gets a
+   `mod.enf` with no launch block of its own, is added to `mods` in `workspace.enf` and to the
+   Workbench project, and is linked onto `P:`.
+
+   ```
+   MyMods/
+   ├── workspace.enf             the launch of every mod: mods, targets, ignore
+   ├── server.cfg
+   ├── .gitignore
+   ├── Workbench/dayz.gproj      one project with the scripts of every mod
+   ├── Addons/                   @CoreMod and @MapMod after a Build
+   ├── CoreMod/                  a mod: mod.enf, the CoreMod/ prefix root, Missions/, Profiles/
+   └── MapMod/
+   ```
+3. Keep `mods` in load order, a mod after the mods it needs, and give each target the mod whose
+   profile, mission and `server.cfg` it runs with:
+
+   ```jsonc
+   "launch": {
+     "modsDirectory": "Addons",
+     "mods": ["@CoreMod", "@MapMod"],
+     "targets": [
+       { "name": "Client", "map": "ChernarusPlus", "run": "client" },
+       { "name": "Map server", "map": "ChernarusPlus", "run": "both", "mod": "MapMod" }
+     ]
+   }
+   ```
+
+   A target that names no `mod` runs with the first mod of the workspace. Third-party mods are
+   named in `mods` too, by their folder under `Addons`; nothing is loaded that is not named there.
+4. **Build** packs every mod, in the order their `requiredAddons` give — so a mod that needs
+   another names that mod's `CfgPatches` class there — and **Start** launches them all. A folder
+   listed in `ignore` is left out of the window: nothing under it is listed, built, linked or
+   launched.
+
+### A mod that is already there
+
+Open the folder that holds it. A mod with a `mod.enf` is listed as it is. One without — somebody
+else's, or yours from before this extension — is found by the `CfgMods` in its `config.cpp` and
+listed as unconfigured: **+ Create mod.enf** on its card reads the name, description and author out
+of `CfgMods`, writes the manifest and links the mod. From there it builds and starts like any other.
+
+The details of every step, and the reasons behind them, are in [MANUAL.md](MANUAL.md).
 
 ## Configuration
 
