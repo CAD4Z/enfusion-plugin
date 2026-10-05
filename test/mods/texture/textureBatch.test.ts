@@ -13,6 +13,7 @@ import {
   textureSourceFormatOf,
 } from '../../../src/mods/texture/textureSources';
 import { BATCH_MAX_JOBS } from '../../../src/mods/texture/textureBatchProtocol';
+import { openedTextureBatch, updateTextureBatch } from '../../../src/mods/texture/textureBatchAuthoring';
 
 const revision = { size: 91, modified: 1_725_000_000_000 };
 
@@ -222,6 +223,32 @@ test('an unsupported old non-primary profile keeps valid identity but is replace
   assert.equal(alpha?.kind, 'ready');
   assert.equal(alpha?.kind === 'ready' && alpha.plan.identity?.guid, 'A0A1A2A3A4A5A6A7');
   assert.deepEqual(alpha?.kind === 'ready' && alpha.plan.profile, DEFAULT_TEXTURE_PROFILE);
+});
+
+test('changing an HDR batch profile restores a secondary with an unsupported old recipe', () => {
+  const primary = 'C:/mod/Mod/sky.hdr';
+  const secondary = 'C:/mod/Mod/icon.png';
+  const plan = textureBatchPlanOf(batch({
+    primary,
+    items: [
+      item(primary, { metadata: { kind: 'valid', revision,
+        value: metadata('0123456789ABCDEF', 'sky.hdr', { ...DEFAULT_TEXTURE_PROFILE, Conversion: 'HDRCompression' }) } }),
+      item(secondary, { metadata: { kind: 'unsupported', revision,
+        identity: { guid: 'A0A1A2A3A4A5A6A7', name: 'Mod/icon.edds', sourceFile: 'icon.png' },
+        reason: 'MipMapFilter=Triangle is unsupported.' } }),
+      item('C:/mod/Mod/broken.tga', { metadata: { kind: 'invalid', revision, reason: 'Invalid GUID.' } }),
+    ],
+  }));
+  const loaded = updateTextureBatch(openedTextureBatch().state, { kind: 'loaded', plan });
+  const selected = updateTextureBatch(loaded.state, { kind: 'select-item', source: secondary });
+  const changed = updateTextureBatch(selected.state, { kind: 'change-profile', field: 'Conversion', value: 'None' });
+  assert.equal(changed.state.kind, 'authoring');
+  if (changed.state.kind !== 'authoring') return;
+  assert.deepEqual(changed.state.plan.jobs.map(({ source }) => source), [secondary, primary]);
+  assert.equal(changed.state.plan.jobs[0]?.identity?.guid, 'A0A1A2A3A4A5A6A7');
+  assert.equal(changed.state.plan.items.find(({ source }) => source.endsWith('broken.tga'))?.kind, 'refused');
+  assert.equal(changed.state.preview.kind, 'loading');
+  assert.equal(changed.effects[0]?.kind === 'render-item' && changed.effects[0].source, secondary);
 });
 
 test('a destination reached through a dot segment is the same destination', () => {

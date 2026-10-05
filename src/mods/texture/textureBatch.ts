@@ -5,6 +5,7 @@ import {
   textureSourceFormatOf,
 } from './textureSources';
 import { BATCH_MAX_JOBS } from './textureBatchProtocol';
+import { textureHdrRefusalOf } from './textureHdr';
 import {
   DEFAULT_TEXTURE_PROFILE,
   type ArtifactRevision,
@@ -41,7 +42,13 @@ export type TextureBatchItemPlan =
       readonly label: 'Convert' | 'Reconvert' | 'Replace';
       readonly plan: Extract<TextureConversionPlan, { kind: 'ready' }>;
     }
-  | { readonly source: string; readonly kind: 'refused'; readonly reason: string };
+  | {
+      readonly source: string;
+      readonly kind: 'refused';
+      readonly reason: string;
+      /** Paths and identity survive a profile refusal, so a compatible edit can restore the item. */
+      readonly candidate?: Extract<TextureConversionPlan, { kind: 'ready' }>;
+    };
 
 export type TextureBatchPlan =
   | { readonly kind: 'refused'; readonly reason: string }
@@ -102,20 +109,19 @@ export function textureBatchPlanOf(input: TextureBatchInput): TextureBatchPlan {
       roots: input.roots,
       sourceRevision: item.sourceRevision,
       outputRevision: item.outputRevision,
-      metadata: metadataForBatch(item, profile),
+      metadata: metadataForBatch(item),
       newGuid: item.newGuid,
       occupiedGuids: input.occupiedGuids,
     });
-    const commonPlan = plan.kind === 'ready' ? { ...plan, profile } : plan;
-    return commonPlan.kind === 'ready'
+    return plan.kind === 'ready'
       ? {
           source: item.source,
           kind: 'ready',
-          action: commonPlan.action,
-          label: commonPlan.label,
-          plan: commonPlan,
+          action: plan.action,
+          label: plan.label,
+          plan,
         }
-      : { source: item.source, kind: 'refused', reason: commonPlan.reason };
+      : { source: item.source, kind: 'refused', reason: plan.reason };
   });
   const destinations = new Map<string, number>();
   for (const item of unique) {
@@ -139,23 +145,41 @@ export function textureBatchPlanOf(input: TextureBatchInput): TextureBatchPlan {
       reason: `A conversion batch runs at most ${BATCH_MAX_JOBS} textures at once; this selection has ${jobs.length}.`,
     };
   }
-  return { kind: 'ready', primary: primary.source, profile, items: isolated, jobs };
+  return withTextureBatchProfile({ kind: 'ready', primary: primary.source, profile, items: isolated, jobs }, profile);
 }
 
-/** Replaces the batch recipe whole; per-source facts and every refusal stay untouched. */
+/** Rechecks profile compatibility without changing captured paths, identity, revisions or collisions. */
 export function withTextureBatchProfile(
   plan: Extract<TextureBatchPlan, { kind: 'ready' }>,
   profile: TextureProfile,
 ): Extract<TextureBatchPlan, { kind: 'ready' }> {
-  const items = plan.items.map((item): TextureBatchItemPlan => item.kind === 'ready'
-    ? { ...item, plan: { ...item.plan, profile } }
-    : item);
+  const items = plan.items.map((item): TextureBatchItemPlan => {
+    const previous = candidateOf(item);
+    if (previous === undefined) return item;
+    const candidate = { ...previous, profile };
+    const reason = textureHdrRefusalOf(profile, candidate.sourceFormat);
+    return reason === undefined
+      ? { source: item.source, kind: 'ready', action: candidate.action, label: candidate.label, plan: candidate }
+      : { source: item.source, kind: 'refused', reason, candidate };
+  });
   return {
     ...plan,
     profile,
     items,
     jobs: items.flatMap((item) => item.kind === 'ready' ? [item.plan] : []),
   };
+}
+
+/** Controls must also consider sources temporarily excluded by the current profile. */
+export function textureBatchSourceFormatsOf(plan: Extract<TextureBatchPlan, { kind: 'ready' }>) {
+  return plan.items.flatMap((item) => {
+    const candidate = candidateOf(item);
+    return candidate === undefined ? [] : [candidate.sourceFormat];
+  });
+}
+
+function candidateOf(item: TextureBatchItemPlan) {
+  return item.kind === 'ready' ? item.plan : item.candidate;
 }
 
 function primaryProfileOf(primary: TextureBatchItemInput): TextureProfile {
@@ -183,11 +207,12 @@ function collisionDestinationOf(
     : undefined;
 }
 
-function metadataForBatch(
-  item: TextureBatchItemInput,
-  profile: TextureProfile,
-): ExistingTextureMetadata {
+/** Plan ownership with neutral settings; only the common profile determines batch compatibility. */
+function metadataForBatch(item: TextureBatchItemInput): ExistingTextureMetadata {
   const sourceFormat = textureSourceFormatOf(item.source);
+  if (item.metadata.kind === 'valid') {
+    return { ...item.metadata, value: { ...item.metadata.value, profile: DEFAULT_TEXTURE_PROFILE } };
+  }
   if (item.metadata.kind !== 'unsupported' || sourceFormat === undefined) {
     return item.metadata;
   }
@@ -197,7 +222,7 @@ function metadataForBatch(
     value: {
       ...item.metadata.identity,
       sourceFormat,
-      profile,
+      profile: DEFAULT_TEXTURE_PROFILE,
     },
   };
 }

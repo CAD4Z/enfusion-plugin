@@ -259,8 +259,8 @@ const NO_PIXELS = new Uint8Array(0);
 function withoutPixels(state: TextureBatchAuthoringState): TextureBatchAuthoringState {
   const empty = (rendered: TextureRendering): TextureRendering => ({
     ...rendered,
-    source: { ...rendered.source, rgba: NO_PIXELS },
-    result: { ...rendered.result, rgba: NO_PIXELS },
+    source: { ...rendered.source, rgba: NO_PIXELS, faces: undefined },
+    result: { ...rendered.result, rgba: NO_PIXELS, faces: undefined },
   });
   switch (state.kind) {
     case 'loading':

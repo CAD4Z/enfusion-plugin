@@ -5,6 +5,7 @@ import type { TextureRendering } from './textureAuthoring';
 import {
   type TextureBatchPlan,
   type TextureBatchJob,
+  textureBatchSourceFormatsOf,
   withTextureBatchProfile,
 } from './textureBatch';
 import type { TextureBatchEvent } from './textureBatchProtocol';
@@ -225,7 +226,7 @@ function changed(
       (event.field === 'RemoveMips' &&
         (!Number.isInteger(event.value) || event.value < 0 || event.value > 14)) ||
       (event.field === 'ContainsMips' &&
-        !state.plan.jobs.every((job) => job.sourceFormat === 'DDS')) ||
+        !textureBatchSourceFormatsOf(state.plan).every((format) => format === 'DDS')) ||
       (event.field === 'ConversionQuality' && !isTextureQuality(event.value)) ||
       capability === undefined || !capability.supported ||
       (event.field === 'ConversionQuality' && !capability.usesQuality && event.value !== 1)) {
@@ -238,7 +239,7 @@ function changed(
     /* A conversion that cannot use quality carries the default, so the recipe stays runnable. */
     ...(event.field === 'Conversion' && !capability.usesQuality ? { ConversionQuality: 1 } : {}),
   });
-  if (textureHdrRefusalOf(draft, state.plan.jobs.map((job) => job.sourceFormat)) !== undefined) return unchanged(state);
+  if (textureHdrRefusalOf(draft, textureBatchSourceFormatsOf(state.plan)) !== undefined) return unchanged(state);
   if (textureSwizzleRefusalOf(draft) !== undefined) return unchanged(state);
   const plan = withTextureBatchProfile(state.plan, draft);
   const revision = state.revision + 1;
@@ -249,7 +250,8 @@ function changed(
       plan,
       draft,
       revision,
-      preview: active === undefined ? state.preview : { kind: 'loading' },
+      preview: active === undefined
+        ? { kind: 'unavailable', reason: refusalOf(plan, state.activeSource) } : { kind: 'loading' },
     },
     effects: active === undefined ? [] : [renderEffect(state.activeSource, revision, active)],
   };

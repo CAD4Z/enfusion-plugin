@@ -9,13 +9,15 @@ import { transformSync } from 'esbuild';
 import type * as vscode from 'vscode';
 import type { EddsConverter } from '../../../src/platform/texture/eddsConverter';
 import type { TextureBatchEditor } from '../../../src/view/texture/textureBatchEditor';
-import type { TextureBatchRequest } from '../../../src/webview/texture/textureBatchProtocol';
+import type { TextureBatchRequest, TextureBatchStateMessage } from '../../../src/webview/texture/textureBatchProtocol';
 import { textureBatchPlanOf } from '../../../src/mods/texture/textureBatch';
 import type { TextureBatchEvent } from '../../../src/mods/texture/textureBatchProtocol';
+import type { TextureRendering } from '../../../src/mods/texture/textureAuthoring';
+import { cubeRendering } from '../../fixtures/textureRendering';
 
 // Exercise the real editor callbacks and reducer; only VS Code and the I/O adapters are replaced.
 // Loading on Node avoids opening an Extension Host just to hold an asynchronous refresh in flight.
-function editorHarness() {
+function editorHarness(rendering?: TextureRendering) {
   const uri = {
     fsPath: 'C:/mod/Mod/a.png',
     toString: () => 'file:///C:/mod/Mod/a.png',
@@ -36,10 +38,11 @@ function editorHarness() {
   let holdLoad = false;
   let previews = 0;
   const calls: AbortSignal[] = [];
+  const messages: TextureBatchStateMessage[] = [];
   const panel = {
     webview: {
       asWebviewUri: (value: unknown) => value,
-      postMessage: () => Promise.resolve(true),
+      postMessage: (value: TextureBatchStateMessage) => { messages.push(value); return Promise.resolve(true); },
       onDidReceiveMessage: (listener: typeof message) => {
         message = listener;
         return { dispose() { /* The harness owns the callback. */ } };
@@ -58,12 +61,13 @@ function editorHarness() {
       : Promise.resolve(plan),
     renderTextureDraft: () => {
       previews += 1;
-      return Promise.reject(new Error('No preview in this fixture'));
+      return rendering === undefined ? Promise.reject(new Error('No preview in this fixture')) : Promise.resolve(rendering);
     },
   };
   const converter = {
     batch: (_jobs: unknown, emit: (value: TextureBatchEvent) => void, signal: AbortSignal) => {
       calls.push(signal);
+      emit({ protocolVersion: 1, kind: 'progress', id: '0', progress: 0.5 });
       emit({ protocolVersion: 1, kind: 'result', id: '0', status: 'Failed', reason: 'locked', retryable: true });
       emit({ protocolVersion: 1, kind: 'complete', converted: 0, failed: 1, cancelled: 0 });
       return Promise.resolve();
@@ -98,6 +102,7 @@ function editorHarness() {
   } as unknown as vscode.LogOutputChannel).open(uri, []);
   return {
     calls,
+    messages,
     previews: () => previews,
     send: (request: TextureBatchRequest) => message(request),
     close: () => dispose(),
@@ -130,4 +135,26 @@ test('closing during the initial load never starts a preview afterwards', async 
   await setImmediate();
   assert.equal(editor.previews(), 0);
   assert.equal(editor.calls.length, 0);
+});
+
+test('cube pixels cross once and stay out of every progress and result state', async () => {
+  const rendering = cubeRendering();
+  const editor = editorHarness(rendering);
+  editor.send({ type: 'ready' });
+  await setImmediate();
+  editor.send({ type: 'run' });
+  await setImmediate();
+  assert.equal(editor.messages.filter((message) => message.rendering === rendering).length, 1);
+  assert.ok(editor.messages.some(({ state }) => state.kind === 'running'));
+  assert.ok(editor.messages.some(({ state }) => state.kind === 'result'));
+  for (const { state } of editor.messages) {
+    const preview = state.kind === 'authoring' && state.preview.kind === 'ready' ? state.preview.rendered
+      : state.kind === 'running' || state.kind === 'result' ? state.rendered : undefined;
+    if (preview === undefined) continue;
+    for (const side of [preview.source, preview.result]) {
+      assert.equal(side.rgba.byteLength, 0);
+      assert.equal(side.faces?.reduce((bytes, face) => bytes + face.byteLength, 0) ?? 0, 0);
+    }
+  }
+  editor.close();
 });

@@ -8,6 +8,8 @@ import {
   type TextureBatchAuthoringState,
 } from '../../mods/texture/textureBatchAuthoring';
 import type { TextureProfile, TextureSourceFormat } from '../../mods/texture/textureConversion';
+import type { EddsPreview } from '../../mods/texture/edds';
+import { textureBatchSourceFormatsOf } from '../../mods/texture/textureBatch';
 import type { TextureBatchRequest, TextureBatchStateMessage } from './textureBatchProtocol';
 import './textureBatch.css';
 
@@ -16,18 +18,17 @@ declare function acquireVsCodeApi(): { postMessage(message: TextureBatchRequest)
 const host = acquireVsCodeApi();
 const root = document.body.appendChild(element('main', 'batch-editor'));
 
-/** The rendering's result, drawn once when its pixels arrive and moved, not redrawn, after that. */
-let canvas: HTMLCanvasElement | undefined;
+/** Pixels and the face selector travel together across progress updates of the same rendering. */
+let preview: HTMLElement | undefined;
 
 window.addEventListener('message', (event: MessageEvent<TextureBatchStateMessage>) => {
   if (event.data.type !== 'state') return;
-  if (event.data.rendering !== undefined) canvas = canvasOf(event.data.rendering?.result);
+  if (event.data.rendering !== undefined) preview = previewOf(event.data.rendering?.result);
   render(event.data.state);
 });
 host.postMessage({ type: 'ready' });
 
-function canvasOf(result: { readonly width: number; readonly height: number; readonly rgba: Uint8Array } | undefined): HTMLCanvasElement | undefined {
-  if (result === undefined) return undefined;
+function canvasOf(result: EddsPreview): HTMLCanvasElement {
   const drawn = document.createElement('canvas');
   drawn.width = result.width;
   drawn.height = result.height;
@@ -39,6 +40,15 @@ function canvasOf(result: { readonly width: number; readonly height: number; rea
     result.height,
   ), 0, 0);
   return drawn;
+}
+
+function previewOf(result: EddsPreview | undefined): HTMLElement | undefined {
+  if (result === undefined) return undefined;
+  const preview = element('div', 'active-preview');
+  const viewport = element('div', 'viewport');
+  viewport.append(canvasOf(result));
+  preview.append(textureSurfaceControls(result, (surface) => viewport.replaceChildren(canvasOf(surface))), viewport);
+  return preview;
 }
 
 function render(state: TextureBatchAuthoringState): void {
@@ -89,7 +99,7 @@ function render(state: TextureBatchAuthoringState): void {
   const rendered = state.kind === 'authoring'
     ? state.preview.kind === 'ready' ? state.preview.rendered : undefined
     : state.rendered;
-  if (rendered === undefined || canvas === undefined) {
+  if (rendered === undefined || preview === undefined) {
     workspace.append(message(
       state.kind === 'authoring' && state.preview.kind === 'unavailable'
         ? state.preview.reason
@@ -97,13 +107,7 @@ function render(state: TextureBatchAuthoringState): void {
       state.kind === 'authoring' && state.preview.kind === 'unavailable' ? 'error' : '',
     ));
   } else {
-    const viewport = element('div', 'viewport');
-    viewport.append(canvas);
-    workspace.append(textureSurfaceControls(rendered.result, (surface) => {
-      const selected = canvasOf(surface);
-      if (selected !== undefined) { canvas = selected; viewport.replaceChildren(selected); }
-    }));
-    workspace.append(viewport);
+    workspace.append(preview);
   }
 
   const sidebar = element('aside', 'batch-sidebar');
@@ -111,7 +115,7 @@ function render(state: TextureBatchAuthoringState): void {
   heading.textContent = 'Common texture profile';
   sidebar.append(
     heading,
-    profileForm(state.draft, state.plan.jobs.map((job) => job.sourceFormat), state.kind !== 'authoring'),
+    profileForm(state.draft, textureBatchSourceFormatsOf(state.plan), state.kind !== 'authoring'),
   );
   if (state.kind === 'running' || state.kind === 'result') {
     const overall = document.createElement('progress');
