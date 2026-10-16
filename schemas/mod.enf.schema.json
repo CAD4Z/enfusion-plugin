@@ -31,7 +31,7 @@
     },
     "exclude": {
       "type": "array",
-      "description": "File masks and folder names the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying. Left out, a default list of the source formats DayZ modding has settled on is used; naming any replaces that list whole. Handed to pboProject as it is written here. AddonBuilder ignores it: the option it takes an exclude list through crashes it.",
+      "description": "File masks and folder names the builder is not to pack: model sources, texture sources, anything a pbo has no business carrying. Left out, a default list of the source formats DayZ modding has settled on is used; naming any replaces that list whole. Handed to pboProject as it is written here. AddonBuilder ignores it: the option it takes an exclude list through crashes it, so it packs every file of the types it copies as they are, whatever this names.",
       "items": {
         "type": "string"
       },

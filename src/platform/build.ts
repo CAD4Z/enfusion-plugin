@@ -16,7 +16,7 @@
  */
 
 import { execFile, exec as execWithShell } from 'node:child_process';
-import { copyFile, mkdir, open, readdir, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, open, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { BuildPlan, BuildStep, CopyStep, PackStep, SignStep } from '../mods/build/build';
 import { windowsFolder, windowsName, windowsPath } from '../mods/paths';
@@ -85,13 +85,17 @@ async function runStep(step: BuildStep, cancelled: () => boolean): Promise<StepO
 }
 
 /**
- * The build itself: the folders made, the old pbo taken off, the builder run — and then the one
- * question worth asking, which is whether the pbo is there.
+ * The build itself: the folders made, the files the builder reads written, the old pbo taken off,
+ * the builder run — and then the one question worth asking, which is whether the pbo is there.
  */
 async function pack(step: PackStep, cancelled: () => boolean): Promise<StepOutcome> {
   try {
     for (const folder of step.folders) {
       await mkdir(folder, { recursive: true });
+    }
+    for (const file of step.files) {
+      await mkdir(windowsFolder(file.path), { recursive: true });
+      await writeFile(file.path, file.content);
     }
     await remove(step.stale);
   } catch (error: unknown) {

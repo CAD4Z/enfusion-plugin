@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ADDON_BUILDER_INCLUDE,
   type BuildJob,
   type BuildPlan,
   type BuildSource,
@@ -38,6 +39,7 @@ test('a single-addon mod comes out as pack, sign and the root files, in that ord
         subject: 'ModA',
         what: 'Packing ModA',
         folders: ['P:\\Mods\\@ModA', 'P:\\Mods\\@ModA\\Addons', 'P:\\Mods\\@ModA\\Keys'],
+        files: [],
         stale: [
           'P:\\Mods\\@ModA\\Addons\\ModA.pbo',
           'P:\\Mods\\@ModA\\Addons\\ModA.pbo.*.bisign',
@@ -100,9 +102,32 @@ test('AddonBuilder is handed the addons folder, the prefix and the drive to coun
     pack.command,
     'start "AddonBuilder" /wait /MIN "F:\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe" ' +
       '"P:\\ModA\\Scripts" "P:\\Mods\\@ModA\\Addons" -prefix="ModA\\Scripts" ' +
-      '-project=P:\\ -temp="P:\\temp"',
+      '-project=P:\\ -temp="P:\\temp" -include="P:\\temp\\AddonBuilder.include.lst"',
   );
   assert.equal(pack.pbo, 'P:\\Mods\\@ModA\\Addons\\Scripts.pbo');
+});
+
+/**
+ * From the command line AddonBuilder packs only what Binarize makes, so without the list a mod
+ * comes out with no scripts in it — and the build reports success. The option takes a file, which
+ * is why the list is written by the step rather than put on the command line.
+ */
+test('AddonBuilder is handed the types to copy as they are, in a file written before it runs', () => {
+  const pack = packOf(buildPlanOf([job()], settings({ builder: 'AddonBuilder' })));
+
+  assert.deepEqual(pack.files, [
+    { path: 'P:\\temp\\AddonBuilder.include.lst', content: ADDON_BUILDER_INCLUDE.join(';') },
+  ]);
+  assert.ok(pack.command.endsWith(' -include="P:\\temp\\AddonBuilder.include.lst"'), pack.command);
+  for (const type of ['*.c', '*.layout', '*.csv']) {
+    assert.ok(ADDON_BUILDER_INCLUDE.includes(type), type);
+  }
+});
+
+/** A source model copied as it is would take the place of the one Binarize made of it. */
+test('AddonBuilder copies no model as it is, and pboProject is written nothing at all', () => {
+  assert.ok(!ADDON_BUILDER_INCLUDE.includes('*.p3d'));
+  assert.deepEqual(packOf(buildPlanOf([job()], settings())).files, []);
 });
 
 /**
@@ -120,11 +145,10 @@ test('both builders keep their workings on the work drive, under the letter that
   const elsewhere = { ...job(), link: link('ModA', 'F:\\Code\\ModA\\ModA', 'linked', 'W:') };
 
   assert.equal(packOf(buildPlanOf([elsewhere], settings())).log.path, 'W:\\temp\\ModA.packing.log');
-  assert.ok(
-    packOf(buildPlanOf([elsewhere], settings({ builder: 'AddonBuilder' }))).command.includes(
-      '-project=W:\\ -temp="W:\\temp"',
-    ),
-  );
+
+  const addonBuilder = packOf(buildPlanOf([elsewhere], settings({ builder: 'AddonBuilder' })));
+  assert.ok(addonBuilder.command.includes('-project=W:\\ -temp="W:\\temp"'), addonBuilder.command);
+  assert.equal(addonBuilder.files[0]?.path, 'W:\\temp\\AddonBuilder.include.lst');
 });
 
 /** Which log to read is a fact about the builder, and the runner should not have to know it. */

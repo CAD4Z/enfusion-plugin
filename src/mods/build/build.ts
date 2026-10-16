@@ -27,6 +27,11 @@
  * is pointed at does not exist** — no console output, no log, exit 0, an empty output folder. So a
  * pack step names the folders to make before it, and they are made whether or not anything else
  * needs them.
+ *
+ * And one about AddonBuilder: **from the command line it packs only what Binarize makes** — the
+ * config, the models and the textures and materials they name — unless it is handed a file listing
+ * the types to copy into the pbo as they are. Without that file a mod comes out with no scripts in
+ * it, and the build still reports success. So a pack step also names the files to write before it.
  */
 
 import {
@@ -139,6 +144,11 @@ export interface PackStep extends Step {
    */
   readonly folders: readonly string[];
   /**
+   * Written whole before the builder runs, each with its own folder made: what a builder takes
+   * only as a file. AddonBuilder's list of the types it copies into the pbo is one.
+   */
+  readonly files: readonly WrittenFile[];
+  /**
    * Taken off first, so that a pbo found afterwards is this run's. A name may carry a `*`: a
    * signature is named after the key that made it, and one made by a key since replaced is stale
    * all the same — and a stale signature is what makes a server turn a freshly built mod away.
@@ -157,6 +167,12 @@ export interface PackStep extends Step {
    * had a handle on it is what the second run is for, and what the wait gives it time to let go.
    */
   readonly pauseMs: number;
+}
+
+/** A file a pack step writes before the builder runs, and what goes in it. */
+export interface WrittenFile {
+  readonly path: string;
+  readonly content: string;
 }
 
 /** A builder's log, and how it keeps it. */
@@ -231,6 +247,46 @@ export const DEFAULT_EXCLUDE: readonly string[] = [
   '*.cmd',
   'thumbs.db',
   'source',
+];
+
+/**
+ * The types AddonBuilder copies into the pbo as they are, handed to it through `-include=`. From
+ * the command line it packs nothing but what Binarize makes — the config, the models and the
+ * textures and materials they name — so a type left off this list is in no pbo it builds, and the
+ * build reports success all the same. Measured on 1.0.240639: without the list, a mod came out with
+ * its config and its model and not one script, layout or string table.
+ *
+ * On it is every type the game reads out of a pbo that Binarize does not make: scripts, the
+ * interface and its fonts, the textures and materials a config names where no model does,
+ * particles, sounds, animations and the data files a mod reads. `*.txt` is there because pboProject
+ * packs every one whatever its list says, and changing builders should not lose a file.
+ *
+ * Two kinds are left off on purpose. Models, because a file copied as it is takes the place of what
+ * Binarize made of it, and a source model is not what the game loads. And the config's includes,
+ * because AddonBuilder binarises the config, which resolves them into it at pack time.
+ */
+export const ADDON_BUILDER_INCLUDE: readonly string[] = [
+  '*.c',
+  '*.layout',
+  '*.styles',
+  '*.imageset',
+  '*.edds',
+  '*.fnt',
+  '*.paa',
+  '*.rvmat',
+  '*.emat',
+  '*.ptc',
+  '*.ogg',
+  '*.wss',
+  '*.anm',
+  '*.asi',
+  '*.ast',
+  '*.agr',
+  '*.aw',
+  '*.csv',
+  '*.xml',
+  '*.json',
+  '*.txt',
 ];
 
 /** The folder of the built mod the pbo go into, which is the one `-mod=` is pointed at. */
@@ -388,9 +444,10 @@ function unexcludedOf(jobs: readonly BuildJob[], settings: MachineSettings): str
   }
 
   return [
-    `${settings.builder} is packing the exclude list of ` +
+    `${settings.builder} ignores the exclude list of ` +
       `${namesOf(jobs.filter((job) => job.exclude.length > 0))}: it takes one only through ` +
-      '-exclude=, which crashes it. Build with pboProject to have the list honoured.',
+      '-exclude=, which crashes it, so a file the list names is packed wherever its type is one ' +
+      'AddonBuilder copies. Build with pboProject to have the list honoured.',
   ];
 }
 
@@ -488,6 +545,7 @@ function packOf(job: BuildJob, settings: MachineSettings): PackStep {
     subject: subjectOf(job),
     what: `Packing ${subjectOf(job)}`,
     folders: [built, windowsPath(built, ADDONS_FOLDER), windowsPath(built, KEYS_FOLDER)],
+    files: PACKING[settings.builder].files(job),
     stale: [pbo, `${pbo}.*.bisign`],
     command: commandOf(job, settings),
     pbo,
@@ -521,15 +579,17 @@ function commandOf(job: BuildJob, settings: MachineSettings): string {
 }
 
 /**
- * The whole of what the two builders differ by once one is chosen: how it is called, where it
- * writes about it, and whether the exclude list reaches it at all. One table, so that the answers
- * for one builder are read in one place and a third one is an entry rather than a hunt.
+ * The whole of what the two builders differ by once one is chosen: how it is called, what it needs
+ * written before it runs, where it writes about it, and whether the exclude list reaches it at all.
+ * One table, so that the answers for one builder are read in one place and a third one is an entry
+ * rather than a hunt.
  */
 const PACKING: Readonly<
   Record<
     Builder,
     {
       readonly arguments: (job: BuildJob) => string[];
+      readonly files: (job: BuildJob) => WrittenFile[];
       readonly log: (job: BuildJob, settings: MachineSettings) => PackingLog;
       /** False where the builder never sees the manifest's exclude list, and is told why. */
       readonly excludes: boolean;
@@ -538,6 +598,7 @@ const PACKING: Readonly<
 > = {
   pboProject: {
     arguments: pboProjectArguments,
+    files: () => [],
     // One log per addon, named after the folder it packed, in the `temp` of the work drive, and
     // rewritten every run.
     log: (job) => ({
@@ -548,6 +609,9 @@ const PACKING: Readonly<
   },
   AddonBuilder: {
     arguments: addonBuilderArguments,
+    // The types it copies into the pbo as they are, in the `temp` of the work drive, written again
+    // before every addon so that no run reads a list some other version of this left behind.
+    files: (job) => [{ path: includeListOf(job), content: ADDON_BUILDER_INCLUDE.join(';') }],
     // One rolling file beside the tools for every build of every addon, appended to.
     log: (_job, settings) => ({
       path: windowsPath(settings.dayzTools, 'Bin', 'Logs', 'AddonBuilder.User.rpt'),
@@ -594,6 +658,9 @@ function pboProjectArguments(job: BuildJob): string[] {
  * backslash, left unquoted because a quote after a backslash is an escaped quote to the program
  * reading it, and a drive root has no space in it to need quoting for.
  *
+ * `-include=` names the file holding `ADDON_BUILDER_INCLUDE`, which the step writes before the run:
+ * the option takes a file and never the list itself.
+ *
  * The exclude list is deliberately not passed. `-exclude=` crashes AddonBuilder 1.0.240639 with an
  * `ArgumentNullException` before it starts — with any list at all, including the `exclude.lst` its
  * own help points at — so passing one would mean every AddonBuilder build failing on a mod that
@@ -606,7 +673,17 @@ function addonBuilderArguments(job: BuildJob): string[] {
     `-prefix=${quote(prefixOf(job))}`,
     `-project=${driveRootOf(job)}`,
     `-temp=${quote(tempOf(job))}`,
+    `-include=${quote(includeListOf(job))}`,
   ];
+}
+
+/**
+ * Where the list of types AddonBuilder copies as they are is written. One file for every addon,
+ * because the list is one: a name per addon would only collide between two mods that each have a
+ * `Scripts`.
+ */
+function includeListOf(job: BuildJob): string {
+  return windowsPath(tempOf(job), 'AddonBuilder.include.lst');
 }
 
 function signOf(job: BuildJob, settings: MachineSettings): SignStep {

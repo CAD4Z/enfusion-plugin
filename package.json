@@ -383,7 +383,7 @@
           ],
           "enumDescriptions": [
             "Mikero pboProject.",
-            "AddonBuilder, which comes with DayZ Tools. It ignores the exclude list: the option it takes one through crashes it."
+            "AddonBuilder, which comes with DayZ Tools. It packs what Binarize makes and a fixed list of the types the game reads as they are, and ignores the exclude list: the option it takes one through crashes it."
           ],
           "scope": "machine",
           "order": 13,
