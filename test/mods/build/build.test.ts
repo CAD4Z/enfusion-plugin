@@ -102,7 +102,7 @@ test('AddonBuilder is handed the addons folder, the prefix and the drive to coun
     pack.command,
     'start "AddonBuilder" /wait /MIN "F:\\DayZ Tools\\Bin\\AddonBuilder\\AddonBuilder.exe" ' +
       '"P:\\ModA\\Scripts" "P:\\Mods\\@ModA\\Addons" -prefix="ModA\\Scripts" ' +
-      '-project=P:\\ -temp="P:\\temp" -include="P:\\temp\\AddonBuilder.include.lst"',
+      '-project=P:\\ -temp="P:\\temp" -clear -include="P:\\temp\\AddonBuilder.include.lst"',
   );
   assert.equal(pack.pbo, 'P:\\Mods\\@ModA\\Addons\\Scripts.pbo');
 });
@@ -122,6 +122,17 @@ test('AddonBuilder is handed the types to copy as they are, in a file written be
   for (const type of ['*.c', '*.layout', '*.csv']) {
     assert.ok(ADDON_BUILDER_INCLUDE.includes(type), type);
   }
+});
+
+/**
+ * AddonBuilder packs whatever its folder of the addon under `temp` holds, and pboProject leaves a
+ * copy of the whole addon there: a pbo that carried both configs and the source images is what
+ * building without `-clear` came to.
+ */
+test('AddonBuilder empties its folder of the addon before it packs from it', () => {
+  const command = packOf(buildPlanOf([job()], settings({ builder: 'AddonBuilder' }))).command;
+
+  assert.ok(command.includes(' -clear '), command);
 });
 
 /** A source model copied as it is would take the place of the one Binarize made of it. */

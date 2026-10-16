@@ -661,6 +661,12 @@ function pboProjectArguments(job: BuildJob): string[] {
  * `-include=` names the file holding `ADDON_BUILDER_INCLUDE`, which the step writes before the run:
  * the option takes a file and never the list itself.
  *
+ * `-clear` empties the addon's own folder under `temp` before anything is copied into it, and it is
+ * not about speed. AddonBuilder packs whatever that folder holds, and pboProject keeps a copy of
+ * the whole addon in the same place — so without it the pbo carried that copy's `config.cpp`
+ * beside the `config.bin` made of the current one, the headers, the source images, and anything
+ * left there by any build before.
+ *
  * The exclude list is deliberately not passed. `-exclude=` crashes AddonBuilder 1.0.240639 with an
  * `ArgumentNullException` before it starts — with any list at all, including the `exclude.lst` its
  * own help points at — so passing one would mean every AddonBuilder build failing on a mod that
@@ -673,6 +679,7 @@ function addonBuilderArguments(job: BuildJob): string[] {
     `-prefix=${quote(prefixOf(job))}`,
     `-project=${driveRootOf(job)}`,
     `-temp=${quote(tempOf(job))}`,
+    '-clear',
     `-include=${quote(includeListOf(job))}`,
   ];
 }

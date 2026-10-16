@@ -483,11 +483,13 @@ mod comes out without a single script while the build reports success. The list 
 game reads that Binarize does not make: `*.c`, `*.layout`, `*.styles`, `*.imageset`, `*.edds`,
 `*.fnt`, `*.paa`, `*.rvmat`, `*.emat`, `*.ptc`, `*.ogg`, `*.wss`, `*.anm`, `*.asi`, `*.ast`,
 `*.agr`, `*.aw`, `*.csv`, `*.xml`, `*.json` and `*.txt`. A file of any other type is in no pbo
-AddonBuilder packs, and a file of one of these is in it whatever `exclude` says. Build errors are
-read out of the packing log and reach Problems — on the line of the file of the workspace the
-builder was talking about, not on its twin on `P:`; an addon that failed without a place to point at
-is marked on its own `config.cpp`. Building is one of the two places where a path out of a `mod.enf`
-reaches a command line (the other is launching), so it wants the folder trusted (Workspace Trust).
+AddonBuilder packs, and a file of one of these is in it whatever `exclude` says. Its own folder of
+the addon under `temp` is emptied first (`-clear`): AddonBuilder packs whatever that folder holds,
+and pboProject keeps a copy of the whole addon there. Build errors are read out of the packing log
+and reach Problems — on the line of the file of the workspace the builder was talking about, not on
+its twin on `P:`; an addon that failed without a place to point at is marked on its own
+`config.cpp`. Building is one of the two places where a path out of a `mod.enf` reaches a command
+line (the other is launching), so it wants the folder trusted (Workspace Trust).
 
 ## Launching
 
