@@ -231,6 +231,9 @@ async function entriesOf(folder: string): Promise<string[]> {
  * What the log holds past the offset given. Read as it comes: a builder writes in whatever the
  * machine's code page is, and the part that matters — a path, a line number — is plain ASCII
  * either way.
+ *
+ * A log shorter than the offset was rolled over during the run — AddonBuilder moves the file aside
+ * at its first write of a new day — and all of what it holds is this run's.
  */
 async function readFrom(path: string, from: number): Promise<string> {
   let file;
@@ -238,14 +241,15 @@ async function readFrom(path: string, from: number): Promise<string> {
   try {
     file = await open(path, 'r');
     const { size } = await file.stat();
-    const length = Math.max(0, size - from);
+    const start = size < from ? 0 : from;
+    const length = size - start;
 
     if (length === 0) {
       return '';
     }
 
     const buffer = Buffer.alloc(length);
-    await file.read(buffer, 0, length, from);
+    await file.read(buffer, 0, length, start);
 
     return buffer.toString('utf8');
   } catch {
