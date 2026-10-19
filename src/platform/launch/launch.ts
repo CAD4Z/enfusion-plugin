@@ -95,9 +95,14 @@ async function programOf(
  * What is in a folder now and what each of them is — a link of ours, a link elsewhere, or something
  * real. Asked of the file patching root, whose links are the whole of what a launch remakes.
  * Nothing there is nothing to say, which is what a first launch finds.
+ *
+ * Every name is asked about, a link that points at nothing among them. The game root passes such a
+ * link over, having nothing behind it to mirror; here it is the link of a mod whose prefix root was
+ * moved or deleted, which a launch has to take off. Left out, it was a link the plan never heard of,
+ * and making the new one in its place failed on the old one with EEXIST.
  */
 export async function readLinkFacts(folder: string): Promise<Map<string, LinkFact>> {
-  const names = (await entriesOf(folder)).map((entry) => entry.name);
+  const names = await namesIn(folder);
   const facts = await Promise.all(
     names.map(async (name) => [name, await linkFactAt(windowsPath(folder, name))] as const),
   );
@@ -371,6 +376,15 @@ async function kill(child: ChildProcess): Promise<void> {
     // Which is what it answers for a process that has already gone; the kill below is the fallback
     // for a machine where `taskkill` is not the way.
     child.kill();
+  }
+}
+
+/** Every name in a folder, whatever is behind it; a folder that is not there holds none. */
+async function namesIn(folder: string): Promise<string[]> {
+  try {
+    return await readdir(folder);
+  } catch {
+    return [];
   }
 }
 
